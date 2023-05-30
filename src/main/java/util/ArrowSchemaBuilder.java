@@ -10,13 +10,11 @@ import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
 import org.apache.calcite.sql.type.SqlTypeName;
-import org.checkerframework.checker.units.qual.A;
 
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
-import java.sql.SQLType;
 
 /**
  * Class containing functionality for building a {@link CalciteSchema} for a database that is
@@ -57,12 +55,8 @@ public class ArrowSchemaBuilder {
 
         // Add each arrow table to the schema
         for (File arrowTableFile : arrowTableFiles) {
-            // Obtain the type of the table
-            RelDataType tableType = createTypeForTable(arrowTableFile, typeFactory);
-
-            // Add the table
-            String tableName = arrowTableFile.getName().replace(".arrow", "");
-            databaseSchema.add(tableName, new ArrowTable(arrowTableFile, tableType));
+            ArrowTable arrowTableInstance = createTableForArrowFile(arrowTableFile, typeFactory);
+            databaseSchema.add(arrowTableInstance.getName(), arrowTableInstance);
         }
 
         // Return the final schema
@@ -70,12 +64,12 @@ public class ArrowSchemaBuilder {
     }
 
     /**
-     * Create a type representing the schema of a specific Arrow table.
+     * Create a {@link ArrowTable} instance representing the schema of a specific Arrow table.
      * @param arrowTable The {@link File} containing the Arrow table.
      * @param typeFactory The {@link RelDataTypeFactory} to use for creating the schema.
      * @return The type representing the Arrow table.
      */
-    private static RelDataType createTypeForTable(File arrowTable, RelDataTypeFactory typeFactory) {
+    private static ArrowTable createTableForArrowFile(File arrowTable, RelDataTypeFactory typeFactory) {
         // Convert the arrow schema into the required RelDataType
         try (   // Initialise the objects needed to read the Arrow schema
                 var rootAllocator = new RootAllocator();
@@ -86,17 +80,26 @@ public class ArrowSchemaBuilder {
             VectorSchemaRoot arrowSchemaRoot = arrowTableFileReader.getVectorSchemaRoot();
             Schema arrowSchema = arrowSchemaRoot.getSchema();
 
+            // Instantiate the statistics
+            long arrowVectorCount = arrowTableFileReader.getRecordBlocks().size();
+            long vectorRowCount = arrowTableFileReader.loadNextBatch() ? arrowTableFileReader.getVectorSchemaRoot().getRowCount() : 0;
+            long approximateTableRowCount = arrowVectorCount * vectorRowCount;
+            ArrowTableStatistics tableStatistics = new ArrowTableStatistics(approximateTableRowCount);
+
             // Create a builder for the calcite type
             RelDataTypeFactory.Builder builderForTable = typeFactory.builder();
 
             // Add each column to the calcite type
             for (Field column : arrowSchema.getFields()) {
-                SqlTypeName columnType = arrowToSqlType(column.getType());
+                RelDataType columnType = typeFactory.createTypeWithNullability(typeFactory.createSqlType(arrowToSqlType(column.getType())), false);
                 builderForTable.add(column.getName(), columnType);
             }
 
-            // Return the calcite type
-            return builderForTable.build();
+            // Obtain the calcite type
+            RelDataType tableType = builderForTable.build();
+
+            // Construct the table instance
+            return new ArrowTable(arrowTable, tableType, tableStatistics);
 
         } catch (FileNotFoundException e) {
             throw new IllegalStateException("Cannot create a table schema from a non-existent table file: " + e.getMessage());
@@ -113,6 +116,12 @@ public class ArrowSchemaBuilder {
     private static SqlTypeName arrowToSqlType(ArrowType arrowType) {
         if (arrowType instanceof ArrowType.Int)
             return SqlTypeName.INTEGER;
+        else if (arrowType instanceof ArrowType.LargeUtf8)
+            return SqlTypeName.VARCHAR;
+        else if (arrowType instanceof ArrowType.Decimal)
+            return SqlTypeName.DECIMAL;
+        else if (arrowType instanceof ArrowType.Date)
+            return SqlTypeName.DATE;
         else
             throw new IllegalArgumentException("The provided ArrowType is currently not supported: " + arrowType.toString());
     }

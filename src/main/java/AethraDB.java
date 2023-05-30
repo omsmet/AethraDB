@@ -1,39 +1,27 @@
-import org.apache.calcite.config.CalciteConnectionConfig;
-import org.apache.calcite.config.CalciteConnectionProperty;
+import calcite.rules.ArrowTableScanProjectionRule;
+import calcite.rules.ArrowTableScanRule;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.jdbc.JavaTypeFactoryImpl;
-import org.apache.calcite.plan.ConventionTraitDef;
-import org.apache.calcite.plan.RelOptCluster;
-import org.apache.calcite.plan.RelOptPlanner;
 import org.apache.calcite.plan.RelOptUtil;
 import org.apache.calcite.plan.hep.HepPlanner;
-import org.apache.calcite.plan.volcano.VolcanoPlanner;
-import org.apache.calcite.prepare.CalciteCatalogReader;
+import org.apache.calcite.plan.hep.HepProgramBuilder;
 import org.apache.calcite.rel.RelNode;
+import org.apache.calcite.rel.RelRoot;
+import org.apache.calcite.rel.rules.CoreRules;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
 import org.apache.calcite.rel.type.RelDataTypeField;
-import org.apache.calcite.rex.RexBuilder;
 import org.apache.calcite.schema.Table;
-import org.apache.calcite.sql.SqlExplainFormat;
-import org.apache.calcite.sql.SqlExplainLevel;
 import org.apache.calcite.sql.SqlNode;
-import org.apache.calcite.sql.fun.SqlStdOperatorTable;
 import org.apache.calcite.sql.parser.SqlParseException;
 import org.apache.calcite.sql.parser.SqlParser;
-import org.apache.calcite.sql.validate.SqlValidator;
-import org.apache.calcite.sql.validate.SqlValidatorUtil;
-import org.apache.calcite.sql2rel.SqlToRelConverter;
-import org.apache.calcite.sql2rel.StandardConvertletTable;
+import org.apache.calcite.tools.*;
 import org.apache.commons.cli.*;
-import org.checkerframework.checker.units.qual.C;
 import util.ArrowSchemaBuilder;
-import util.ArrowTable;
 
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
-import java.util.Collections;
 import java.util.Objects;
 
 /**
@@ -48,7 +36,7 @@ public class AethraDB {
      * Main entry point of the application.
      * @param args A list of arguments influencing the behaviour of the engine.
      */
-    public static void main(String[] args) throws IOException {
+    public static void main(String[] args) throws IOException, SqlParseException, ValidationException, RelConversionException {
         // Define argument parser
         Options cliOptions = createOptionConfiguration();
         CommandLineParser cliParser = new DefaultParser();
@@ -79,60 +67,72 @@ public class AethraDB {
             throw new IllegalStateException("The query file does not exist");
         String textualSqlQuery = Files.readString(queryFile.toPath());
 
+        // Create the planner
+        SqlParser.Config sqlParserConfig = SqlParser.config().withCaseSensitive(false);
+
+        FrameworkConfig frameworkConfig = Frameworks.newConfigBuilder()
+                .parserConfig(sqlParserConfig)
+                .defaultSchema(databaseSchema.plus())
+                .build();
+
+        Planner queryPlanner = Frameworks.getPlanner(frameworkConfig);
+
         // Parse query into AST
-        SqlParser sqlParser = SqlParser.create(textualSqlQuery);
-        SqlNode parsedSqlQuery = null;
-        try {
-            parsedSqlQuery = sqlParser.parseQuery();
-        } catch (SqlParseException e) {
-            throw new RuntimeException(e);
-        }
+        SqlNode parsedSqlQuery = queryPlanner.parse(textualSqlQuery);
         System.out.println("[Parsed query]");
         System.out.println(parsedSqlQuery.toString());
         System.out.println();
 
-        // Create a catalog reader
-        CalciteConnectionConfig catalogReaderConfig = CalciteConnectionConfig.DEFAULT
-                .set(CalciteConnectionProperty.CASE_SENSITIVE, "false");
-        CalciteCatalogReader catalogReader = new CalciteCatalogReader(
-                databaseSchema,
-                Collections.emptyList(),
-                typeFactory,
-                catalogReaderConfig);
-
-        // Create the SQL validator using the standard operator table and default configuration
-        SqlValidator sqlValidator = SqlValidatorUtil.newValidator(
-                SqlStdOperatorTable.instance(),
-                catalogReader,
-                typeFactory,
-                SqlValidator.Config.DEFAULT);
-
         // Validate the parsed query
-        SqlNode validatedSqlQuery = sqlValidator.validate(parsedSqlQuery);
+        SqlNode validatedSqlQuery = queryPlanner.validate(parsedSqlQuery);
+        RelRoot queryRoot = queryPlanner.rel(validatedSqlQuery);
+        RelNode queryNode = queryRoot.project();
+
         System.out.println("[Validated query]");
         System.out.println(validatedSqlQuery.toString());
         System.out.println();
 
-        // Create the optimisation cluster to maintain planning information
-        RelOptPlanner planner = new VolcanoPlanner();
-        planner.addRelTraitDef(ConventionTraitDef.INSTANCE);
-        RelOptCluster planningCluster = RelOptCluster.create(planner, new RexBuilder(typeFactory));
+        // Create the optimiser
+        HepProgramBuilder hepProgramBuilder = new HepProgramBuilder();
 
-        // Convert the query into a logical plan
-        SqlToRelConverter sqlToRelConverter = new SqlToRelConverter(
-                (type, query, schema, path) -> null, // NOOP_EXPANDER
-                sqlValidator,
-                catalogReader,
-                planningCluster,
-                StandardConvertletTable.INSTANCE,
-                SqlToRelConverter.config());
+//        hepProgramBuilder.addRuleInstance(CoreRules.AGGREGATE_JOIN_TRANSPOSE);          // Pushes an aggregate past a Join
+//        hepProgramBuilder.addRuleInstance(CoreRules.AGGREGATE_JOIN_TRANSPOSE_EXTENDED); // extension of above to push down aggregate functions
+        hepProgramBuilder.addRuleInstance(CoreRules.AGGREGATE_REDUCE_FUNCTIONS);        // Reduces aggregate functions in an aggregate to simpler forms
 
-        RelNode logicalPlan = sqlToRelConverter.convertQuery(validatedSqlQuery, false, true).rel;
-        System.out.println(
-                RelOptUtil.dumpPlan("[Logical plan]",
-                        logicalPlan,
-                        SqlExplainFormat.TEXT,
-                        SqlExplainLevel.EXPPLAN_ATTRIBUTES));
+        hepProgramBuilder.addRuleInstance(CoreRules.CALC_REDUCE_EXPRESSIONS);           // Reduces constants inside a logical calc
+        hepProgramBuilder.addRuleInstance(CoreRules.CALC_REMOVE);                       // Removes trivial logical calc nodes
+
+        hepProgramBuilder.addRuleInstance(CoreRules.FILTER_AGGREGATE_TRANSPOSE);        // Pushes a filter past an aggregate
+        hepProgramBuilder.addRuleInstance(CoreRules.FILTER_MERGE);                      // Rule that combines two logical filters
+        hepProgramBuilder.addRuleInstance(CoreRules.FILTER_REDUCE_EXPRESSIONS);         // Reduces constant expressions inside filters
+
+//        hepProgramBuilder.addRuleInstance(CoreRules.JOIN_ASSOCIATE);                    // Rule that changes a join based on the associativity rule
+//        hepProgramBuilder.addRuleInstance(CoreRules.JOIN_COMMUTE);                      // Rule that permutes the inputs to an inner join
+        hepProgramBuilder.addRuleInstance(CoreRules.JOIN_CONDITION_PUSH);               // Rule that pushes predicates in a join into the inputs into the join
+        hepProgramBuilder.addRuleInstance(CoreRules.JOIN_PUSH_TRANSITIVE_PREDICATES);   // Rule that infers predicates from a join and creates filters if those predicates can be pushed to its inputs
+        hepProgramBuilder.addRuleInstance(CoreRules.JOIN_REDUCE_EXPRESSIONS);           // Rule that reduces constants inside a join
+
+        hepProgramBuilder.addRuleInstance(CoreRules.PROJECT_AGGREGATE_MERGE);           // Projects away aggregate calls that are not used
+        hepProgramBuilder.addRuleInstance(CoreRules.PROJECT_FILTER_TRANSPOSE);          // Push project past filter
+        hepProgramBuilder.addRuleInstance(CoreRules.PROJECT_JOIN_TRANSPOSE);            // Push project past join
+        hepProgramBuilder.addRuleInstance(CoreRules.PROJECT_REDUCE_EXPRESSIONS);        // Reduces constant expressions inside projections
+        hepProgramBuilder.addRuleInstance(CoreRules.PROJECT_REMOVE);                    // Removes projections that only return their input)
+
+        // Rules to enable custom, arrow-specific optimisations/translations
+        final ArrowTableScanProjectionRule PROJECT_SCAN = ArrowTableScanProjectionRule.Config.DEFAULT.toRule();
+        hepProgramBuilder.addRuleInstance(PROJECT_SCAN);
+        final ArrowTableScanRule ARROW_SCAN = ArrowTableScanRule.Config.DEFAULT.toRule();
+        hepProgramBuilder.addRuleInstance(ARROW_SCAN);
+
+        // Interesting sort and union rules also exist
+
+        HepPlanner hepPlanner = new HepPlanner(hepProgramBuilder.build());
+
+        // Plan the query
+        hepPlanner.setRoot(queryNode);
+        queryNode = hepPlanner.findBestExp();
+        System.out.println("[Optimised query]");
+        System.out.println(RelOptUtil.toString(queryNode));
     }
 
     /**

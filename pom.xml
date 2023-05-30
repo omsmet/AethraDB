@@ -17,6 +17,10 @@
         <arrow.version>12.0.0</arrow.version>
         <calcite.version>1.34.0</calcite.version>
         <commons-cli.version>1.5.0</commons-cli.version>
+        <immutables.version>2.9.2</immutables.version>
+
+        <!-- Plugin Versions -->
+        <maven.compiler>3.11.0</maven.compiler>
     </properties>
 
     <dependencies>
@@ -45,6 +49,27 @@
             <artifactId>commons-cli</artifactId>
             <version>${commons-cli.version}</version>
         </dependency>
+
+        <!-- Calcite Customisation Dependencies -->
+        <dependency>
+            <groupId>org.immutables</groupId>
+            <artifactId>value</artifactId>
+            <version>${immutables.version}</version>
+            <scope>provided</scope>
+        </dependency>
     </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>${maven.compiler}</version>
+                <configuration>
+                    <generatedSourcesDirectory>target/generated-sources</generatedSourcesDirectory>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
 
 </project>
