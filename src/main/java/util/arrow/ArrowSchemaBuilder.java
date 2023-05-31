@@ -1,4 +1,4 @@
-package util;
+package util.arrow;
 
 import org.apache.arrow.memory.RootAllocator;
 import org.apache.arrow.vector.VectorSchemaRoot;

@@ -1,4 +1,4 @@
-package util;
+package util.arrow;
 
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeFactory;

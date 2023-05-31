@@ -6,7 +6,7 @@ import org.apache.calcite.plan.RelOptTable;
 import org.apache.calcite.plan.RelRule;
 import org.apache.calcite.rel.logical.LogicalTableScan;
 import org.immutables.value.Value;
-import util.ArrowTable;
+import util.arrow.ArrowTable;
 
 import java.util.List;
 

@@ -1,4 +1,4 @@
-package util;
+package util.arrow;
 
 import org.apache.calcite.rel.RelCollation;
 import org.apache.calcite.rel.RelDistribution;

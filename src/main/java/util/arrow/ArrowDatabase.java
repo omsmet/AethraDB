@@ -1,4 +1,4 @@
-package util;
+package util.arrow;
 
 import calcite.rules.ArrowTableScanProjectionRule;
 import calcite.rules.ArrowTableScanRule;

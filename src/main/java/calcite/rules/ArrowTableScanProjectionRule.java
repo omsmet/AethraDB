@@ -13,7 +13,7 @@ import org.apache.calcite.rex.RexVisitorImpl;
 import org.apache.calcite.util.mapping.Mapping;
 import org.apache.calcite.util.mapping.Mappings;
 import org.immutables.value.Value;
-import util.ArrowTable;
+import util.arrow.ArrowTable;
 
 import java.util.ArrayList;
 import java.util.List;
