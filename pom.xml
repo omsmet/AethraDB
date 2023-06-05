@@ -75,6 +75,13 @@
                 <version>${maven.compiler}</version>
                 <configuration>
                     <generatedSourcesDirectory>target/generated-sources</generatedSourcesDirectory>
+                    <compilerVersion>20</compilerVersion>
+                    <source>20</source>
+                    <target>20</target>
+                    <compilerArgs combine.children="append">
+                        <arg>--add-modules=jdk.incubator.vector</arg>
+                        <arg>--enable-preview</arg>
+                    </compilerArgs>
                 </configuration>
             </plugin>
         </plugins>

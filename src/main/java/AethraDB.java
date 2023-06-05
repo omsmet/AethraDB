@@ -1,33 +1,44 @@
+import evaluation.codegen.GeneratedQuery;
+import evaluation.codegen.QueryCodeGenerator;
+import evaluation.codegen.translation.NonVectorisedQueryTranslator;
+import jdk.incubator.vector.IntVector;
+import jdk.incubator.vector.VectorSpecies;
+import org.apache.calcite.plan.RelOptUtil;
+import org.apache.calcite.rel.RelNode;
+import org.apache.calcite.sql.SqlNode;
 import org.apache.calcite.sql.parser.SqlParseException;
-import org.apache.calcite.tools.*;
+import org.apache.calcite.tools.RelConversionException;
+import org.apache.calcite.tools.ValidationException;
 import org.apache.commons.cli.*;
-import org.checkerframework.checker.units.qual.C;
 import org.codehaus.commons.compiler.CompileException;
 import org.codehaus.commons.compiler.Location;
-import org.codehaus.janino.Access;
-import org.codehaus.janino.Java;
-import org.codehaus.janino.SimpleCompiler;
-import org.locationtech.proj4j.proj.Eckert1Projection;
-import util.janino.GeneratorMethods;
+import util.arrow.ArrowDatabase;
 
+import java.io.File;
 import java.io.IOException;
-import java.lang.reflect.Method;
-import java.util.ArrayList;
-import java.util.List;
+import java.lang.reflect.InvocationTargetException;
+import java.nio.file.Files;
 
 /**
  * Main class of the AethraDB database engine, used for invoking the engine for testing purposes.
  */
 public class AethraDB {
 
+    /**
+     * Command line option for obtaining the directory in which the Arrow database is located.
+     */
     private static Option dbDirectoryPath;
+
+    /**
+     * Command line option for obtaining the file that contains the SQL query to be executed.
+     */
     private static Option queryFilePath;
 
     /**
      * Main entry point of the application.
      * @param args A list of arguments influencing the behaviour of the engine.
      */
-    public static void main(String[] args) throws IOException, SqlParseException, ValidationException, RelConversionException, CompileException {
+    public static void main(String[] args) throws IOException, SqlParseException, ValidationException, RelConversionException {
         // Define argument parser
         Options cliOptions = createOptionConfiguration();
         CommandLineParser cliParser = new DefaultParser();
@@ -44,103 +55,49 @@ public class AethraDB {
         }
 
         // Create the database instance
-//        ArrowDatabase database = new ArrowDatabase(cmdArguments.getOptionValue(dbDirectoryPath));
-//
-//        // Print the schema for debug purposes
-//        System.out.println("[Database schema]");
-//        database.printSchema();
-//        System.out.println();
-//
-//        // Read the query
-//        File queryFile = new File(cmdArguments.getOptionValue(queryFilePath));
-//        if (!queryFile.exists() || !queryFile.isFile())
-//            throw new IllegalStateException("The query file does not exist");
-//        String textualSqlQuery = Files.readString(queryFile.toPath());
-//
-//        // Parse query into AST
-//        SqlNode parsedSqlQuery = database.parseQuery(textualSqlQuery);
-//        System.out.println("[Parsed query]");
-//        System.out.println(parsedSqlQuery.toString());
-//        System.out.println();
-//
-//        // Validate the parsed query
-//        RelNode validatedSqlQuery = database.validateQuery(parsedSqlQuery);
-//        System.out.println("[Validated query]");
-//        System.out.println(validatedSqlQuery.toString());
-//        System.out.println();
-//
-//        // Plan the query
-//        RelNode logicalQueryPlan = database.planQuery(validatedSqlQuery);
-//        System.out.println("[Optimised query]");
-//        System.out.println(RelOptUtil.toString(logicalQueryPlan));
+        ArrowDatabase database = new ArrowDatabase(cmdArguments.getOptionValue(dbDirectoryPath));
 
-        Java.CompilationUnit testUnit = new Java.CompilationUnit("JaninoTest.java");
+        // Print the schema for debug purposes
+        System.out.println("[Database schema]");
+        database.printSchema();
+        System.out.println();
 
-        // Create a test class for encapsulation
-        final Java.PackageMemberClassDeclaration testClass = GeneratorMethods.createClass(
-                testUnit, Access.PUBLIC, "TestClassJanino", null);
+        // Read the query
+        File queryFile = new File(cmdArguments.getOptionValue(queryFilePath));
+        if (!queryFile.exists() || !queryFile.isFile())
+            throw new IllegalStateException("The query file does not exist");
+        String textualSqlQuery = Files.readString(queryFile.toPath());
 
-        // Create a testMethod() which computes int x = 2; double y = x * 3 + 5.0; return y;
-        List<Java.Statement> testMethodBody = new ArrayList<>();
+        // Parse query into AST
+        SqlNode parsedSqlQuery = database.parseQuery(textualSqlQuery);
+        System.out.println("[Parsed query]");
+        System.out.println(parsedSqlQuery.toString());
+        System.out.println();
 
-        Java.Block computationBlock = GeneratorMethods.createBlock();
-        computationBlock.addStatement(GeneratorMethods.createLocalVarDecl(Java.Primitive.INT, "x", "2"));
-        computationBlock.addStatement(GeneratorMethods.createLocalVarDecl(Java.Primitive.DOUBLE, "y"));
-        computationBlock.addStatement( // y = x * 3 + 5.0
-                GeneratorMethods.createVariableAssignmentExpr(
-                        GeneratorMethods.createVariableRef("y"),
-                        GeneratorMethods.createAdditionOp(
-                                GeneratorMethods.createMultiplicationOp(
-                                        GeneratorMethods.createVariableRef("x"),
-                                        GeneratorMethods.createIntegerLiteral("3")
-                                ),
-                                GeneratorMethods.createFloatingPointLiteral("5.0")
-                        )
-                )
-        );
+        // Validate the parsed query
+        RelNode validatedSqlQuery = database.validateQuery(parsedSqlQuery);
+        System.out.println("[Validated query]");
+        System.out.println(validatedSqlQuery.toString());
+        System.out.println();
 
-        computationBlock.addStatement(GeneratorMethods.createReturnStm(
-                GeneratorMethods.createVariableRef("y")
-        ));
-        testMethodBody.add(computationBlock);
+        // Plan the query
+        RelNode logicalQueryPlan = database.planQuery(validatedSqlQuery);
+        System.out.println("[Optimised query]");
+        System.out.println(RelOptUtil.toString(logicalQueryPlan));
 
-        GeneratorMethods.createMethod(
-                testClass,
-                Access.PUBLIC,
-                GeneratorMethods.createPrimitiveType(Java.Primitive.DOUBLE),
-                "testMethod",
-                testMethodBody);
-
-        // Try to evaluate the program thus far
+        // Generate code for the query
+        NonVectorisedQueryTranslator queryTranslator = new NonVectorisedQueryTranslator();
+        QueryCodeGenerator queryCodeGenerator = queryTranslator.translate(logicalQueryPlan);
+        GeneratedQuery generatedQuery;
         try {
-            SimpleCompiler compiler = new SimpleCompiler();
-            compiler.cook(testUnit);
-
-            ClassLoader loader = compiler.getClassLoader();
-
-            Class<?> compiledClass = loader.loadClass("TestClassJanino");
-            Object compiledClassInstance = compiledClass.getDeclaredConstructor().newInstance();
-            Method methodToInvoke = compiledClass.getMethod("testMethod");
-            double res = (Double) methodToInvoke.invoke(compiledClassInstance);
-            System.out.println(res);
+            generatedQuery = queryCodeGenerator.generateQuery();
         } catch (Exception e) {
-            System.out.println(e);
+            throw new RuntimeException("Could not generate code for query", e);
         }
 
-    }
+        // Execute the generated query
+        generatedQuery.execute();
 
-    /**
-     * A "Clever" method to get a location from a stack trace.
-     */
-    private static Location
-    getLocation() {
-        Exception         e   = new Exception();
-        StackTraceElement ste = e.getStackTrace()[1]; //we only care about our caller
-        return new Location(
-                ste.getFileName(),
-                ste.getLineNumber(),
-                0
-        );
     }
 
     /**
