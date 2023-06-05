@@ -1,13 +1,8 @@
 package evaluation.codegen;
 
 import evaluation.codegen.infrastructure.CodeGenContext;
-import evaluation.codegen.infrastructure.janino.JaninoClassGen;
-import evaluation.codegen.infrastructure.janino.JaninoGeneralGen;
-import evaluation.codegen.infrastructure.janino.JaninoMethodGen;
-import evaluation.codegen.infrastructure.janino.JaninoVariableGen;
+import evaluation.codegen.infrastructure.janino.*;
 import evaluation.codegen.operators.CodeGenOperator;
-import jdk.incubator.vector.VectorSpecies;
-import org.apache.arrow.vector.IntVector;
 import org.codehaus.commons.compiler.CompileException;
 import org.codehaus.janino.*;
 
@@ -17,7 +12,7 @@ import java.lang.reflect.Constructor;
 import java.util.ArrayList;
 import java.util.List;
 
-import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.getLocation;
+import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.*;
 
 /**
  * Class taking care of general purpose operations in query code generation.
@@ -70,8 +65,8 @@ public class QueryCodeGenerator extends SimpleCompiler {
         this.generatedQuery = null;
         this.generatedQueryClassName = "GeneratedQuery_" + rootOperator.hashCode();
         this.defaultImports = new String[] {
-                VectorSpecies.class.getName(),
-                IntVector.class.getName()
+                jdk.incubator.vector.VectorSpecies.class.getName(),
+                jdk.incubator.vector.IntVector.class.getName()
         };
 
         // Initialise the compiler, so it will allow us to generate a class which extends
@@ -117,8 +112,10 @@ public class QueryCodeGenerator extends SimpleCompiler {
                 queryClass,
                 Access.PUBLIC,
                 JaninoMethodGen.createFormalParameters(
+                        getLocation(),
                         new Java.FunctionDeclarator.FormalParameter[] {
                                 JaninoMethodGen.createFormalParameter(
+                                        getLocation(),
                                         this.classToType(getLocation(), CodeGenContext.class),
                                         cCtxParamName
                                 )
@@ -128,7 +125,7 @@ public class QueryCodeGenerator extends SimpleCompiler {
                         getLocation(),
                         null,
                         new Java.Rvalue[] {
-                                JaninoVariableGen.createVariableRef(getLocation(), cCtxParamName)
+                                JaninoGeneralGen.createAmbiguousNameRef(getLocation(), cCtxParamName)
                         }
                 ),
                 new ArrayList<>()
@@ -149,10 +146,10 @@ public class QueryCodeGenerator extends SimpleCompiler {
         // toPrint = cCtx.getTest();
         executeMethodBody.add(JaninoVariableGen.createVariableAssignmentExpr(
                 getLocation(),
-                JaninoVariableGen.createVariableRef(getLocation(), "toPrint"),
+                JaninoGeneralGen.createAmbiguousNameRef(getLocation(), "toPrint"),
                 JaninoMethodGen.createMethodInvocation(
                         getLocation(),
-                        JaninoVariableGen.createVariableRef(getLocation(), "cCtx"),
+                        JaninoGeneralGen.createAmbiguousNameRef(getLocation(), "cCtx"),
                         "getTest",
                         new Java.Rvalue[0]
                 )
@@ -165,7 +162,122 @@ public class QueryCodeGenerator extends SimpleCompiler {
                         new Java.AmbiguousName(getLocation(), new String[] {"System", "out"}),
                         "println",
                         new Java.Rvalue[]{
-                                JaninoVariableGen.createVariableRef(getLocation(), "toPrint")
+                                JaninoGeneralGen.createAmbiguousNameRef(getLocation(), "toPrint")
+                        }
+                )
+        );
+
+        // We also add the vectorised processing example.
+        // int[] testArray = new int[] { 1, 2, 3, 4, 5, 6, 7, 8 };
+        executeMethodBody.add(
+            JaninoVariableGen.createLocalVariable(
+                    getLocation(),
+                    JaninoGeneralGen.createPrimitiveArrayType(getLocation(), Java.Primitive.INT),
+                    "testArray",
+                    JaninoGeneralGen.createPrimitiveArrayInitialiser(
+                            getLocation(),
+                            Java.Primitive.INT,
+                            new String[] { "1", "2", "3", "4", "5", "6", "7", "8" }
+                    )
+            )
+        );
+
+        // VectorSpecies<Integer> integerVectorSpecies = IntVector.SPECIES_PREFERRED;
+        executeMethodBody.add(
+                JaninoVariableGen.createLocalVariable(
+                        getLocation(),
+                        JaninoGeneralGen.createReferenceType(
+                                getLocation(), "VectorSpecies", "Integer"),
+                        "integerVectorSpecies",
+                        new Java.AmbiguousName(
+                                getLocation(),
+                                new String[] {
+                                        "IntVector",
+                                        "SPECIES_PREFERRED"
+                                })
+                )
+        );
+
+        // IntVector testArrayVector = IntVector.fromArray(integerVectorSpecies, testArray, 0);
+        executeMethodBody.add(
+                JaninoVariableGen.createLocalVariable(
+                        getLocation(),
+                        JaninoGeneralGen.createReferenceType(getLocation(), "IntVector"),
+                        "testArrayVector",
+                        JaninoMethodGen.createMethodInvocation(
+                                getLocation(),
+                                JaninoGeneralGen.createAmbiguousNameRef(getLocation(),"IntVector"),
+                                "fromArray",
+                                new Java.Rvalue[] {
+                                        createAmbiguousNameRef(getLocation(), "integerVectorSpecies"),
+                                        createAmbiguousNameRef(getLocation(), "testArray"),
+                                        createIntegerLiteral(getLocation(), "0")
+                                }
+                        )
+                )
+        );
+
+        // IntVector resultVector = testArrayVector.add(42);
+        executeMethodBody.add(
+                JaninoVariableGen.createLocalVariable(
+                        getLocation(),
+                        createReferenceType(getLocation(), "IntVector"),
+                        "resultVector",
+                        JaninoMethodGen.createMethodInvocation(
+                                getLocation(),
+                                createAmbiguousNameRef(getLocation(), "testArrayVector"),
+                                "add",
+                                new Java.Rvalue[] {
+                                        createIntegerLiteral(getLocation(), "42")
+                                }
+                        )
+                )
+        );
+
+        // resultVector.intoArray(testArray, 0);
+        executeMethodBody.add(
+                JaninoMethodGen.createMethodInvocationStm(
+                        getLocation(),
+                        createAmbiguousNameRef(getLocation(), "resultVector"),
+                        "intoArray",
+                        new Java.Rvalue[] {
+                                createAmbiguousNameRef(getLocation(), "testArray"),
+                                createIntegerLiteral(getLocation(), "0")
+                        }
+                )
+        );
+
+        // for (int i = 0; i < testArray.length; i++) System.out.println(testArray[i]);
+        Java.Block forLoopBody = JaninoMethodGen.createBlock(getLocation());
+        executeMethodBody.add(
+                JaninoControlGen.createForLoop(
+                        getLocation(),
+                        JaninoVariableGen.createPrimitiveLocalVar(                                                        // int i = 0
+                                getLocation(),
+                                Java.Primitive.INT,
+                                "i",
+                                "0"
+                        ),
+                        JaninoOperatorGen.lt(                                                                             // i < testArray.length
+                                getLocation(),
+                                createAmbiguousNameRef(getLocation(), "i"),
+                                createAmbiguousNameRef(getLocation(), "testArray.length")),
+                        JaninoOperatorGen.postIncrement(getLocation(), createAmbiguousNameRef(getLocation(), "i")), // i++
+                        forLoopBody
+                )
+        );
+
+        forLoopBody.addStatement(
+                JaninoMethodGen.createMethodInvocationStm(
+                        getLocation(),
+                        new Java.AmbiguousName(getLocation(), new String[] {"System", "out"}),
+                        "println",
+                        new Java.Rvalue[] {
+                                JaninoGeneralGen.createArrayElementAccessExpr(
+                                        getLocation(),
+                                        createAmbiguousNameRef(getLocation(), "testArray"),
+                                        createAmbiguousNameRef(getLocation(), "i")
+                                )
                         }
                 )
         );

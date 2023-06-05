@@ -26,12 +26,71 @@ public class JaninoGeneralGen {
 
     /**
      * Method for creating an {@link Java.Type} instance for a primitive java type.
-     * @param location The location at which the created primitive is requested for generation.
+     * @param location The location at which the created primitive type is requested for generation.
      * @param type The type of the primitive that should be created.
      * @return an {@link Java.Type} instance for a specific java primitive type.
      */
     public static Java.Type createPrimitiveType(Location location, Java.Primitive type) {
         return new Java.PrimitiveType(location, type);
+    }
+
+    /**
+     * Method for creating an {@link Java.Type} instance for an array of java primitives.
+     * @param location The location at which the created primitive array type is requested for generation.
+     * @param type The type of the primitive that should be generated for.
+     * @return A {@link Java.Type} instance for a specific java primitive array type.
+     */
+    public static Java.ArrayType createPrimitiveArrayType(Location location, Java.Primitive type) {
+        return new Java.ArrayType(createPrimitiveType(location, type));
+    }
+
+    /**
+     * Method for creating an {@link Java.ReferenceType} instance.
+     * @param location The location at which the type reference requested for generation.
+     * @param identifier The identifier of the referenced type.
+     * @return The {@link Java.ReferenceType} corresponding to {@code identifier}.
+     */
+    public static Java.ReferenceType createReferenceType(Location location, String identifier) {
+        return createReferenceType(location, identifier, null);
+    }
+
+    /**
+     * Method for creating an {@link Java.ReferenceType} instance.
+     * @param location The location at which the type reference requested for generation.
+     * @param identifier The identifier of the referenced type.
+     * @param typeArgumentIdentifier An optional type argument for the referenced type.
+     * @return The {@link Java.ReferenceType} corresponding to {@code identifier<typeArgumentIdentifier>}.
+     */
+    public static Java.ReferenceType createReferenceType(
+            Location location,
+            String identifier,
+            String typeArgumentIdentifier
+    ) {
+        return new Java.ReferenceType(
+                location,
+                new Java.Annotation[0],
+                new String[] { identifier },
+                typeArgumentIdentifier == null ? null : new Java.TypeArgument[]{
+                        new Java.ReferenceType(
+                                getLocation(),
+                                new Java.Annotation[0],
+                                new String[] { typeArgumentIdentifier },
+                                null
+                        )
+                });
+    }
+
+    /**
+     * Method to create an {@link Java.AmbiguousName} to reference a class, variable etc..
+     * @param location The location from which the reference is requested for generation.
+     * @param name The name of the object being referred to.
+     * @return The {@link Java.AmbiguousName} corresponding to {@code object}.
+     */
+    public static Java.AmbiguousName createAmbiguousNameRef(Location location, String name) {
+        return new Java.AmbiguousName(
+                location,
+                name.split("\\.")
+        );
     }
 
     /**
@@ -62,6 +121,69 @@ public class JaninoGeneralGen {
      */
     public static Java.StringLiteral createStringLiteral(Location location, String value) {
         return new Java.StringLiteral(location, value);
+    }
+
+    /**
+     * Method for generating an initialised array of java primitives.
+     * @param location The location at which the array is requested for generation.
+     * @param primitiveType The type of the array elements.
+     * @param initialValues The initial values to be contained in the array.
+     * @return The initialised array.
+     */
+    public static Java.NewInitializedArray createInitialisedPrimitiveArray(
+            Location location,
+            Java.Primitive primitiveType,
+            String[] initialValues
+    ) {
+        return new Java.NewInitializedArray(
+                location,
+                createPrimitiveArrayType(location, primitiveType),
+                createPrimitiveArrayInitialiser(location, primitiveType, initialValues)
+        );
+    }
+
+    /**
+     * Method for generating the array initialiser of an array of java primitives.
+     * @param location The location at which the initialiser is requested for generation.
+     * @param type The type of the array elements.
+     * @param values The list of values that should be contained in the initialised array.
+     * @return The initialiser for the provided values.
+     */
+    public static Java.ArrayInitializer createPrimitiveArrayInitialiser(
+            Location location,
+            Java.Primitive type,
+            String[] values
+    ) {
+        Java.Rvalue[] initialRValues = new Java.Rvalue[values.length];
+
+        for (int i = 0; i < values.length; i++) {
+            initialRValues[i] = switch (type) {
+                case INT -> JaninoGeneralGen.createIntegerLiteral(location, values[i]);
+                case FLOAT, DOUBLE -> JaninoGeneralGen.createFloatingPointLiteral(location, values[i]);
+                default -> throw new UnsupportedOperationException("The current primitive is not supported for array initialiser generation");
+            };
+        }
+
+        return new Java.ArrayInitializer(location, initialRValues);
+    }
+
+    /**
+     * Method for creating an expression that accesses an element of an array.
+     * @param location The location at which the array access expression is requested for generation.
+     * @param array The array to access an element from.
+     * @param elementIndex The index of the element to access.
+     * @return The expression for accessing an array element.
+     */
+    public static Java.ArrayAccessExpression createArrayElementAccessExpr(
+            Location location,
+            Java.Rvalue array,
+            Java.Rvalue elementIndex
+    ) {
+        return new Java.ArrayAccessExpression(
+                location,
+                array,
+                elementIndex
+        );
     }
 
 }

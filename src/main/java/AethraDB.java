@@ -1,8 +1,6 @@
 import evaluation.codegen.GeneratedQuery;
 import evaluation.codegen.QueryCodeGenerator;
 import evaluation.codegen.translation.NonVectorisedQueryTranslator;
-import jdk.incubator.vector.IntVector;
-import jdk.incubator.vector.VectorSpecies;
 import org.apache.calcite.plan.RelOptUtil;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.sql.SqlNode;
@@ -10,13 +8,10 @@ import org.apache.calcite.sql.parser.SqlParseException;
 import org.apache.calcite.tools.RelConversionException;
 import org.apache.calcite.tools.ValidationException;
 import org.apache.commons.cli.*;
-import org.codehaus.commons.compiler.CompileException;
-import org.codehaus.commons.compiler.Location;
 import util.arrow.ArrowDatabase;
 
 import java.io.File;
 import java.io.IOException;
-import java.lang.reflect.InvocationTargetException;
 import java.nio.file.Files;
 
 /**

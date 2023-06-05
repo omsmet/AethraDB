@@ -55,31 +55,39 @@ public class JaninoVariableGen {
             };
         }
 
+        return createLocalVariable(
+                location,
+                JaninoGeneralGen.createPrimitiveType(location, primitiveType),
+                variableName,
+                initialValueLiteral);
+    }
+
+    /**
+     * Method for generating a local variable declaration.
+     * @param location The location at which the variable is requested for generation.
+     * @param type The type of the variable to generate.
+     * @param variableName The name of the variable to generate.
+     * @param initialValue The initial value of the variable.
+     * @return The generated variable.
+     */
+    public static Java.LocalVariableDeclarationStatement createLocalVariable(
+            Location location,
+            Java.Type type,
+            String variableName,
+            Java.ArrayInitializerOrRvalue initialValue
+    ) {
         return new Java.LocalVariableDeclarationStatement(
                 location,
                 new Java.Modifier[0], // Local variables do not need an access modifier ? todo: are these only used in methods or also in classes?
-                JaninoGeneralGen.createPrimitiveType(location, primitiveType),
-                new Java.VariableDeclarator[] {
+                type,
+                new Java.VariableDeclarator[]{
                         new Java.VariableDeclarator(
                                 location,
                                 variableName,
                                 0,
-                                initialValueLiteral
+                                initialValue
                         )
                 }
-        );
-    }
-
-    /**
-     * Method to create a reference to a variable.
-     * @param location The location from which the reference is requested for generation.
-     * @param varName The name of the variable to be referenced.
-     * @return The reference to the variable identified by {@code varName}.
-     */
-    public static Java.AmbiguousName createVariableRef(Location location, String varName) {
-        return new Java.AmbiguousName(
-                location,
-                new String[] { varName }
         );
     }
 
