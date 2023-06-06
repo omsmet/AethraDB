@@ -15,8 +15,25 @@ public class JaninoOperatorGen {
 
     }
 
+    /**
+     * Generate an addition/string concatenation operator.
+     * @param location The location at which teh operator is requested for generation.
+     * @param lhs The left-hand side of the addition/concatenation.
+     * @param rhs The right-hand side of the addition/concatenation.
+     * @return The generated addition/concatenation operator.
+     */
     public static Java.BinaryOperation plus(Location location, Java.Rvalue lhs, Java.Rvalue rhs) {
         return new Java.BinaryOperation(location, lhs, "+", rhs);
+    }
+
+    /**
+     * Generate a logical not operator.
+     * @param location The location at which the operator is requested for generation.
+     * @param boolValue The value to invert.
+     * @return The generated operator.
+     */
+    public static Java.UnaryOperation not(Location location, Java.Rvalue boolValue) {
+        return new Java.UnaryOperation(location, "!", boolValue);
     }
 
     /**

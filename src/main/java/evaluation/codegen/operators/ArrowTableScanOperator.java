@@ -114,10 +114,9 @@ public class ArrowTableScanOperator extends CodeGenOperator<LogicalArrowTableSca
         cCtx.pushCodeGenContext();
 
         // Have the parent operator consume the result within the for loop
-        if (this.parent != null)
-            forLoopBody.addStatements(this.parent.consumeNonVec(cCtx, oCtx));
+        forLoopBody.addStatements(this.parent.consumeNonVec(cCtx, oCtx));
 
-        // And pop the CodeGenContext and ordinal to variable name mappings again
+        // Pop the CodeGenContext and ordinal to access path mappings again
         cCtx.popCodeGenContext();
         cCtx.popOrdinalMapping();
 
@@ -146,8 +145,7 @@ public class ArrowTableScanOperator extends CodeGenOperator<LogicalArrowTableSca
         cCtx.pushCodeGenContext();
 
         // Have the parent operator consume the result within the while loop
-        if (this.parent != null)
-            whileLoopBody.addStatements(this.parent.consumeVec(cCtx, oCtx));
+        whileLoopBody.addStatements(this.parent.consumeVec(cCtx, oCtx));
 
         // And pop the CodeGenContext and ordinal to variable name mappings again
         cCtx.popCodeGenContext();

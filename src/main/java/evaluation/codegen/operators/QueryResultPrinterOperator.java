@@ -17,7 +17,7 @@ import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createSt
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.getLocation;
 
 /**
- * An {@link CodeGenOperator} which can be the top-level operator of a {@link CodeGenOperator} tree
+ * A {@link CodeGenOperator} which can be the top-level operator of a {@link CodeGenOperator} tree
  * and simply prints all results to the standard output.
  */
 public class QueryResultPrinterOperator extends CodeGenOperator<RelNode> {

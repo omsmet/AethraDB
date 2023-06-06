@@ -3,9 +3,13 @@ package evaluation.codegen.operators;
 import evaluation.codegen.infrastructure.context.CodeGenContext;
 import evaluation.codegen.infrastructure.context.OptimisationContext;
 import org.apache.calcite.rel.RelNode;
+import org.apache.calcite.sql.type.BasicSqlType;
 import org.codehaus.janino.Java;
 
 import java.util.List;
+
+import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createPrimitiveType;
+import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.getLocation;
 
 /**
  * Class that is extended by all code generator operators.
@@ -116,6 +120,22 @@ public abstract class CodeGenOperator<T extends RelNode> {
      */
     public List<Java.Statement> consumeVec(CodeGenContext cCtx, OptimisationContext oCtx) {
         throw new UnsupportedOperationException("This CodeGenOperator does not support this consumption style");
+    }
+
+    /**
+     * Method for obtaining a scalar java type for a provided logical sql type.
+     * @param sqlType The type for which to obtain the java type.
+     * @return A {@link Java.Type} corresponding to the provided {@code sqlType}.
+     */
+    protected Java.Type sqlTypeToScalarJavaType(BasicSqlType sqlType) {
+        return switch (sqlType.getSqlTypeName()) {
+            case DOUBLE -> createPrimitiveType(getLocation(), Java.Primitive.DOUBLE);
+            case FLOAT -> createPrimitiveType(getLocation(), Java.Primitive.FLOAT);
+            case INTEGER -> createPrimitiveType(getLocation(), Java.Primitive.INT);
+            case BIGINT -> createPrimitiveType(getLocation(), Java.Primitive.LONG);
+            default -> throw new UnsupportedOperationException(
+                    "sqlTypeToScalarJavaType does not support the provided sqlType");
+        };
     }
 
 }
