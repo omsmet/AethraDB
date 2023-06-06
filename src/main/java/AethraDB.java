@@ -1,6 +1,8 @@
 import evaluation.codegen.GeneratedQuery;
 import evaluation.codegen.QueryCodeGenerator;
 import evaluation.codegen.translation.NonVectorisedQueryTranslator;
+import evaluation.codegen.translation.QueryTranslator;
+import evaluation.codegen.translation.VectorisedQueryTranslator;
 import org.apache.calcite.plan.RelOptUtil;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.sql.SqlNode;
@@ -77,11 +79,12 @@ public class AethraDB {
         System.out.println(RelOptUtil.toString(logicalQueryPlan));
 
         // Generate code for the query
-        NonVectorisedQueryTranslator queryTranslator = new NonVectorisedQueryTranslator();
+        QueryTranslator queryTranslator = new NonVectorisedQueryTranslator();
+//        QueryTranslator queryTranslator = new VectorisedQueryTranslator();
         QueryCodeGenerator queryCodeGenerator = queryTranslator.translate(logicalQueryPlan);
         GeneratedQuery generatedQuery;
         try {
-            generatedQuery = queryCodeGenerator.generateQuery();
+            generatedQuery = queryCodeGenerator.generateQuery(true);
         } catch (Exception e) {
             throw new RuntimeException("Could not generate code for query", e);
         }

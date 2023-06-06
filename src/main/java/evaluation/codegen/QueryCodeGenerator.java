@@ -94,10 +94,11 @@ public class QueryCodeGenerator extends SimpleCompiler {
 
     /**
      * Method performing the actual code generation for the query represented by {@code this.rootOperator}.
+     * @param printCode Whether to print the generated code to the standard output.
      * @return the {@link GeneratedQuery} corresponding to the query represented by {@code this.rootOperator}.
      * @throws Exception when an exception occurs during the code generation stage.
      */
-    public GeneratedQuery generateQuery() throws Exception {
+    public GeneratedQuery generateQuery(boolean printCode) throws Exception {
         // Return the cached query if we have already generated the query
         if (generated)
             return this.generatedQuery;
@@ -156,7 +157,7 @@ public class QueryCodeGenerator extends SimpleCompiler {
         );
 
         // Create the body for the execute method
-        List<? extends Java.BlockStatement> executeMethodBody;
+        List<Java.Statement> executeMethodBody;
         if (this.rootOperatorVectorised && this.rootOperator.canProduceVectorised())
             executeMethodBody = this.rootOperator.produceVec(this.cCtx, this.oCtx);
         else if (!this.rootOperatorVectorised && this.rootOperator.canProduceNonVectorised())
@@ -179,6 +180,13 @@ public class QueryCodeGenerator extends SimpleCompiler {
                 new Java.Type[] { this.classToType(getLocation(), IOException.class) },
                 executeMethodBody
         );
+
+        // Print the generated method body if requested
+        if (printCode) {
+            System.out.println("[Generated query code]");
+            printCode(executeMethodBody);
+            System.out.println();
+        }
 
         // Compile the class
         this.cook(generatedQueryUnit);
@@ -225,5 +233,61 @@ public class QueryCodeGenerator extends SimpleCompiler {
         return l.toArray(new Java.AbstractCompilationUnit.ImportDeclaration[0]);
     }
 
+    /**
+     * Method to print generated code to the standard output.
+     * @param code The code to print.
+     */
+    private static void printCode(List<Java.Statement> code) {
+        printCode(code, 0);
+    }
+
+    /**
+     * Method to print generated code to the standard output.
+     * @param code The code to print.
+     * @param indentationLevel The number of spaces to add before each line of the code.
+     */
+    private static void printCode(List<? extends Java.BlockStatement> code, int indentationLevel) {
+        for (Java.BlockStatement statement : code)
+            printCode(statement, indentationLevel);
+    }
+
+    /**
+     * Method to print generated code to the standard output.
+     * @param code The code to print.
+     * @param indentationLevel The number of spaces to add before each line of the code.
+     */
+    private static void printCode(Java.BlockStatement code, int indentationLevel) {
+        if (code instanceof Java.Block block) {
+            printCode(block.statements, indentationLevel);
+
+        } else if (code instanceof Java.WhileStatement whileStatement) {
+            String whileGuardLine = "while (" + whileStatement.condition.toString() + ") {";
+            System.out.print(whileGuardLine.indent(indentationLevel));
+            printCode(whileStatement.body, indentationLevel + 4);
+            System.out.print("}".indent(indentationLevel));
+
+        } else if (code instanceof Java.ForStatement forStatement) {
+            String forGuardLine =
+                    "for (" + forStatement.init.toString() + " "
+                            + forStatement.condition.toString() + "; "
+                            + forStatement.update[0].toString() + ") {";
+            System.out.print(forGuardLine.indent(indentationLevel));
+            printCode(forStatement.body, indentationLevel + 4);
+            System.out.print("}".indent(indentationLevel));
+
+        } else if (code instanceof Java.IfStatement ifStatement) {
+            String ifGuardLine = "if (" + ifStatement.condition.toString() + ") {";
+            System.out.print(ifGuardLine.indent(indentationLevel));
+            printCode(ifStatement.thenStatement, indentationLevel + 4);
+            if (ifStatement.elseStatement != null) {
+                System.out.print("} else }".indent(indentationLevel));
+                printCode(ifStatement.elseStatement, indentationLevel + 4);
+            }
+            System.out.print("}".indent(indentationLevel));
+
+        } else {
+            System.out.print(code.toString().indent(indentationLevel));
+        }
+    }
 
 }
