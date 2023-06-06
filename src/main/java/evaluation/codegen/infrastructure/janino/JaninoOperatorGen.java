@@ -15,6 +15,10 @@ public class JaninoOperatorGen {
 
     }
 
+    public static Java.BinaryOperation plus(Location location, Java.Rvalue lhs, Java.Rvalue rhs) {
+        return new Java.BinaryOperation(location, lhs, "+", rhs);
+    }
+
     /**
      * Generate a less-than comparison operator.
      * @param location The location at which the operator is requested for generation.
@@ -23,12 +27,7 @@ public class JaninoOperatorGen {
      * @return The comparison operator.
      */
     public static Java.BinaryOperation lt(Location location, Java.Rvalue lhs, Java.Rvalue rhs) {
-        return new Java.BinaryOperation(
-                location,
-                lhs,
-                "<",
-                rhs
-        );
+        return new Java.BinaryOperation(location, lhs, "<", rhs);
     }
 
     /**
@@ -38,11 +37,7 @@ public class JaninoOperatorGen {
      * @return the post-increment operator.
      */
     public static Java.Crement postIncrement(Location location, Java.Lvalue var) {
-        return new Java.Crement(
-                location,
-                var,
-                "++"
-        );
+        return new Java.Crement(location, var, "++");
     }
 
 }

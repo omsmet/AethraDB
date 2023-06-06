@@ -2,6 +2,7 @@ package evaluation.codegen.translation;
 
 import calcite.operators.LogicalArrowTableScan;
 import evaluation.codegen.QueryCodeGenerator;
+import evaluation.codegen.operators.ArrowTableScanOperator;
 import evaluation.codegen.operators.CodeGenOperator;
 import org.apache.calcite.rel.RelNode;
 
@@ -23,7 +24,7 @@ public abstract class QueryTranslator {
      * @param logicalPlan The logical (sub)-plan to translate.
      * @return A {@link CodeGenOperator} representing the logical plan.
      */
-    protected final CodeGenOperator convert(RelNode logicalPlan) {
+    protected final CodeGenOperator<?> convert(RelNode logicalPlan) {
         if (logicalPlan instanceof LogicalArrowTableScan)
             return convert((LogicalArrowTableScan) logicalPlan);
 
@@ -35,5 +36,7 @@ public abstract class QueryTranslator {
      * @param scan the {@link LogicalArrowTableScan} to translate.
      * @return a {@link CodeGenOperator} corresponding to {@code scan} in the paradigm implemented by the {@link QueryTranslator} descendant.
      */
-    protected abstract CodeGenOperator convert(LogicalArrowTableScan scan);
+    protected CodeGenOperator<LogicalArrowTableScan> convert(LogicalArrowTableScan scan) {
+            return new ArrowTableScanOperator(scan);
+    };
 }

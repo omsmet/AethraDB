@@ -1,4 +1,4 @@
-package evaluation.codegen.infrastructure;
+package evaluation.codegen.infrastructure.context;
 
 /**
  * Class for storing information that can be used for performing optimisations at code generation time

@@ -81,6 +81,21 @@ public class JaninoGeneralGen {
     }
 
     /**
+     * Method to create a cast statement.
+     * @param location The location at which the cast statement is requested.
+     * @param targetType The type to which the value should be cast.
+     * @param value The value to be cast.
+     * @return The cast statement corresponding to the provided arguments.
+     */
+    public static Java.Cast createCast(Location location, Java.Type targetType, Java.Rvalue value) {
+        return new Java.Cast(
+                location,
+                targetType,
+                value
+        );
+    }
+
+    /**
      * Method to create an {@link Java.AmbiguousName} to reference a class, variable etc..
      * @param location The location from which the reference is requested for generation.
      * @param name The name of the object being referred to.
@@ -91,6 +106,16 @@ public class JaninoGeneralGen {
                 location,
                 name.split("\\.")
         );
+    }
+
+    /**
+     * Method for creating an int literal.
+     * @param location The location at which the created primitive is requested for generation.
+     * @param value The value of the int literal.
+     * @return an {@link Java.IntegerLiteral} with the specified value.
+     */
+    public static Java.IntegerLiteral createIntegerLiteral(Location location, int value) {
+        return new Java.IntegerLiteral(location, Integer.toString(value));
     }
 
     /**

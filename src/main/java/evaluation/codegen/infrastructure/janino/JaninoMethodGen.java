@@ -190,6 +190,22 @@ public class JaninoMethodGen {
      * @param location The location at which the method invocation statement is being requested for generation.
      * @param targetContainer The object containing the method to be invoked.
      * @param methodName The name of the method to be invoked.
+     * @return The generated method invocation statement.
+     * @throws CompileException when the method invocation expression is not valid.
+     */
+    public static Java.Statement createMethodInvocationStm(
+            Location location,
+            Java.Atom targetContainer,
+            String methodName
+    ) throws CompileException {
+        return createMethodInvocationStm(location, targetContainer, methodName, new Java.Rvalue[0]);
+    }
+
+    /**
+     * Method for creating a statement that invokes a method.
+     * @param location The location at which the method invocation statement is being requested for generation.
+     * @param targetContainer The object containing the method to be invoked.
+     * @param methodName The name of the method to be invoked.
      * @param arguments The arguments to be used on method invocation.
      * @return The generated method invocation statement.
      * @throws CompileException when the method invocation expression is not valid.
@@ -206,6 +222,21 @@ public class JaninoMethodGen {
                 methodName,
                 arguments
         ));
+    }
+
+    /**
+     * Method for creating a method invocation expression.
+     * @param location The location at which the method invocation is being requested for generation.
+     * @param targetContainer The object containing the method to be invoked.
+     * @param methodName The name of the method to be invoked.
+     * @return The generated method invocation expression.
+     */
+    public static Java.MethodInvocation createMethodInvocation(
+            Location location,
+            Java.Atom targetContainer,
+            String methodName
+    ) {
+        return createMethodInvocation(location, targetContainer, methodName, new Java.Rvalue[0]);
     }
 
     /**

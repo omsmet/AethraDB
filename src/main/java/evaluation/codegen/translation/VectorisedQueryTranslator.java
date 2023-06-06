@@ -1,8 +1,8 @@
 package evaluation.codegen.translation;
 
-import calcite.operators.LogicalArrowTableScan;
 import evaluation.codegen.QueryCodeGenerator;
 import evaluation.codegen.operators.CodeGenOperator;
+import evaluation.codegen.operators.QueryResultPrinterOperator;
 import org.apache.calcite.rel.RelNode;
 
 /**
@@ -19,13 +19,9 @@ public class VectorisedQueryTranslator extends QueryTranslator {
      */
     @Override
     public QueryCodeGenerator translate(RelNode logicalPlanRoot) {
-        // TODO: implement
-        throw new UnsupportedOperationException("Not Implemented Yet");
+        CodeGenOperator<?> rootOperator = convert(logicalPlanRoot);
+        CodeGenOperator<?> printOperator = new QueryResultPrinterOperator(rootOperator.getLogicalSubplan(), rootOperator);
+        return new QueryCodeGenerator(printOperator, true);
     }
 
-    @Override
-    protected CodeGenOperator convert(LogicalArrowTableScan scan) {
-        // TODO: implement
-        throw new UnsupportedOperationException("Not Implemented Yet");
-    }
 }

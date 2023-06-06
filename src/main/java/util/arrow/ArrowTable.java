@@ -56,4 +56,12 @@ public class ArrowTable extends AbstractTable {
     public String getName() {
         return this.arrowFile.getName().replace(".arrow", "");
     }
+
+    /**
+     * Method to obtain the file backing the table.
+     * @return The {@link File} backing the table.
+     */
+    public File getArrowFile() {
+        return this.arrowFile;
+    }
 }

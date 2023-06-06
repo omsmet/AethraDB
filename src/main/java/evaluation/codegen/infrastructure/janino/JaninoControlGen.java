@@ -40,5 +40,23 @@ public class JaninoControlGen {
         );
     }
 
+    /**
+     * Method for creating a standard while-loop.
+     * @param location The location at which the while loop is requested for generation.
+     * @param condition The condition during which the while-loop should execute.
+     * @param body The body of the while-loop.
+     * @return The while-loop corresponding to the provided arguments.
+     */
+    public static Java.WhileStatement createWhileLoop(
+            Location location,
+            Java.Rvalue condition,
+            Java.BlockStatement body
+    ) {
+        return new Java.WhileStatement(
+                location,
+                condition,
+                body
+        );
+    }
 
 }

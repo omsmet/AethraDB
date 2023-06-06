@@ -1,9 +1,8 @@
 package evaluation.codegen.translation;
 
-import calcite.operators.LogicalArrowTableScan;
 import evaluation.codegen.QueryCodeGenerator;
-import evaluation.codegen.operators.ArrowTableScanOperator;
 import evaluation.codegen.operators.CodeGenOperator;
+import evaluation.codegen.operators.QueryResultPrinterOperator;
 import org.apache.calcite.rel.RelNode;
 
 /**
@@ -20,13 +19,9 @@ public class NonVectorisedQueryTranslator extends QueryTranslator {
      */
     @Override
     public QueryCodeGenerator translate(RelNode logicalPlanRoot) {
-        CodeGenOperator rootOperator = convert(logicalPlanRoot);
-        QueryCodeGenerator result = new QueryCodeGenerator(rootOperator);
-        return result;
+        CodeGenOperator<?> rootOperator = convert(logicalPlanRoot);
+        CodeGenOperator<?> printOperator = new QueryResultPrinterOperator(rootOperator.getLogicalSubplan(), rootOperator);
+        return new QueryCodeGenerator(printOperator, false);
     }
 
-    @Override
-    protected CodeGenOperator convert(LogicalArrowTableScan scan) {
-        return new ArrowTableScanOperator(scan);
-    }
 }

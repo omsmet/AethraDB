@@ -1,7 +1,7 @@
 package evaluation.codegen;
 
-import evaluation.codegen.infrastructure.CodeGenContext;
-import evaluation.codegen.infrastructure.janino.*;
+import evaluation.codegen.infrastructure.context.CodeGenContext;
+import evaluation.codegen.infrastructure.context.OptimisationContext;
 import evaluation.codegen.operators.CodeGenOperator;
 import org.codehaus.commons.compiler.CompileException;
 import org.codehaus.janino.*;
@@ -12,7 +12,14 @@ import java.lang.reflect.Constructor;
 import java.util.ArrayList;
 import java.util.List;
 
-import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.*;
+import static evaluation.codegen.infrastructure.janino.JaninoClassGen.addPackageMemberClassDeclaration;
+import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createAmbiguousNameRef;
+import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createPrimitiveType;
+import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.getLocation;
+import static evaluation.codegen.infrastructure.janino.JaninoMethodGen.createConstructor;
+import static evaluation.codegen.infrastructure.janino.JaninoMethodGen.createFormalParameter;
+import static evaluation.codegen.infrastructure.janino.JaninoMethodGen.createFormalParameters;
+import static evaluation.codegen.infrastructure.janino.JaninoMethodGen.createMethod;
 
 /**
  * Class taking care of general purpose operations in query code generation.
@@ -23,12 +30,22 @@ public class QueryCodeGenerator extends SimpleCompiler {
     /**
      * The root operator of the query for which code should be generated.
      */
-    private final CodeGenOperator rootOperator;
+    private final CodeGenOperator<?> rootOperator;
+
+    /**
+     * Whether to use the vectorised execution produce method on the top-level operator.
+     */
+    private final boolean rootOperatorVectorised;
 
     /**
      * The {@link CodeGenContext} that was/will be used for generating the query.
      */
     private final CodeGenContext cCtx;
+
+    /**
+     * The {@link OptimisationContext} that was/will be used for generating the query.
+     */
+    private final OptimisationContext oCtx;
 
     /**
      * Variable for keeping track of whether the query has already been generated.
@@ -53,21 +70,21 @@ public class QueryCodeGenerator extends SimpleCompiler {
     /**
      * Creates a {@link QueryCodeGenerator} instance for a specific query.
      * @param rootOperator The root operator of the query for which we need to perform code generation.
+     * @param useVectorised Whether to use the vectorised produce method on the root operator.
      */
-    public QueryCodeGenerator(CodeGenOperator rootOperator) {
+    public QueryCodeGenerator(CodeGenOperator<?> rootOperator, boolean useVectorised) {
         // Perform SimpleCompiler constructor
         super();
 
         // Initialise member variables
         this.rootOperator = rootOperator;
-        this.cCtx = new CodeGenContext(42);
+        this.rootOperatorVectorised = useVectorised;
+        this.cCtx = new CodeGenContext();
+        this.oCtx = new OptimisationContext();
         this.generated = false;
         this.generatedQuery = null;
         this.generatedQueryClassName = "GeneratedQuery_" + rootOperator.hashCode();
-        this.defaultImports = new String[] {
-                jdk.incubator.vector.VectorSpecies.class.getName(),
-                jdk.incubator.vector.IntVector.class.getName()
-        };
+        this.defaultImports = new String[0];
 
         // Initialise the compiler, so it will allow us to generate a class which extends
         // the GeneratedQuery class and import necessary dependencies
@@ -94,7 +111,7 @@ public class QueryCodeGenerator extends SimpleCompiler {
 
         // Generate the class representing the query
         // public GeneratedQueryClass extends GeneratedQuery
-        Java.PackageMemberClassDeclaration queryClass = JaninoClassGen.addPackageMemberClassDeclaration(
+        Java.PackageMemberClassDeclaration queryClass = addPackageMemberClassDeclaration(
                 getLocation(),
                 Access.PUBLIC,
                 generatedQueryUnit,
@@ -107,17 +124,23 @@ public class QueryCodeGenerator extends SimpleCompiler {
         //     super(cCtx);
         // }
         String cCtxParamName = "cCtx";
-        JaninoMethodGen.createConstructor(
+        String oCtxParamName = "oCtx";
+        createConstructor(
                 getLocation(),
                 queryClass,
                 Access.PUBLIC,
-                JaninoMethodGen.createFormalParameters(
+                createFormalParameters(
                         getLocation(),
                         new Java.FunctionDeclarator.FormalParameter[] {
-                                JaninoMethodGen.createFormalParameter(
+                                createFormalParameter(
                                         getLocation(),
                                         this.classToType(getLocation(), CodeGenContext.class),
                                         cCtxParamName
+                                ),
+                                createFormalParameter(
+                                        getLocation(),
+                                        this.classToType(getLocation(), OptimisationContext.class),
+                                        oCtxParamName
                                 )
                         }
                 ),
@@ -125,171 +148,35 @@ public class QueryCodeGenerator extends SimpleCompiler {
                         getLocation(),
                         null,
                         new Java.Rvalue[] {
-                                JaninoGeneralGen.createAmbiguousNameRef(getLocation(), cCtxParamName)
+                                createAmbiguousNameRef(getLocation(), cCtxParamName),
+                                createAmbiguousNameRef(getLocation(), oCtxParamName)
                         }
                 ),
                 new ArrayList<>()
         );
 
         // Create the body for the execute method
-        // Currently a method that verifies that cCtx can be accessed at runtime
-        // TODO: replace by operator tree generation
-        List<Java.Statement> executeMethodBody = new ArrayList<>();
-
-        // int toPrint;
-        executeMethodBody.add(JaninoVariableGen.createPrimitiveLocalVar(
-                getLocation(),
-                Java.Primitive.INT,
-                "toPrint"
-        ));
-
-        // toPrint = cCtx.getTest();
-        executeMethodBody.add(JaninoVariableGen.createVariableAssignmentExpr(
-                getLocation(),
-                JaninoGeneralGen.createAmbiguousNameRef(getLocation(), "toPrint"),
-                JaninoMethodGen.createMethodInvocation(
-                        getLocation(),
-                        JaninoGeneralGen.createAmbiguousNameRef(getLocation(), "cCtx"),
-                        "getTest",
-                        new Java.Rvalue[0]
-                )
-        ));
-
-        // System.out.println(toPrint);
-        executeMethodBody.add(
-                JaninoMethodGen.createMethodInvocationStm(
-                        getLocation(),
-                        new Java.AmbiguousName(getLocation(), new String[] {"System", "out"}),
-                        "println",
-                        new Java.Rvalue[]{
-                                JaninoGeneralGen.createAmbiguousNameRef(getLocation(), "toPrint")
-                        }
-                )
-        );
-
-        // We also add the vectorised processing example.
-        // int[] testArray = new int[] { 1, 2, 3, 4, 5, 6, 7, 8 };
-        executeMethodBody.add(
-            JaninoVariableGen.createLocalVariable(
-                    getLocation(),
-                    JaninoGeneralGen.createPrimitiveArrayType(getLocation(), Java.Primitive.INT),
-                    "testArray",
-                    JaninoGeneralGen.createPrimitiveArrayInitialiser(
-                            getLocation(),
-                            Java.Primitive.INT,
-                            new String[] { "1", "2", "3", "4", "5", "6", "7", "8" }
-                    )
-            )
-        );
-
-        // VectorSpecies<Integer> integerVectorSpecies = IntVector.SPECIES_PREFERRED;
-        executeMethodBody.add(
-                JaninoVariableGen.createLocalVariable(
-                        getLocation(),
-                        JaninoGeneralGen.createReferenceType(
-                                getLocation(), "VectorSpecies", "Integer"),
-                        "integerVectorSpecies",
-                        new Java.AmbiguousName(
-                                getLocation(),
-                                new String[] {
-                                        "IntVector",
-                                        "SPECIES_PREFERRED"
-                                })
-                )
-        );
-
-        // IntVector testArrayVector = IntVector.fromArray(integerVectorSpecies, testArray, 0);
-        executeMethodBody.add(
-                JaninoVariableGen.createLocalVariable(
-                        getLocation(),
-                        JaninoGeneralGen.createReferenceType(getLocation(), "IntVector"),
-                        "testArrayVector",
-                        JaninoMethodGen.createMethodInvocation(
-                                getLocation(),
-                                JaninoGeneralGen.createAmbiguousNameRef(getLocation(),"IntVector"),
-                                "fromArray",
-                                new Java.Rvalue[] {
-                                        createAmbiguousNameRef(getLocation(), "integerVectorSpecies"),
-                                        createAmbiguousNameRef(getLocation(), "testArray"),
-                                        createIntegerLiteral(getLocation(), "0")
-                                }
-                        )
-                )
-        );
-
-        // IntVector resultVector = testArrayVector.add(42);
-        executeMethodBody.add(
-                JaninoVariableGen.createLocalVariable(
-                        getLocation(),
-                        createReferenceType(getLocation(), "IntVector"),
-                        "resultVector",
-                        JaninoMethodGen.createMethodInvocation(
-                                getLocation(),
-                                createAmbiguousNameRef(getLocation(), "testArrayVector"),
-                                "add",
-                                new Java.Rvalue[] {
-                                        createIntegerLiteral(getLocation(), "42")
-                                }
-                        )
-                )
-        );
-
-        // resultVector.intoArray(testArray, 0);
-        executeMethodBody.add(
-                JaninoMethodGen.createMethodInvocationStm(
-                        getLocation(),
-                        createAmbiguousNameRef(getLocation(), "resultVector"),
-                        "intoArray",
-                        new Java.Rvalue[] {
-                                createAmbiguousNameRef(getLocation(), "testArray"),
-                                createIntegerLiteral(getLocation(), "0")
-                        }
-                )
-        );
-
-        // for (int i = 0; i < testArray.length; i++) System.out.println(testArray[i]);
-        Java.Block forLoopBody = JaninoMethodGen.createBlock(getLocation());
-        executeMethodBody.add(
-                JaninoControlGen.createForLoop(
-                        getLocation(),
-                        JaninoVariableGen.createPrimitiveLocalVar(                                                        // int i = 0
-                                getLocation(),
-                                Java.Primitive.INT,
-                                "i",
-                                "0"
-                        ),
-                        JaninoOperatorGen.lt(                                                                             // i < testArray.length
-                                getLocation(),
-                                createAmbiguousNameRef(getLocation(), "i"),
-                                createAmbiguousNameRef(getLocation(), "testArray.length")),
-                        JaninoOperatorGen.postIncrement(getLocation(), createAmbiguousNameRef(getLocation(), "i")), // i++
-                        forLoopBody
-                )
-        );
-
-        forLoopBody.addStatement(
-                JaninoMethodGen.createMethodInvocationStm(
-                        getLocation(),
-                        new Java.AmbiguousName(getLocation(), new String[] {"System", "out"}),
-                        "println",
-                        new Java.Rvalue[] {
-                                JaninoGeneralGen.createArrayElementAccessExpr(
-                                        getLocation(),
-                                        createAmbiguousNameRef(getLocation(), "testArray"),
-                                        createAmbiguousNameRef(getLocation(), "i")
-                                )
-                        }
-                )
-        );
+        List<? extends Java.BlockStatement> executeMethodBody;
+        if (this.rootOperatorVectorised && this.rootOperator.canProduceVectorised())
+            executeMethodBody = this.rootOperator.produceVec(this.cCtx, this.oCtx);
+        else if (!this.rootOperatorVectorised && this.rootOperator.canProduceNonVectorised())
+            executeMethodBody = this.rootOperator.produceNonVec(this.cCtx, this.oCtx);
+        else
+            throw new UnsupportedOperationException("Attempting to invoke a CodeGenOperator produce method that is not supported");
 
         // Generate the execute method
-        // @Override public void execute()
-        JaninoMethodGen.createMethod(
+        // @Override public void execute() throws IOException
+        createMethod(
                 getLocation(),
                 queryClass,
                 Access.PUBLIC,
-                JaninoGeneralGen.createPrimitiveType(getLocation(), Java.Primitive.VOID),
+                createPrimitiveType(getLocation(), Java.Primitive.VOID),
                 "execute",
+                createFormalParameters(
+                        getLocation(),
+                        new Java.FunctionDeclarator.FormalParameter[0]
+                ),
+                new Java.Type[] { this.classToType(getLocation(), IOException.class) },
                 executeMethodBody
         );
 
@@ -299,8 +186,10 @@ public class QueryCodeGenerator extends SimpleCompiler {
         // Create an instance of the compiled class and store it
         try {
             Class<?> compiledClass = this.getClassLoader().loadClass(this.generatedQueryClassName);
-            Constructor<?> compiledQueryConstructor = compiledClass.getDeclaredConstructor(CodeGenContext.class);
-            this.generatedQuery = (GeneratedQuery) compiledQueryConstructor.newInstance(this.cCtx);
+            Constructor<?> compiledQueryConstructor = compiledClass.getDeclaredConstructor(
+                    CodeGenContext.class,
+                    OptimisationContext.class);
+            this.generatedQuery = (GeneratedQuery) compiledQueryConstructor.newInstance(this.cCtx, this.oCtx);
             this.generated = true;
         } catch (ClassNotFoundException e) {
             throw new RuntimeException("Could not instantiate the generated query class: " + e.getMessage());
@@ -333,9 +222,7 @@ public class QueryCodeGenerator extends SimpleCompiler {
             p.read(TokenType.END_OF_INPUT);
         }
 
-        return l.toArray(
-                new Java.AbstractCompilationUnit.ImportDeclaration[l.size()]
-        );
+        return l.toArray(new Java.AbstractCompilationUnit.ImportDeclaration[0]);
     }
 
 

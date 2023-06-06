@@ -4,14 +4,10 @@ import evaluation.codegen.translation.NonVectorisedQueryTranslator;
 import org.apache.calcite.plan.RelOptUtil;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.sql.SqlNode;
-import org.apache.calcite.sql.parser.SqlParseException;
-import org.apache.calcite.tools.RelConversionException;
-import org.apache.calcite.tools.ValidationException;
 import org.apache.commons.cli.*;
 import util.arrow.ArrowDatabase;
 
 import java.io.File;
-import java.io.IOException;
 import java.nio.file.Files;
 
 /**
@@ -33,7 +29,7 @@ public class AethraDB {
      * Main entry point of the application.
      * @param args A list of arguments influencing the behaviour of the engine.
      */
-    public static void main(String[] args) throws IOException, SqlParseException, ValidationException, RelConversionException {
+    public static void main(String[] args) throws Exception {
         // Define argument parser
         Options cliOptions = createOptionConfiguration();
         CommandLineParser cliParser = new DefaultParser();
@@ -91,8 +87,9 @@ public class AethraDB {
         }
 
         // Execute the generated query
+        System.out.println("[Query result]");
         generatedQuery.execute();
-
+        generatedQuery.getCCtcx().close();
     }
 
     /**
