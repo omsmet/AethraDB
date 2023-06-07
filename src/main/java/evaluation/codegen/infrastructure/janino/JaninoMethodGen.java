@@ -191,13 +191,12 @@ public class JaninoMethodGen {
      * @param targetContainer The object containing the method to be invoked.
      * @param methodName The name of the method to be invoked.
      * @return The generated method invocation statement.
-     * @throws CompileException when the method invocation expression is not valid.
      */
     public static Java.Statement createMethodInvocationStm(
             Location location,
             Java.Atom targetContainer,
             String methodName
-    ) throws CompileException {
+    ) {
         return createMethodInvocationStm(location, targetContainer, methodName, new Java.Rvalue[0]);
     }
 
@@ -208,20 +207,24 @@ public class JaninoMethodGen {
      * @param methodName The name of the method to be invoked.
      * @param arguments The arguments to be used on method invocation.
      * @return The generated method invocation statement.
-     * @throws CompileException when the method invocation expression is not valid.
      */
     public static Java.Statement createMethodInvocationStm(
             Location location,
             Java.Atom targetContainer,
             String methodName,
             Java.Rvalue[] arguments
-    ) throws CompileException {
-        return new Java.ExpressionStatement(createMethodInvocation(
-                location,
-                targetContainer,
-                methodName,
-                arguments
-        ));
+    ) {
+        try {
+            return new Java.ExpressionStatement(createMethodInvocation(
+                    location,
+                    targetContainer,
+                    methodName,
+                    arguments
+            ));
+        } catch (CompileException e) {
+            throw new RuntimeException(
+                    "Exception occurred while executing createMethodInvocationStm", e);
+        }
     }
 
     /**

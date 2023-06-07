@@ -1,10 +1,22 @@
 package evaluation.codegen.infrastructure.context;
 
 import evaluation.codegen.infrastructure.context.access_path.AccessPath;
+import evaluation.codegen.infrastructure.data.AllocationManager;
 import evaluation.codegen.infrastructure.data.ArrowTableReader;
+import evaluation.codegen.infrastructure.data.DirectAllocationManager;
 import org.apache.arrow.memory.RootAllocator;
+import org.codehaus.janino.Java;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.Stack;
+
+import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.getLocation;
+import static evaluation.codegen.infrastructure.janino.JaninoVariableGen.createLocalVariable;
 
 /**
  * Class for keeping track of the context during code generation, as well as plugging in specific
@@ -23,6 +35,13 @@ public class CodeGenContext implements AutoCloseable {
      * Set keeping track of the defined variables at the current stage of the code generation process.
      */
     private Set<String> currentDefinedVariables;
+
+    /**
+     * Map for keeping track of the variable allocations that need to be performed before the
+     * innermost scan operator and released afterwards. These variable must be allocated using an
+     * {@link AllocationManager}.
+     */
+    private Map<String, Java.Statement> scanSurroundingVariables;
 
     /**
      * Stack for keeping track of the ordinal to access path mapping at different stages of the code generation process.
@@ -45,6 +64,11 @@ public class CodeGenContext implements AutoCloseable {
     private List<ArrowTableReader> arrowTableReaders;
 
     /**
+     * The {@link AllocationManager} used by this query.
+     */
+    private AllocationManager allocationManager;
+
+    /**
      * Creates a new empty {@link CodeGenContext} instance.
      */
     public CodeGenContext() {
@@ -54,11 +78,14 @@ public class CodeGenContext implements AutoCloseable {
         this.defineVariable("cCtx");
         this.defineVariable("oCtx");
 
+        this.scanSurroundingVariables = new HashMap<>();
+
         this.ordinalMapping = new Stack<>();
         this.currentOrdinalMapping = new ArrayList<>();
 
         this.arrowRootAllocator = null;
         this.arrowTableReaders = null;
+        this.allocationManager = null;
     }
 
     /**
@@ -96,6 +123,87 @@ public class CodeGenContext implements AutoCloseable {
     }
 
     /**
+     * Method to define a scan-surrounding variable that will be allocated just before the innermost
+     * scan operator and released after it. These variables must be allocated using an
+     * {@link AllocationManager}.
+     * This method temporarily registers the name of the variable globally to ease bookkeeping.
+     * @param preferredName The preferred name of the variable to allocate.
+     * @param typeToAllocate The type that the variable should get.
+     * @param initialisationStatement The statement to initialise the scan surrounding variable.
+     * @return The actual name of the allocated variable.
+     */
+    public String defineScanSurroundingVariables(
+            String preferredName,
+            Java.Type typeToAllocate,
+            Java.ArrayInitializerOrRvalue initialisationStatement
+    ) {
+        // Find a globally available name
+        String actualName = preferredName;
+        int postfix = 0;
+        while (true) {
+            // Check if the current name is already taken at some stage in the query processing
+            boolean nameTaken = false;
+            for (Set<String> definedNamesAtStage : this.definedVariables) {
+                nameTaken |= definedNamesAtStage.contains(actualName);
+            }
+
+            if (nameTaken) {
+                // Name is taken, add postfix and increment postfix for next attempt if needed
+                actualName = preferredName + "_" + postfix;
+                postfix++;
+            } else {
+                // Name is available
+                break;
+            }
+        }
+
+        // Define the name globally
+        for (Set<String> definedNamesAtStage : this.definedVariables)
+            definedNamesAtStage.add(actualName);
+        this.currentDefinedVariables.add(actualName);
+
+        // Schedule the variable for allocation
+        this.scanSurroundingVariables.put(
+                actualName,
+                createLocalVariable(
+                        getLocation(),
+                        typeToAllocate,
+                        actualName,
+                        initialisationStatement
+                )
+        );
+
+        // Return the allocated variable's name
+        return actualName;
+    }
+
+    /**
+     * Method for obtaining the list of scan-surrounding variables to allocate through the given
+     * statements. The caller of the method assumes the responsibility for making sure the
+     * variables are allocated and also discarded via the allocation manager.
+     * The context is also cleaned again of the remaining global names.
+     * @return The map of names and statements to (de)-allocate the scan surrounding variables.
+     */
+    public Map<String, Java.Statement> getScanSurroundingVariables() {
+        // Obtain the allocation statements
+        Map<String, Java.Statement> allocationStatements =
+               this.scanSurroundingVariables;
+
+        // Clean the context of parent "scopes"
+        for (String nameToClean : this.scanSurroundingVariables.keySet()) {
+            for (Set<String> definedNamesAtStage : this.definedVariables) {
+                definedNamesAtStage.remove(nameToClean);
+            }
+        }
+
+        // Reset the scan surrounding variables variable
+        this.scanSurroundingVariables = new HashMap<>();
+
+        // Return the allocation statements
+        return allocationStatements;
+    }
+
+    /**
      * Obtain the {@link RootAllocator} to be able to process Arrow files.
      * @return The {@link RootAllocator} belonging to this query.
      */
@@ -125,6 +233,16 @@ public class CodeGenContext implements AutoCloseable {
      */
     public ArrowTableReader getArrowReader(int index) {
         return this.arrowTableReaders.get(index);
+    }
+
+    /**
+     * Method for obtaining the {@link AllocationManager} of this {@link CodeGenContext}.
+     * @return The {@link AllocationManager} of this {@link CodeGenContext}.
+     */
+    public AllocationManager getAllocationManager() {
+        if (this.allocationManager == null)
+            this.allocationManager = new DirectAllocationManager();
+        return this.allocationManager;
     }
 
     /**

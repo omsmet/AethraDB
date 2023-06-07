@@ -3,22 +3,26 @@ package evaluation.codegen.operators;
 import evaluation.codegen.infrastructure.context.CodeGenContext;
 import evaluation.codegen.infrastructure.context.OptimisationContext;
 import evaluation.codegen.infrastructure.context.access_path.AccessPath;
-import evaluation.codegen.infrastructure.context.access_path.SimpleAccessPath;
+import evaluation.codegen.infrastructure.context.access_path.ArrowVectorAccessPath;
+import evaluation.codegen.infrastructure.context.access_path.ArrowVectorWithSelectionVectorAccessPath;
 import org.apache.calcite.rel.logical.LogicalFilter;
 import org.apache.calcite.rex.RexCall;
 import org.apache.calcite.rex.RexInputRef;
 import org.apache.calcite.rex.RexLiteral;
 import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.sql.type.BasicSqlType;
+import org.apache.calcite.sql.type.SqlTypeName;
 import org.codehaus.janino.Java;
 
 import java.util.ArrayList;
 import java.util.List;
 
-import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createFloatingPointLiteral;
 import static evaluation.codegen.infrastructure.janino.JaninoControlGen.createIfNotContinue;
-import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createIntegerLiteral;
+import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createAmbiguousNameRef;
+import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createPrimitiveArrayType;
+import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createPrimitiveType;
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.getLocation;
+import static evaluation.codegen.infrastructure.janino.JaninoMethodGen.createMethodInvocation;
 import static evaluation.codegen.infrastructure.janino.JaninoOperatorGen.lt;
 import static evaluation.codegen.infrastructure.janino.JaninoVariableGen.createLocalVariable;
 
@@ -61,17 +65,14 @@ public class FilterOperator extends CodeGenOperator<LogicalFilter> {
 
     @Override
     public List<Java.Statement> consumeNonVec(CodeGenContext cCtx, OptimisationContext oCtx) {
-        // Obtain the current ordinal mapping to access the exposed columns
-        List<AccessPath> ordinalMapping = cCtx.getCurrentOrdinalMapping();
-
         // Obtain and process the filter condition
         RexNode filterConditionRaw = this.getLogicalSubplan().getCondition();
         return consumeNonVecOperator(cCtx, oCtx, filterConditionRaw, true);
     }
 
     /**
-     * Method to generate the required code on the backward code generation pass based on the
-     * specific filter operator used by the {@link LogicalFilter}.
+     * Method to generate the required code on the non-vectorised backward code generation pass
+     * based on the specific filter operator used by the {@link LogicalFilter}.
      * @param cCtx The {@link CodeGenContext} to use during the generation.
      * @param oCtx The {@link OptimisationContext} to use during the generation and execution.
      * @param filterOperator The operator to generate code for.
@@ -104,29 +105,8 @@ public class FilterOperator extends CodeGenOperator<LogicalFilter> {
     }
 
     /**
-     * Method to invoke the parent's consumption method in the non-vectorised code generation process.
-     * TODO: candidate for general {@link CodeGenOperator} method.
-     * @param cCtx The {@link CodeGenContext} to use during the generation.
-     * @param oCtx The {@link OptimisationContext} to use during the generation and execution.
-     * @return The generated consumption code.
-     */
-    private List<Java.Statement> nonVecParentConsume(CodeGenContext cCtx, OptimisationContext oCtx) {
-        // Push the ordinal mapping and CodeGenContext
-        cCtx.pushOrdinalMapping();
-        cCtx.pushCodeGenContext();
-
-        // Have the parent operator consume the result within the for loop
-        List<Java.Statement> parentCode = this.parent.consumeNonVec(cCtx, oCtx);
-
-        // Pop the CodeGenContext and ordinal to access path mappings again
-        cCtx.popCodeGenContext();
-        cCtx.popOrdinalMapping();
-
-        return parentCode;
-    }
-
-    /**
-     * Method to generate the required code on the backward code generation pass for an AND operator.
+     * Method to generate the required non-vectorised code on the backward code generation pass for
+     * an AND operator.
      * @param cCtx The {@link CodeGenContext} to use during the generation.
      * @param oCtx The {@link OptimisationContext} to use during the generation and execution.
      * @param filterOperator The AND operator to generate code for.
@@ -159,7 +139,8 @@ public class FilterOperator extends CodeGenOperator<LogicalFilter> {
     }
 
     /**
-     * Method to generate the required code on the backward code generation pass for a < operator.
+     * Method to generate the required non-vectorised code on the backward code generation pass for
+     * a < operator.
      * @param cCtx The {@link CodeGenContext} to use during the generation.
      * @param oCtx The {@link OptimisationContext} to use during the generation and execution.
      * @param filterOperator The < operator to generate code for.
@@ -211,45 +192,22 @@ public class FilterOperator extends CodeGenOperator<LogicalFilter> {
      * @param target The code generation result to add code to if required for accessing the operand.
      * @return The {@link Java.Rvalue} corresponding to the operand.
      */
-    private Java.Rvalue codeGenOperandNonVec(CodeGenContext cCtx, OptimisationContext oCtx, RexNode operand, List<Java.Statement> target) {
+    private Java.Rvalue codeGenOperandNonVec(
+            CodeGenContext cCtx,
+            OptimisationContext oCtx,
+            RexNode operand,
+            List<Java.Statement> target
+    ) {
         // Generate the required code based on the operand type
         if (operand instanceof RexInputRef inputRef) {
             // RexInputRefs refer to a specific ordinal position in the result of the previous operator
             int ordinalIndex = inputRef.getIndex();
-            List<AccessPath> currentOrdinalMapping = cCtx.getCurrentOrdinalMapping();
-            AccessPath ordinalAccessPath = currentOrdinalMapping.get(ordinalIndex);
-
-            // If the access path is not a simple access path, allocate a variable to make it simple
-            // This is done to reduce method calls where possible
-            if (!(ordinalAccessPath instanceof SimpleAccessPath)) {
-                String operandVariableName = cCtx.defineVariable("ordinal_" + ordinalIndex);
-                target.add(
-                    createLocalVariable(
-                            getLocation(),
-                            sqlTypeToScalarJavaType((BasicSqlType) operand.getType()),
-                            operandVariableName,
-                            ordinalAccessPath.read()
-                    )
-                );
-
-                // Update the ordinal access path in the mapping to reflect the allocation of the variable
-                ordinalAccessPath = new SimpleAccessPath(operandVariableName);
-                cCtx.getCurrentOrdinalMapping().set(ordinalIndex, ordinalAccessPath);
-            }
-
-            // Return the (updated) access path
-            return ordinalAccessPath.read();
+            Java.Type operandType = sqlTypeToScalarJavaType((BasicSqlType) operand.getType());
+            return getRValueFromAccessPathNonVec(cCtx, oCtx, ordinalIndex, operandType, target);
 
         } else if (operand instanceof RexLiteral literal) {
-            // Simply return a literal corresponding to the operand
-            BasicSqlType literalType = (BasicSqlType) literal.getType();
+            return rexLiteralToRvalue(literal);
 
-            return switch (literalType.getSqlTypeName()) {
-                case DOUBLE -> createFloatingPointLiteral(getLocation(), literal.getValueAs(Double.class).toString());
-                case FLOAT -> createFloatingPointLiteral(getLocation(), literal.getValueAs(Float.class).toString());
-                case INTEGER -> createIntegerLiteral(getLocation(), literal.getValueAs(Integer.class).toString());
-                default -> throw new UnsupportedOperationException("FilterOperator.codeGenOperandNonVec does not support his literal type");
-            };
         } else {
             throw new UnsupportedOperationException("FilterOperator.codeGenOperandNonVec does not support the provide operand");
         }
@@ -261,9 +219,236 @@ public class FilterOperator extends CodeGenOperator<LogicalFilter> {
         return this.child.produceVec(cCtx, oCtx);
     }
 
-//    @Override
-//    public List<Java.Statement> consumeVec(CodeGenContext cCtx, OptimisationContext oCtx) {
-//        // TODO: Implement
-//    }
+    @Override
+    public List<Java.Statement> consumeVec(CodeGenContext cCtx, OptimisationContext oCtx) {
+        // Obtain and process the filter condition
+        RexNode filterConditionRaw = this.getLogicalSubplan().getCondition();
+        return consumeVecOperator(cCtx, oCtx, filterConditionRaw, true);
+    }
+
+    /**
+     * Method to generate the required code on the vectorised backward code generation pass based on
+     * the specific filter operator used by the {@link LogicalFilter}.
+     * @param cCtx The {@link CodeGenContext} to use during the generation.
+     * @param oCtx The {@link OptimisationContext} to use during the generation and execution.
+     * @param filterOperator The operator to generate code for.
+     * @param callParentConsumeOnMatch Whether the parent operator consume method should be invoked
+     *                                 if this {@code filterOperator} matches. Necessary to allow
+     *                                 this method to generate the required code in a recursive fashion.
+     * @return The generated query code.
+     */
+    private List<Java.Statement> consumeVecOperator(
+            CodeGenContext cCtx,
+            OptimisationContext oCtx,
+            RexNode filterOperator,
+            boolean callParentConsumeOnMatch
+    ) {
+        if (!(filterOperator instanceof RexCall castFilterOperator))
+            throw new UnsupportedOperationException(
+                    "FilterOperator.consumeVecOperator only supports RexCall conditions");
+
+        // Important for all operators: since we are in the vectorised style, we are processing within
+        // a while loop which contains subsequent operators. To indicate the validity of a record within
+        // a vector, we will thus be using selection vectors/validity vectors and therefore each
+        // operator must support different AccessPath formats to deal with this accordingly.
+
+        // Forward the generation obligation to the correct method based on the operator type.
+        return switch (castFilterOperator.getKind()) {
+            case AND -> consumeVecAndOperator(cCtx, oCtx, castFilterOperator, callParentConsumeOnMatch);
+            case LESS_THAN -> consumeVecLtOperator(cCtx, oCtx, castFilterOperator, callParentConsumeOnMatch);
+            default -> throw new UnsupportedOperationException(
+                    "FilterOperator.consumeVecOperator does not support this operator type");
+        };
+    }
+
+    /**
+     * Method to generate the required vectorised code on the backward code generation pass for an
+     * AND operator.
+     * @param cCtx The {@link CodeGenContext} to use during the generation.
+     * @param oCtx The {@link OptimisationContext} to use during the generation and execution.
+     * @param filterOperator The AND operator to generate code for.
+     * @param callParentConsumeOnMatch Whether the parent operator consume method should be invoked
+     *                                 if this {@code filterOperator} matches. Necessary to allow
+     *                                 recursive code generation.
+     * @return The generated query code.
+     */
+    private List<Java.Statement> consumeVecAndOperator(
+            CodeGenContext cCtx,
+            OptimisationContext oCtx,
+            RexCall filterOperator,
+            boolean callParentConsumeOnMatch
+    ) {
+        // Initialise the result
+        List<Java.Statement> codegenResult = new ArrayList<>();
+
+        // Obtain the AND operands and generate code for each of them
+        // If a record does not match the operand, it will invoke a continue statement
+        for (RexNode operand : filterOperator.getOperands())
+            codegenResult.addAll(consumeVecOperator(cCtx, oCtx, operand, false));
+
+        // The vectors which are in the getCurrentOrdinalMapping() will have validity markers attached
+        // to them, so we can now invoke the parent if required to consume the remaining records in the result.
+        if (callParentConsumeOnMatch)
+            codegenResult.addAll(vecParentConsume(cCtx, oCtx));
+
+        // Return the resulting code
+        return codegenResult;
+    }
+
+    /**
+     * Method to generate the required vectorised code on the backward code generation pass for a
+     * < operator.
+     * @param cCtx The {@link CodeGenContext} to use during the generation.
+     * @param oCtx The {@link OptimisationContext} to use during the generation and execution.
+     * @param filterOperator The < operator to generate code for.
+     * @param callParentConsumeOnMatch Whether the parent operator consume method should be invoked
+     *                                 if this {@code filterOperator} matches. Necessary to allow
+     *                                 recursive code generation.
+     * @return The generated query code.
+     */
+    private List<Java.Statement> consumeVecLtOperator(
+            CodeGenContext cCtx,
+            OptimisationContext oCtx,
+            RexCall filterOperator,
+            boolean callParentConsumeOnMatch
+    ) {
+        // Initialise the result
+        List<Java.Statement> codegenResult = new ArrayList<>();
+
+        // Obtain the operands
+        RexNode lhs = filterOperator.getOperands().get(0);
+        RexNode rhs = filterOperator.getOperands().get(1);
+
+        // Currently the filter operator only supports the INTEGER SQL type, check this condition
+        if (lhs.getType().getSqlTypeName() != SqlTypeName.INTEGER
+                || rhs.getType().getSqlTypeName() != SqlTypeName.INTEGER)
+            throw new UnsupportedOperationException(
+                    "FilterOperator.consumeVecLtOperator only supports integer operands");
+
+        // Check if the operands match the expected format:
+        // Vector < Scalar (which means we need a RexInputRef < RexLiteral)
+        if (!(lhs instanceof RexInputRef lhsRef) || !(rhs instanceof RexLiteral rhsLit))
+            throw new UnsupportedOperationException(
+                    "FilterOperator.consumeVecLtOperator does not support this operand combination");
+
+        // Generate the Rvalue for the rhs integer scalar
+        Java.Rvalue rhsIntScalar = rexLiteralToRvalue(rhsLit);
+
+        // Check if left-hand operand matches one of the processing patterns:
+        // - ArrowVectorAccessPath
+        // - ArrowVectorWithSelectionVectorAccessPath
+        AccessPath lhsAP = cCtx.getCurrentOrdinalMapping().get(lhsRef.getIndex());
+        if (!(lhsAP instanceof ArrowVectorAccessPath || lhsAP instanceof ArrowVectorWithSelectionVectorAccessPath))
+            throw new UnsupportedOperationException(
+                    "FilterOperator.consumeVecLtOperator does not support this left-hand access path");
+
+        // Handle the generic part of the code generation
+        // Do a scan-surrounding allocation for the selection vector that will result from this operator
+        // int[] ordinal_[index]_sel_vec = cCtx.getAllocationManager().getIntVector()
+        String ordinalSelectionVectorVariableName = cCtx.defineScanSurroundingVariables(
+                "ordinal_" + lhsRef.getIndex() + "_sel_vec",
+                createPrimitiveArrayType(getLocation(), Java.Primitive.INT),
+                createMethodInvocation(
+                        getLocation(),
+                        createMethodInvocation(
+                                getLocation(),
+                                createAmbiguousNameRef(getLocation(), "cCtx"),
+                                "getAllocationManager"
+                        ),
+                        "getIntVector"
+                )
+        );
+
+        // Perform the actual selection using the appropriate vector support library (based on the
+        // left-hand access path type) and store the length of the selection vector in a local variable
+        String ordinalSelectionVectorLengthVariableName =
+                cCtx.defineVariable(ordinalSelectionVectorVariableName + "_length");
+
+        if (lhsAP instanceof ArrowVectorAccessPath lhsArrowVecAP) {
+            // int ordinal_[index]_sel_vec_length = VectorisedFilterOperators.lessThan(
+            //      lhsArrowVecAP.read(), rhsIntScalar, ordinal_[index]_sel_vec);
+            codegenResult.add(
+                    createLocalVariable(
+                            getLocation(),
+                            createPrimitiveType(getLocation(), Java.Primitive.INT),
+                            ordinalSelectionVectorLengthVariableName,
+                            createMethodInvocation(
+                                    getLocation(),
+                                    createAmbiguousNameRef(
+                                            getLocation(),
+                                            "evaluation.vector_support.VectorisedFilterOperators"
+                                    ),
+                                    "lessThan",
+                                    new Java.Rvalue[] {
+                                            lhsArrowVecAP.read(),
+                                            rhsIntScalar,
+                                            createAmbiguousNameRef(
+                                                    getLocation(),
+                                                    ordinalSelectionVectorVariableName
+                                            )
+                                    }
+                            )
+                    )
+            );
+
+        } else { // lhsAP instanceof ArrowVectorWithSelectionVectorAccessPath lhsArrowVecWSAP
+            var lhsArrowVecWSAP = (ArrowVectorWithSelectionVectorAccessPath) lhsAP;
+            // int rdinal_[index]_sel_vec_length = VectorisedFilterOperators.lessThan(
+            //      lhsArrowVecWSAP.readArrowVector(), rhsIntScalar, ordinal_[index]_sel_vec,
+            //      lhsArrowVecWSAP.readSelectionVector(), lhsArrowVecWSAP.readSelectionVectorLength());
+            codegenResult.add(
+                    createLocalVariable(
+                            getLocation(),
+                            createPrimitiveType(getLocation(), Java.Primitive.INT),
+                            ordinalSelectionVectorLengthVariableName,
+                            createMethodInvocation(
+                                    getLocation(),
+                                    createAmbiguousNameRef(
+                                            getLocation(),
+                                            "evaluation.vector_support.VectorisedFilterOperators"
+                                    ),
+                                    "lessThan",
+                                    new Java.Rvalue[] {
+                                            lhsArrowVecWSAP.readArrowVector(),
+                                            rhsIntScalar,
+                                            createAmbiguousNameRef(
+                                                    getLocation(),
+                                                    ordinalSelectionVectorVariableName
+                                            ),
+                                            lhsArrowVecWSAP.readSelectionVector(),
+                                            lhsArrowVecWSAP.readSelectionVectorLength()
+                                    }
+                            )
+                    )
+            );
+        }
+
+        // Update the current ordinal mapping to include the selection vector for all arrow vectors
+        List<AccessPath> updatedOrdinalMapping = cCtx.getCurrentOrdinalMapping().stream().map(
+                entry -> {
+                    if (entry instanceof ArrowVectorAccessPath avapEntry)
+                        return (AccessPath) new ArrowVectorWithSelectionVectorAccessPath(
+                                avapEntry.getVariableName(),
+                                ordinalSelectionVectorVariableName,
+                                ordinalSelectionVectorLengthVariableName);
+                    else if (entry instanceof ArrowVectorWithSelectionVectorAccessPath avwsvapEntry)
+                        return (AccessPath) new ArrowVectorWithSelectionVectorAccessPath(
+                                avwsvapEntry.getArrowVectorVariable(),
+                                ordinalSelectionVectorVariableName,
+                                ordinalSelectionVectorLengthVariableName
+                        );
+                    else
+                        throw new UnsupportedOperationException(
+                                "We expected all ordinals to be of a vector type");
+                }).toList();
+        cCtx.setCurrentOrdinalMapping(updatedOrdinalMapping);
+
+        // Invoke the parent consumption method if required.
+        if (callParentConsumeOnMatch)
+            codegenResult.addAll(vecParentConsume(cCtx, oCtx));
+
+        // Return the result
+        return codegenResult;
+    }
 
 }

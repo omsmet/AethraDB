@@ -3,10 +3,12 @@ package evaluation.codegen.operators;
 import evaluation.codegen.infrastructure.context.CodeGenContext;
 import evaluation.codegen.infrastructure.context.OptimisationContext;
 import evaluation.codegen.infrastructure.context.access_path.AccessPath;
+import evaluation.codegen.infrastructure.context.access_path.ArrowVectorAccessPath;
+import evaluation.codegen.infrastructure.context.access_path.ArrowVectorWithSelectionVectorAccessPath;
 import evaluation.codegen.infrastructure.janino.JaninoMethodGen;
 import evaluation.codegen.infrastructure.janino.JaninoOperatorGen;
 import org.apache.calcite.rel.RelNode;
-import org.codehaus.commons.compiler.CompileException;
+import org.apache.calcite.sql.type.BasicSqlType;
 import org.codehaus.janino.Java;
 
 import java.util.ArrayList;
@@ -15,6 +17,7 @@ import java.util.List;
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createAmbiguousNameRef;
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createStringLiteral;
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.getLocation;
+import static evaluation.codegen.infrastructure.janino.JaninoMethodGen.createMethodInvocationStm;
 
 /**
  * A {@link CodeGenOperator} which can be the top-level operator of a {@link CodeGenOperator} tree
@@ -70,25 +73,23 @@ public class QueryResultPrinterOperator extends CodeGenOperator<RelNode> {
 
         // Generate the required print statements
         for (int i = 0; i < currentOrdinalMapping.size(); i++) {
+            Java.Type ordinalType = sqlTypeToScalarJavaType(
+                    (BasicSqlType) this.getLogicalSubplan().getRowType().getFieldList().get(i).getType());
             String methodName = (i != currentOrdinalMapping.size() - 1) ? "print" : "println";
-            try {
-                codegenResult.add(
-                        JaninoMethodGen.createMethodInvocationStm(
-                                getLocation(),
-                                createAmbiguousNameRef(getLocation(), "System.out"),
-                                methodName,
-                                new Java.Rvalue[] {
-                                        JaninoOperatorGen.plus(
-                                                getLocation(),
-                                                currentOrdinalMapping.get(i).read(),
-                                                createStringLiteral(getLocation(), "\", \"")
-                                        )
-                                }
-                        )
-                );
-            } catch (CompileException e) {
-                throw new RuntimeException("Could not generate method invocation statement during code generation phase", e);
-            }
+            codegenResult.add(
+                    createMethodInvocationStm(
+                            getLocation(),
+                            createAmbiguousNameRef(getLocation(), "System.out"),
+                            methodName,
+                            new Java.Rvalue[] {
+                                    JaninoOperatorGen.plus(
+                                            getLocation(),
+                                            getRValueFromAccessPathNonVec(cCtx, oCtx, i, ordinalType, codegenResult),
+                                            createStringLiteral(getLocation(), "\", \"")
+                                    )
+                            }
+                    )
+            );
         }
 
         return codegenResult;
@@ -110,18 +111,44 @@ public class QueryResultPrinterOperator extends CodeGenOperator<RelNode> {
 
         // Generate the required print statements
         for (int i = 0; i < currentOrdinalMapping.size(); i++) {
-            String methodName = (i != currentOrdinalMapping.size() - 1) ? "print" : "println";
-            try {
+
+            // Differentiate by type of result
+            AccessPath ordinalAccessPath = currentOrdinalMapping.get(i);
+            if (ordinalAccessPath instanceof ArrowVectorAccessPath avap) {
                 codegenResult.add(
-                        JaninoMethodGen.createMethodInvocationStm(
+                        createMethodInvocationStm(
                                 getLocation(),
-                                createAmbiguousNameRef(getLocation(), "System.out"),
-                                methodName,
+                                createAmbiguousNameRef(
+                                        getLocation(),
+                                        "evaluation.vector_support.VectorisedPrintOperators"
+                                ),
+                                "print",
                                 new Java.Rvalue[] {
-                                        currentOrdinalMapping.get(i).read(),
+                                        avap.read()
                                 }
                         )
                 );
+            } else if (ordinalAccessPath instanceof ArrowVectorWithSelectionVectorAccessPath avwsvap) {
+                codegenResult.add(
+                        createMethodInvocationStm(
+                                getLocation(),
+                                createAmbiguousNameRef(
+                                        getLocation(),
+                                        "evaluation.vector_support.VectorisedPrintOperators"
+                                ),
+                                "print",
+                                new Java.Rvalue[] {
+                                        avwsvap.readArrowVector(),
+                                        avwsvap.readSelectionVector(),
+                                        avwsvap.readSelectionVectorLength()
+                                }
+                        )
+                );
+            } else {
+                throw new UnsupportedOperationException("QueryResultPrinterOperator.consumeVec does not support this ordinal type");
+            }
+
+            if (i == currentOrdinalMapping.size() - 1) {
                 codegenResult.add(
                         JaninoMethodGen.createMethodInvocationStm(
                                 getLocation(),
@@ -129,8 +156,6 @@ public class QueryResultPrinterOperator extends CodeGenOperator<RelNode> {
                                 "println"
                         )
                 );
-            } catch (CompileException e) {
-                throw new RuntimeException("Could not generate method invocation statement during code generation phase", e);
             }
         }
 

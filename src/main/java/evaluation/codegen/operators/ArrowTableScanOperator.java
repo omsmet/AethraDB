@@ -4,8 +4,9 @@ import calcite.operators.LogicalArrowTableScan;
 import evaluation.codegen.infrastructure.context.CodeGenContext;
 import evaluation.codegen.infrastructure.context.OptimisationContext;
 import evaluation.codegen.infrastructure.context.access_path.AccessPath;
+import evaluation.codegen.infrastructure.context.access_path.ArrowVectorAccessPath;
 import evaluation.codegen.infrastructure.context.access_path.IndexedArrowVectorElementAccessPath;
-import evaluation.codegen.infrastructure.context.access_path.SimpleAccessPath;
+import evaluation.codegen.infrastructure.context.access_path.ScalarVariableAccessPath;
 import evaluation.codegen.infrastructure.data.ArrowTableReader;
 import evaluation.codegen.infrastructure.data.DirectArrowTableReader;
 import evaluation.codegen.infrastructure.janino.JaninoOperatorGen;
@@ -19,6 +20,7 @@ import util.arrow.ArrowTable;
 import java.io.FileNotFoundException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 import static evaluation.codegen.infrastructure.janino.JaninoControlGen.createForLoop;
 import static evaluation.codegen.infrastructure.janino.JaninoControlGen.createWhileLoop;
@@ -29,6 +31,7 @@ import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createRe
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.getLocation;
 import static evaluation.codegen.infrastructure.janino.JaninoMethodGen.createBlock;
 import static evaluation.codegen.infrastructure.janino.JaninoMethodGen.createMethodInvocation;
+import static evaluation.codegen.infrastructure.janino.JaninoMethodGen.createMethodInvocationStm;
 import static evaluation.codegen.infrastructure.janino.JaninoVariableGen.createLocalVariable;
 import static evaluation.codegen.infrastructure.janino.JaninoVariableGen.createPrimitiveLocalVar;
 
@@ -72,30 +75,23 @@ public class ArrowTableScanOperator extends CodeGenOperator<LogicalArrowTableSca
 
         // for (int aviv = 0; aviv < firstColumnVector.getValueCount; aviv++) { [forLoopBody] }
         String avivName = cCtx.defineVariable("aviv");
-        SimpleAccessPath avivAccessPath = new SimpleAccessPath(avivName);
+        ScalarVariableAccessPath avivAccessPath = new ScalarVariableAccessPath(avivName);
         Java.Block forLoopBody = createBlock(getLocation());
         whileLoopBody.addStatement(
                 createForLoop(
                         getLocation(),
-                        createPrimitiveLocalVar(
-                                getLocation(),
-                                Java.Primitive.INT,
-                                avivName,
-                                "0"
-                        ),
+                        createPrimitiveLocalVar(getLocation(), Java.Primitive.INT, avivName, "0"),
                         JaninoOperatorGen.lt(
                                 getLocation(),
                                 avivAccessPath.read(),
                                 createMethodInvocation(
                                         getLocation(),
-                                        cCtx.getCurrentOrdinalMapping().get(0).read(),
+                                        // Valid to cast to ArrowVectorAccessPath as this is delivered by genericProduce(..)
+                                        ((ArrowVectorAccessPath) cCtx.getCurrentOrdinalMapping().get(0)).read(),
                                         "getValueCount"
                                 )
                         ),
-                        JaninoOperatorGen.postIncrement(
-                                getLocation(),
-                                createAmbiguousNameRef(getLocation(), avivName)
-                        ),
+                        JaninoOperatorGen.postIncrement(getLocation(), createAmbiguousNameRef(getLocation(), avivName)),
                         forLoopBody
                 )
         );
@@ -105,23 +101,16 @@ public class ArrowTableScanOperator extends CodeGenOperator<LogicalArrowTableSca
         // the aviv index variable
         List<AccessPath> updatedOrdinalMapping =
                 cCtx.getCurrentOrdinalMapping().stream().map(entry ->
-                        (AccessPath) new IndexedArrowVectorElementAccessPath((SimpleAccessPath) entry, avivAccessPath)
+                        // Valid to cast to entry ArrowVectorAccessPath as this is delivered by genericProduce(..)
+                        (AccessPath) new IndexedArrowVectorElementAccessPath((ArrowVectorAccessPath) entry, avivAccessPath)
                 ).toList();
         cCtx.setCurrentOrdinalMapping(updatedOrdinalMapping);
 
-        // Push the ordinal to access path mapping and CodeGenContext
-        cCtx.pushOrdinalMapping();
-        cCtx.pushCodeGenContext();
-
         // Have the parent operator consume the result within the for loop
-        forLoopBody.addStatements(this.parent.consumeNonVec(cCtx, oCtx));
+        forLoopBody.addStatements(nonVecParentConsume(cCtx, oCtx));
 
-        // Pop the CodeGenContext and ordinal to access path mappings again
-        cCtx.popCodeGenContext();
-        cCtx.popOrdinalMapping();
-
-        // Return the generated code
-        return codegenResult;
+        // Return the generated code after wrapping it in the scan surrounding variables
+        return wrapInScanSurroundingVariables(cCtx, oCtx, codegenResult);
     }
 
     @Override
@@ -140,19 +129,11 @@ public class ArrowTableScanOperator extends CodeGenOperator<LogicalArrowTableSca
         Java.Block whileLoopBody = createBlock(getLocation());
         List<Java.Statement> codegenResult = this.genericProduce(cCtx, oCtx, whileLoopBody);
 
-        // Push the ordinal to access path mapping and CodeGenContext
-        cCtx.pushOrdinalMapping();
-        cCtx.pushCodeGenContext();
-
         // Have the parent operator consume the result within the while loop
-        whileLoopBody.addStatements(this.parent.consumeVec(cCtx, oCtx));
+        whileLoopBody.addStatements(vecParentConsume(cCtx, oCtx));
 
-        // And pop the CodeGenContext and ordinal to variable name mappings again
-        cCtx.popCodeGenContext();
-        cCtx.popOrdinalMapping();
-
-        // Return the generated code
-        return codegenResult;
+        // Return the generated code after wrapping it in the scan surrounding variables
+        return wrapInScanSurroundingVariables(cCtx, oCtx, codegenResult);
     }
 
     @Override
@@ -279,7 +260,7 @@ public class ArrowTableScanOperator extends CodeGenOperator<LogicalArrowTableSca
             // Define and expose an access path to a variable representing vectors of the projected column
             String preferredOutputColumnVariableName = arrowReaderVariableName + "_vc_" + outputColumnIndex;
             String outputColumnVariableName = cCtx.defineVariable(preferredOutputColumnVariableName);
-            projectedColumnAccessPaths.add(outputColumnIndex, new SimpleAccessPath(outputColumnVariableName));
+            projectedColumnAccessPaths.add(outputColumnIndex, new ArrowVectorAccessPath(outputColumnVariableName));
 
             // Do the projection by generating the variable for this column's vector
             Java.Type projectedColumnType = createReferenceType(getLocation(), vectorType);
@@ -308,5 +289,46 @@ public class ArrowTableScanOperator extends CodeGenOperator<LogicalArrowTableSca
         cCtx.setCurrentOrdinalMapping(projectedColumnAccessPaths);
 
         return codegenResult;
+    }
+
+    /**
+     * Method for handling the allocation of scan-surrounding variables.
+     * @param cCtx The {@link CodeGenContext} to use during the generation.
+     * @param oCtx The {@link OptimisationContext} to use during the generation and execution.
+     * @param scanCodeToWrap The code of the generated scan operator to wrap.
+     */
+    public List<Java.Statement> wrapInScanSurroundingVariables(
+            CodeGenContext cCtx,
+            OptimisationContext oCtx,
+            List<Java.Statement> scanCodeToWrap
+    ) {
+        List<Java.Statement> result = new ArrayList<>();
+
+        // Allocate the variables
+        Map<String, Java.Statement> scanSurroundingAllocations = cCtx.getScanSurroundingVariables();
+        result.addAll(scanSurroundingAllocations.values());
+
+        // Add the code of the scan operator
+        result.addAll(scanCodeToWrap);
+
+        // Deallocate the scan variables
+        for (String varToDallocate : scanSurroundingAllocations.keySet()) {
+            result.add(
+                    createMethodInvocationStm(
+                            getLocation(),
+                            createMethodInvocation(
+                                    getLocation(),
+                                    createAmbiguousNameRef(getLocation(), "cCtx"),
+                                    "getAllocationManager"
+                            ),
+                            "release",
+                            new Java.Rvalue[] {
+                                    createAmbiguousNameRef(getLocation(), varToDallocate)
+                            }
+                    )
+            );
+        }
+
+        return result;
     }
 }

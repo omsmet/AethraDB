@@ -14,24 +14,30 @@ public class IndexedArrowVectorElementAccessPath extends AccessPath {
     /**
      * The Arrow vector variable to access elements from.
      */
-    private final SimpleAccessPath arrowVectorVariable;
+    private final ArrowVectorAccessPath arrowVectorVariable;
 
     /**
      * The variable representing the index of the element in the Arrow vector to access.
      */
-    private final SimpleAccessPath indexVariable;
+    private final ScalarVariableAccessPath indexVariable;
 
     /**
      * Create an {@link IndexedArrowVectorElementAccessPath} instance.
      * @param arrowVectorVariable The Arrow vector variable to access.
      * @param indexVariable The index variable to use.
      */
-    public IndexedArrowVectorElementAccessPath(SimpleAccessPath arrowVectorVariable, SimpleAccessPath indexVariable) {
+    public IndexedArrowVectorElementAccessPath(
+            ArrowVectorAccessPath arrowVectorVariable,
+            ScalarVariableAccessPath indexVariable
+    ) {
         this.arrowVectorVariable = arrowVectorVariable;
         this.indexVariable = indexVariable;
     }
 
-    @Override
+    /**
+     * Method performing code generation to read the value of the variable represented by {@code this}.
+     * @return A {@link Java.Rvalue} to read the value of the variable represented by {@code this}.
+     */
     public Java.Rvalue read() {
         return createMethodInvocation(
                 getLocation(),
@@ -42,4 +48,5 @@ public class IndexedArrowVectorElementAccessPath extends AccessPath {
                 }
         );
     }
+
 }

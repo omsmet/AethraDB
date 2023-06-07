@@ -4,7 +4,12 @@ import evaluation.codegen.infrastructure.context.CodeGenContext;
 import evaluation.codegen.infrastructure.context.OptimisationContext;
 import evaluation.codegen.operators.CodeGenOperator;
 import org.codehaus.commons.compiler.CompileException;
-import org.codehaus.janino.*;
+import org.codehaus.janino.Access;
+import org.codehaus.janino.Java;
+import org.codehaus.janino.Parser;
+import org.codehaus.janino.Scanner;
+import org.codehaus.janino.SimpleCompiler;
+import org.codehaus.janino.TokenType;
 
 import java.io.IOException;
 import java.io.StringReader;
