@@ -2,6 +2,7 @@ import evaluation.codegen.GeneratedQuery;
 import evaluation.codegen.QueryCodeGenerator;
 import evaluation.codegen.translation.NonVectorisedQueryTranslator;
 import evaluation.codegen.translation.QueryTranslator;
+import evaluation.codegen.translation.VectorisedQueryTranslator;
 import org.apache.calcite.plan.RelOptUtil;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.sql.SqlNode;

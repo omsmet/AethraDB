@@ -5,8 +5,8 @@ import evaluation.codegen.infrastructure.context.OptimisationContext;
 import evaluation.codegen.infrastructure.context.access_path.AccessPath;
 import evaluation.codegen.infrastructure.context.access_path.ArrowVectorAccessPath;
 import evaluation.codegen.infrastructure.context.access_path.ArrowVectorWithSelectionVectorAccessPath;
+import evaluation.codegen.infrastructure.context.access_path.ScalarVariableAccessPath;
 import evaluation.codegen.infrastructure.janino.JaninoMethodGen;
-import evaluation.codegen.infrastructure.janino.JaninoOperatorGen;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.sql.type.BasicSqlType;
 import org.codehaus.janino.Java;
@@ -18,6 +18,7 @@ import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createAm
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createStringLiteral;
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.getLocation;
 import static evaluation.codegen.infrastructure.janino.JaninoMethodGen.createMethodInvocationStm;
+import static evaluation.codegen.infrastructure.janino.JaninoOperatorGen.plus;
 
 /**
  * A {@link CodeGenOperator} which can be the top-level operator of a {@link CodeGenOperator} tree
@@ -75,19 +76,23 @@ public class QueryResultPrinterOperator extends CodeGenOperator<RelNode> {
         for (int i = 0; i < currentOrdinalMapping.size(); i++) {
             Java.Type ordinalType = sqlTypeToScalarJavaType(
                     (BasicSqlType) this.getLogicalSubplan().getRowType().getFieldList().get(i).getType());
-            String methodName = (i != currentOrdinalMapping.size() - 1) ? "print" : "println";
+
+            boolean lastElement = (i == currentOrdinalMapping.size() - 1);
+            String methodName = lastElement ? "println" : "print";
+            Java.Rvalue printValue = getRValueFromAccessPathNonVec(cCtx, oCtx, i, ordinalType, codegenResult);
+            if (!lastElement)
+                printValue = plus(
+                        getLocation(),
+                        printValue,
+                        createStringLiteral(getLocation(), "\", \"")
+                );
+
             codegenResult.add(
                     createMethodInvocationStm(
                             getLocation(),
                             createAmbiguousNameRef(getLocation(), "System.out"),
                             methodName,
-                            new Java.Rvalue[] {
-                                    JaninoOperatorGen.plus(
-                                            getLocation(),
-                                            getRValueFromAccessPathNonVec(cCtx, oCtx, i, ordinalType, codegenResult),
-                                            createStringLiteral(getLocation(), "\", \"")
-                                    )
-                            }
+                            new Java.Rvalue[] { printValue }
                     )
             );
         }
@@ -128,6 +133,7 @@ public class QueryResultPrinterOperator extends CodeGenOperator<RelNode> {
                                 }
                         )
                 );
+
             } else if (ordinalAccessPath instanceof ArrowVectorWithSelectionVectorAccessPath avwsvap) {
                 codegenResult.add(
                         createMethodInvocationStm(
@@ -144,6 +150,18 @@ public class QueryResultPrinterOperator extends CodeGenOperator<RelNode> {
                                 }
                         )
                 );
+
+            } else if (ordinalAccessPath instanceof ScalarVariableAccessPath svap) {
+                // This should only occur for aggregation queries in the vectorised paradigm
+                codegenResult.add(
+                        createMethodInvocationStm(
+                                getLocation(),
+                                createAmbiguousNameRef(getLocation(), "System.out"),
+                                "println",
+                                new Java.Rvalue[] { svap.read() }
+                        )
+                );
+
             } else {
                 throw new UnsupportedOperationException("QueryResultPrinterOperator.consumeVec does not support this ordinal type");
             }

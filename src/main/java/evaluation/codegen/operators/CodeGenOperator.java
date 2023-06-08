@@ -17,6 +17,7 @@ import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createIn
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createPrimitiveType;
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.getLocation;
 import static evaluation.codegen.infrastructure.janino.JaninoVariableGen.createLocalVariable;
+import static evaluation.codegen.infrastructure.janino.JaninoVariableGen.createPrimitiveLocalVar;
 
 /**
  * Class that is extended by all code generator operators.
@@ -184,6 +185,23 @@ public abstract class CodeGenOperator<T extends RelNode> {
             case BIGINT -> createPrimitiveType(getLocation(), Java.Primitive.LONG);
             default -> throw new UnsupportedOperationException(
                     "sqlTypeToScalarJavaType does not support the provided sqlType");
+        };
+    }
+
+    /**
+     * Method for obtaining an initialised java primitive variable declaration for a logical sql type.
+     * @param sqlType The type for which to obtain the variable.
+     * @param variableName The name to give to the variable.
+     * @return A {@link Java.Statement} corresponding to the declaration of the variable.
+     */
+    protected Java.Statement sqlTypeToScalarJavaVariable(BasicSqlType sqlType, String variableName) {
+        return switch (sqlType.getSqlTypeName()) {
+            case DOUBLE -> createPrimitiveLocalVar(getLocation(), Java.Primitive.DOUBLE, variableName, "0");
+            case FLOAT -> createPrimitiveLocalVar(getLocation(), Java.Primitive.FLOAT, variableName, "0");
+            case INTEGER -> createPrimitiveLocalVar(getLocation(), Java.Primitive.INT, variableName, "0");
+            case BIGINT -> createPrimitiveLocalVar(getLocation(), Java.Primitive.LONG, variableName, "0");
+            default -> throw new UnsupportedOperationException(
+                    "sqlTypeToScalarJavaVariable does not support the provided sqlType");
         };
     }
 

@@ -1,5 +1,6 @@
 package evaluation.codegen.infrastructure.janino;
 
+import org.codehaus.commons.compiler.CompileException;
 import org.codehaus.commons.compiler.Location;
 import org.codehaus.janino.Java;
 
@@ -27,6 +28,30 @@ public class JaninoOperatorGen {
     }
 
     /**
+     * Generate a post-increment operator.
+     * @param location The location at which the operator is requested for generation.
+     * @param var The variable to increment.
+     * @return the post-increment operator.
+     */
+    public static Java.Crement postIncrement(Location location, Java.Lvalue var) {
+        return new Java.Crement(location, var, "++");
+    }
+
+    /**
+     * Generate a post-increment operator statement.
+     * @param location The location at which the operator is requested for generation.
+     * @param var The variable to increment.
+     * @return the post-increment operator.
+     */
+    public static Java.Statement postIncrementStm(Location location, Java.Lvalue var) {
+        try {
+            return new Java.ExpressionStatement(postIncrement(location, var));
+        } catch (CompileException e) {
+            throw new RuntimeException("Exception occurred during post increment statement creation", e);
+        }
+    }
+
+    /**
      * Generate a logical not operator.
      * @param location The location at which the operator is requested for generation.
      * @param boolValue The value to invert.
@@ -45,16 +70,6 @@ public class JaninoOperatorGen {
      */
     public static Java.BinaryOperation lt(Location location, Java.Rvalue lhs, Java.Rvalue rhs) {
         return new Java.BinaryOperation(location, lhs, "<", rhs);
-    }
-
-    /**
-     * Generate a post-increment operator.
-     * @param location The location at which the operator is requested for generation.
-     * @param var The variable to increment.
-     * @return the post-increment operator.
-     */
-    public static Java.Crement postIncrement(Location location, Java.Lvalue var) {
-        return new Java.Crement(location, var, "++");
     }
 
 }

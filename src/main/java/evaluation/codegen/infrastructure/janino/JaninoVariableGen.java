@@ -48,8 +48,8 @@ public class JaninoVariableGen {
         Java.Literal initialValueLiteral = null;
         if (initialValue != null) { // Allow declaration of uninitialised variables
             initialValueLiteral = switch (primitiveType) {
-                case INT -> JaninoGeneralGen.createIntegerLiteral(location, initialValue);
                 case DOUBLE, FLOAT -> JaninoGeneralGen.createFloatingPointLiteral(location, initialValue);
+                case INT, LONG -> JaninoGeneralGen.createIntegerLiteral(location, initialValue);
                 default ->
                         throw new UnsupportedOperationException("This primitive type is not yet supported for local variable declarations");
             };
@@ -97,12 +97,13 @@ public class JaninoVariableGen {
      * @param lhs The variable to which the assignment should be done.
      * @param rhs The value to assign.
      * @return The assignment statement.
-     * @throws CompileException when the variable assignment is not valid.
      */
-    public static Java.ExpressionStatement createVariableAssignmentExpr(Location location, Java.Lvalue lhs, Java.Rvalue rhs) throws CompileException {
-        return new Java.ExpressionStatement(
-                createVariableAssignment(location, lhs, rhs)
-        );
+    public static Java.ExpressionStatement createVariableAssignmentStm(Location location, Java.Lvalue lhs, Java.Rvalue rhs) {
+        try {
+            return new Java.ExpressionStatement(createVariableAssignment(location, lhs, rhs));
+        } catch (CompileException e) {
+            throw new RuntimeException("Exception occurred while creating a variable assignment statement", e);
+        }
     }
 
     /**
@@ -117,6 +118,37 @@ public class JaninoVariableGen {
                 location,
                 lhs,
                 "=",
+                rhs
+        );
+    }
+
+    /**
+     * Method to generate a statement that performs an addition assignment to a variable.
+     * @param location The location from which the addition assignment statement is requested for generation.
+     * @param lhs The variable to which the addition assignment should be done.
+     * @param rhs The value to add to the variable assign.
+     * @return The addition assignment statement.
+     */
+    public static Java.ExpressionStatement createVariableAdditionAssignmentStm(Location location, Java.Lvalue lhs, Java.Rvalue rhs) {
+        try {
+            return new Java.ExpressionStatement(createVariableAdditionAssignment(location, lhs, rhs));
+        } catch (CompileException e) {
+            throw new RuntimeException("Exception occurred while creating a variable addition assignment statement", e);
+        }
+    }
+
+    /**
+     * Method to generate a variable addition assignment (+=).
+     * @param location The location from which the addition assignment expression is requested for generation.
+     * @param lhs The variable to which the addition assignment should be done.
+     * @param rhs The value to add to the variable.
+     * @return The variable addition assignment.
+     */
+    private static Java.Assignment createVariableAdditionAssignment(Location location, Java.Lvalue lhs, Java.Rvalue rhs) {
+        return new Java.Assignment(
+                location,
+                lhs,
+                "+=",
                 rhs
         );
     }
