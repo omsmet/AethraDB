@@ -5,6 +5,7 @@ import evaluation.codegen.infrastructure.context.OptimisationContext;
 import evaluation.codegen.infrastructure.context.access_path.AccessPath;
 import evaluation.codegen.infrastructure.context.access_path.ArrowVectorAccessPath;
 import evaluation.codegen.infrastructure.context.access_path.ArrowVectorWithSelectionVectorAccessPath;
+import evaluation.codegen.infrastructure.context.access_path.ArrowVectorWithValidityMaskAccessPath;
 import evaluation.codegen.infrastructure.context.access_path.ScalarVariableAccessPath;
 import org.apache.calcite.rel.core.AggregateCall;
 import org.apache.calcite.rel.logical.LogicalAggregate;
@@ -40,10 +41,15 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
     /**
      * Create a {@link AggregationOperator} instance for a specific sub-query.
      * @param aggregation The logical aggregation (and sub-query) for which the operator is created.
+     * @param simdEnabled Whether the operator is allowed to use SIMD for processing.
      * @param child The {@link CodeGenOperator} producing the records to be aggregated.
      */
-    public AggregationOperator(LogicalAggregate aggregation, CodeGenOperator<?> child) {
-        super(aggregation);
+    public AggregationOperator(
+            LogicalAggregate aggregation,
+            boolean simdEnabled,
+            CodeGenOperator<?> child
+    ) {
+        super(aggregation, simdEnabled);
         this.child = child;
         this.child.setParent(this);
 
@@ -299,6 +305,26 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
                                                 this.aggCallToStateVariableNameMapping.get(i)
                                         ),
                                         avwsvap.readSelectionVectorLength()
+                                )
+                        );
+
+                    } else if (firstOrdinalAP instanceof ArrowVectorWithValidityMaskAccessPath avwvmap) {
+                        // count += VectorisedAggregationOperators.count(avwvmap.readValidityMask(), avwvmap.readValidityMaskLength());
+                        codeGenResult.add(
+                                createVariableAdditionAssignmentStm(
+                                        getLocation(),
+                                        createAmbiguousNameRef(getLocation(),
+                                                this.aggCallToStateVariableNameMapping.get(i)
+                                        ),
+                                        createMethodInvocation(
+                                                getLocation(),
+                                                createAmbiguousNameRef(getLocation(), "evaluation.vector_support.VectorisedAggregationOperators"),
+                                                "count",
+                                                new Java.Rvalue[] {
+                                                        avwvmap.readValidityMask(),
+                                                        avwvmap.readValidityMaskLength()
+                                                }
+                                        )
                                 )
                         );
 

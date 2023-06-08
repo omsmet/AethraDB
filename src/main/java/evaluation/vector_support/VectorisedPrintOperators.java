@@ -35,4 +35,34 @@ public class VectorisedPrintOperators extends VectorisedOperators {
         System.out.println(vector.get(selectionVector[lastSelectionVectorIndex]) + "]");
     }
 
+    /**
+     * Primitive for printing a {@link org.apache.arrow.vector.IntVector} to the standard output
+     * when only some entries are valid as specified by a validity mask.
+     * @param vector The vector to output.
+     * @param validityMask The validity mask indicating the valid entries.
+     * @param validityMaskLength The length of the valid portion of the validity mask.
+     */
+    public static void print(
+            org.apache.arrow.vector.IntVector vector,
+            boolean[] validityMask,
+            int validityMaskLength
+    ) {
+        System.out.print("[");
+        boolean entryHasBeenPrinted = false;
+
+        for (int i = 0; i < validityMaskLength; i++) {
+            if (!validityMask[i])
+                continue;
+
+            if (entryHasBeenPrinted)
+                System.out.print(", " + vector.get(i));
+            else {
+                System.out.print(vector.get(i));
+                entryHasBeenPrinted = true;
+            }
+        }
+
+        System.out.println("]");
+    }
+
 }

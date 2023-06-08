@@ -27,10 +27,10 @@ import java.util.concurrent.TimeUnit;
 
 /**
  * This microbenchmark evaluates the query processing performance of AethraDB using its vectorised
- * query code generation without SIMD-ed operators.
+ * query code generation with SIMD-ed operators.
  */
 @State(Scope.Benchmark)
-public class VectorisedNonSimd implements ResultConsumptionTarget {
+public class VectorisedSimd implements ResultConsumptionTarget {
 
     /**
      * We want to test the query processing performance for different table instances, where respectively
@@ -98,7 +98,7 @@ public class VectorisedNonSimd implements ResultConsumptionTarget {
 
         // Generate code for the query
         QueryTranslator queryTranslator = new QueryTranslator();
-        CodeGenOperator<?> queryRootOperator = queryTranslator.translate(plannedQuery, false);
+        CodeGenOperator<?> queryRootOperator = queryTranslator.translate(plannedQuery, true);
         CodeGenOperator<RelNode> queryResultConsumptionOperator = new ResultConsumptionOperator(plannedQuery, queryRootOperator);
         QueryCodeGenerator queryCodeGenerator = new QueryCodeGenerator(queryResultConsumptionOperator, true);
         this.generatedQuery = queryCodeGenerator.generateQuery(true);

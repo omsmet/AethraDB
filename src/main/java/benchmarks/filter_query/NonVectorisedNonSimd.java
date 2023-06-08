@@ -98,7 +98,7 @@ public class NonVectorisedNonSimd implements ResultConsumptionTarget {
 
         // Generate code for the query
         QueryTranslator queryTranslator = new QueryTranslator();
-        CodeGenOperator<?> queryRootOperator = queryTranslator.translate(plannedQuery);
+        CodeGenOperator<?> queryRootOperator = queryTranslator.translate(plannedQuery, false);
         CodeGenOperator<RelNode> queryResultConsumptionOperator = new ResultConsumptionOperator(plannedQuery, queryRootOperator);
         QueryCodeGenerator queryCodeGenerator = new QueryCodeGenerator(queryResultConsumptionOperator, false);
         this.generatedQuery = queryCodeGenerator.generateQuery(true);
@@ -135,7 +135,12 @@ public class NonVectorisedNonSimd implements ResultConsumptionTarget {
     @Benchmark
     @BenchmarkMode(Mode.SampleTime)
     @OutputTimeUnit(TimeUnit.MILLISECONDS)
-    @Fork(jvmArgsAppend = "--add-opens=java.base/java.nio=ALL-UNNAMED")
+    @Fork(jvmArgsAppend = {
+            "--add-modules=jdk.incubator.vector",
+            "--add-opens=java.base/java.nio=ALL-UNNAMED",
+            "-Darrow.enable_unsafe_memory_access=true",
+            "-Darrow.enable_null_check_for_get=false"
+    })
     public void executeFilterQuery() throws IOException {
         this.generatedQuery.execute();
     }

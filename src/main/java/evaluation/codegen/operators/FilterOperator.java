@@ -5,6 +5,7 @@ import evaluation.codegen.infrastructure.context.OptimisationContext;
 import evaluation.codegen.infrastructure.context.access_path.AccessPath;
 import evaluation.codegen.infrastructure.context.access_path.ArrowVectorAccessPath;
 import evaluation.codegen.infrastructure.context.access_path.ArrowVectorWithSelectionVectorAccessPath;
+import evaluation.codegen.infrastructure.context.access_path.ArrowVectorWithValidityMaskAccessPath;
 import org.apache.calcite.rel.logical.LogicalFilter;
 import org.apache.calcite.rex.RexCall;
 import org.apache.calcite.rex.RexInputRef;
@@ -39,10 +40,11 @@ public class FilterOperator extends CodeGenOperator<LogicalFilter> {
     /**
      * Create a {@link FilterOperator} instance for a specific sub-query.
      * @param filter The logical filter (and sub-query) for which the operator is created.
+     * @param simdEnabled Whether the operator is allowed to use SIMD for processing.
      * @param child The {@link CodeGenOperator} producing the records to be filtered.
      */
-    public FilterOperator(LogicalFilter filter, CodeGenOperator<?> child) {
-        super(filter);
+    public FilterOperator(LogicalFilter filter, boolean simdEnabled, CodeGenOperator<?> child) {
+        super(filter, simdEnabled);
         this.child = child;
         this.child.setParent(this);
     }
@@ -331,47 +333,61 @@ public class FilterOperator extends CodeGenOperator<LogicalFilter> {
             throw new UnsupportedOperationException(
                     "FilterOperator.consumeVecLtOperator does not support this operand combination");
 
+        // Get the access path for the lhs input reference
+        AccessPath lhsAP = cCtx.getCurrentOrdinalMapping().get(lhsRef.getIndex());
+
         // Generate the Rvalue for the rhs integer scalar
         Java.Rvalue rhsIntScalar = rexLiteralToRvalue(rhsLit);
 
-        // Check if left-hand operand matches one of the processing patterns:
-        // - ArrowVectorAccessPath
-        // - ArrowVectorWithSelectionVectorAccessPath
-        AccessPath lhsAP = cCtx.getCurrentOrdinalMapping().get(lhsRef.getIndex());
-        if (!(lhsAP instanceof ArrowVectorAccessPath || lhsAP instanceof ArrowVectorWithSelectionVectorAccessPath))
-            throw new UnsupportedOperationException(
-                    "FilterOperator.consumeVecLtOperator does not support this left-hand access path");
-
-        // Handle the generic part of the code generation
-        // Do a scan-surrounding allocation for the selection vector that will result from this operator
-        // int[] ordinal_[index]_sel_vec = cCtx.getAllocationManager().getIntVector()
-        String ordinalSelectionVectorVariableName = cCtx.defineScanSurroundingVariables(
-                "ordinal_" + lhsRef.getIndex() + "_sel_vec",
-                createPrimitiveArrayType(getLocation(), Java.Primitive.INT),
-                createMethodInvocation(
-                        getLocation(),
-                        createMethodInvocation(
-                                getLocation(),
-                                createAmbiguousNameRef(getLocation(), "cCtx"),
-                                "getAllocationManager"
-                        ),
-                        "getIntVector"
-                )
-        );
+        // Handle the generic part of the code generation based on whether SIMD is enabled
+        // Do a scan-surrounding allocation for the selection vector/validity mask that will result from this operator
+        String selectionResultVariableName;
+        if (this.simdEnabled) {
+            // boolean[] ordinal_[index]_val_mask = cCtx.getAllocationManager().getBooleanVector()
+            selectionResultVariableName = cCtx.defineScanSurroundingVariables(
+                    "ordinal_" + lhsRef.getIndex() + "_val_mask",
+                    createPrimitiveArrayType(getLocation(), Java.Primitive.BOOLEAN),
+                    createMethodInvocation(
+                            getLocation(),
+                            createMethodInvocation(
+                                    getLocation(),
+                                    createAmbiguousNameRef(getLocation(), "cCtx"),
+                                    "getAllocationManager"
+                            ),
+                            "getBooleanVector"
+                    )
+            );
+        } else {
+            // int[] ordinal_[index]_sel_vec = cCtx.getAllocationManager().getIntVector()
+            selectionResultVariableName = cCtx.defineScanSurroundingVariables(
+                    "ordinal_" + lhsRef.getIndex() + "_sel_vec",
+                    createPrimitiveArrayType(getLocation(), Java.Primitive.INT),
+                    createMethodInvocation(
+                            getLocation(),
+                            createMethodInvocation(
+                                    getLocation(),
+                                    createAmbiguousNameRef(getLocation(), "cCtx"),
+                                    "getAllocationManager"
+                            ),
+                            "getIntVector"
+                    )
+            );
+        }
 
         // Perform the actual selection using the appropriate vector support library (based on the
-        // left-hand access path type) and store the length of the selection vector in a local variable
-        String ordinalSelectionVectorLengthVariableName =
-                cCtx.defineVariable(ordinalSelectionVectorVariableName + "_length");
+        // left-hand access path type and whether SIMD is enabled) and store the length of
+        // the selection result (selection vector/validity mask) in a local variable
+        String selectionResultLengthVariableName =
+                cCtx.defineVariable(selectionResultVariableName + "_length");
 
-        if (lhsAP instanceof ArrowVectorAccessPath lhsArrowVecAP) {
+        if (lhsAP instanceof ArrowVectorAccessPath lhsArrowVecAP && !this.simdEnabled) {
             // int ordinal_[index]_sel_vec_length = VectorisedFilterOperators.lessThan(
             //      lhsArrowVecAP.read(), rhsIntScalar, ordinal_[index]_sel_vec);
             codegenResult.add(
                     createLocalVariable(
                             getLocation(),
                             createPrimitiveType(getLocation(), Java.Primitive.INT),
-                            ordinalSelectionVectorLengthVariableName,
+                            selectionResultLengthVariableName,
                             createMethodInvocation(
                                     getLocation(),
                                     createAmbiguousNameRef(
@@ -379,20 +395,46 @@ public class FilterOperator extends CodeGenOperator<LogicalFilter> {
                                             "evaluation.vector_support.VectorisedFilterOperators"
                                     ),
                                     "lessThan",
-                                    new Java.Rvalue[] {
+                                    new Java.Rvalue[]{
                                             lhsArrowVecAP.read(),
                                             rhsIntScalar,
                                             createAmbiguousNameRef(
                                                     getLocation(),
-                                                    ordinalSelectionVectorVariableName
+                                                    selectionResultVariableName
                                             )
                                     }
                             )
                     )
             );
 
-        } else { // lhsAP instanceof ArrowVectorWithSelectionVectorAccessPath lhsArrowVecWSAP
-            var lhsArrowVecWSAP = (ArrowVectorWithSelectionVectorAccessPath) lhsAP;
+        } else if (lhsAP instanceof ArrowVectorAccessPath lhsArrowVecAP && this.simdEnabled) {
+            // int ordinal_[index]_val_mask_length = VectorisedFilterOperators.lessThanSIMD(
+            //      lhsArrowVecAP.read(), rhsIntScalar, ordinal_[index]_val_mask);
+            codegenResult.add(
+                    createLocalVariable(
+                            getLocation(),
+                            createPrimitiveType(getLocation(), Java.Primitive.INT),
+                            selectionResultLengthVariableName,
+                            createMethodInvocation(
+                                    getLocation(),
+                                    createAmbiguousNameRef(
+                                            getLocation(),
+                                            "evaluation.vector_support.VectorisedFilterOperators"
+                                    ),
+                                    "lessThanSIMD",
+                                    new Java.Rvalue[] {
+                                            lhsArrowVecAP.read(),
+                                            rhsIntScalar,
+                                            createAmbiguousNameRef(
+                                                    getLocation(),
+                                                    selectionResultVariableName
+                                            )
+                                    }
+                            )
+                    )
+            );
+
+        } else if (lhsAP instanceof ArrowVectorWithSelectionVectorAccessPath lhsArrowVecWSAP && !this.simdEnabled) {
             // int rdinal_[index]_sel_vec_length = VectorisedFilterOperators.lessThan(
             //      lhsArrowVecWSAP.readArrowVector(), rhsIntScalar, ordinal_[index]_sel_vec,
             //      lhsArrowVecWSAP.readSelectionVector(), lhsArrowVecWSAP.readSelectionVectorLength());
@@ -400,7 +442,7 @@ public class FilterOperator extends CodeGenOperator<LogicalFilter> {
                     createLocalVariable(
                             getLocation(),
                             createPrimitiveType(getLocation(), Java.Primitive.INT),
-                            ordinalSelectionVectorLengthVariableName,
+                            selectionResultLengthVariableName,
                             createMethodInvocation(
                                     getLocation(),
                                     createAmbiguousNameRef(
@@ -413,7 +455,7 @@ public class FilterOperator extends CodeGenOperator<LogicalFilter> {
                                             rhsIntScalar,
                                             createAmbiguousNameRef(
                                                     getLocation(),
-                                                    ordinalSelectionVectorVariableName
+                                                    selectionResultVariableName
                                             ),
                                             lhsArrowVecWSAP.readSelectionVector(),
                                             lhsArrowVecWSAP.readSelectionVectorLength()
@@ -421,25 +463,70 @@ public class FilterOperator extends CodeGenOperator<LogicalFilter> {
                             )
                     )
             );
+
+        } else if (lhsAP instanceof ArrowVectorWithValidityMaskAccessPath lhsAvwvmAP && this.simdEnabled) {
+            // int ordinal_[index]_val_mask_length = VectorisedFilterOperators.lessThanSIMD(
+            //      lhsAvwvmAP.readArrowVector(), rhsIntScalar, ordinal_[index]_val_mask,
+            //      lhsAvwvmAP.readValidityMask(), lhsAvwvmAP.readValidityMaskLength());
+            codegenResult.add(
+                    createLocalVariable(
+                            getLocation(),
+                            createPrimitiveType(getLocation(), Java.Primitive.INT),
+                            selectionResultLengthVariableName,
+                            createMethodInvocation(
+                                    getLocation(),
+                                    createAmbiguousNameRef(
+                                            getLocation(),
+                                            "evaluation.vector_support.VectorisedFilterOperators"
+                                    ),
+                                    "lessThanSIMD",
+                                    new Java.Rvalue[] {
+                                            lhsAvwvmAP.readArrowVector(),
+                                            rhsIntScalar,
+                                            createAmbiguousNameRef(
+                                                    getLocation(),
+                                                    selectionResultVariableName
+                                            ),
+                                            lhsAvwvmAP.readValidityMask(),
+                                            lhsAvwvmAP.readValidityMaskLength()
+                                    }
+                            )
+                    )
+            );
+
+        } else {
+            throw new UnsupportedOperationException(
+                    "FilterOperator.consumeVecLtOperator does not support this left-hand access path and simd enabled combination");
         }
 
         // Update the current ordinal mapping to include the selection vector for all arrow vectors
         List<AccessPath> updatedOrdinalMapping = cCtx.getCurrentOrdinalMapping().stream().map(
                 entry -> {
-                    if (entry instanceof ArrowVectorAccessPath avapEntry)
+                    if (entry instanceof ArrowVectorAccessPath avapEntry && !this.simdEnabled)
                         return (AccessPath) new ArrowVectorWithSelectionVectorAccessPath(
                                 avapEntry.getVariableName(),
-                                ordinalSelectionVectorVariableName,
-                                ordinalSelectionVectorLengthVariableName);
-                    else if (entry instanceof ArrowVectorWithSelectionVectorAccessPath avwsvapEntry)
+                                selectionResultVariableName,
+                                selectionResultLengthVariableName);
+                    else if (entry instanceof ArrowVectorAccessPath avapEntry && this.simdEnabled)
+                        return (AccessPath) new ArrowVectorWithValidityMaskAccessPath(
+                                avapEntry.getVariableName(),
+                                selectionResultVariableName,
+                                selectionResultLengthVariableName);
+                    else if (entry instanceof ArrowVectorWithSelectionVectorAccessPath avwsvapEntry && !this.simdEnabled)
                         return (AccessPath) new ArrowVectorWithSelectionVectorAccessPath(
                                 avwsvapEntry.getArrowVectorVariable(),
-                                ordinalSelectionVectorVariableName,
-                                ordinalSelectionVectorLengthVariableName
+                                selectionResultVariableName,
+                                selectionResultLengthVariableName
+                        );
+                    else if (entry instanceof ArrowVectorWithValidityMaskAccessPath avwvmapEntry && this.simdEnabled)
+                        return (AccessPath) new ArrowVectorWithValidityMaskAccessPath(
+                                avwvmapEntry.getArrowVectorVariable(),
+                                selectionResultVariableName,
+                                selectionResultLengthVariableName
                         );
                     else
                         throw new UnsupportedOperationException(
-                                "We expected all ordinals to be of a vector type");
+                                "We expected all ordinals to be of specific vector types");
                 }).toList();
         cCtx.setCurrentOrdinalMapping(updatedOrdinalMapping);
 

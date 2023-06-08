@@ -42,9 +42,10 @@ public class ArrowTableScanOperator extends CodeGenOperator<LogicalArrowTableSca
     /**
      * Creates an {@link ArrowTableScanOperator} for a specific {@link LogicalArrowTableScan}.
      * @param logicalSubplan The {@link LogicalArrowTableScan} to create a scan operator for.
+     * @param simdEnabled Whether the operator is allowed to use SIMD for processing.
      */
-    public ArrowTableScanOperator(LogicalArrowTableScan logicalSubplan) {
-        super(logicalSubplan);
+    public ArrowTableScanOperator(LogicalArrowTableScan logicalSubplan, boolean simdEnabled) {
+        super(logicalSubplan, simdEnabled);
     }
 
     @Override

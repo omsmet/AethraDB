@@ -25,4 +25,16 @@ public abstract class AllocationManager {
      */
     public abstract void release(int[] vector);
 
+    /**
+     * Method for obtaining a boolean vector to use in query processing.
+     * @return A boolean vector of length {@code evaluation.vector_support.VectorisedOperators.VECTOR_LENGTH}.
+     */
+    public abstract boolean[] getBooleanVector();
+
+    /**
+     * Method to mark a boolean vector used in query processing as unused. ("free a vector")
+     * @param vector The vector to mark as unused.
+     */
+    public abstract void release(boolean[] vector);
+
 }

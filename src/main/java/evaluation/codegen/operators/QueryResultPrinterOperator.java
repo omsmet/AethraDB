@@ -5,6 +5,7 @@ import evaluation.codegen.infrastructure.context.OptimisationContext;
 import evaluation.codegen.infrastructure.context.access_path.AccessPath;
 import evaluation.codegen.infrastructure.context.access_path.ArrowVectorAccessPath;
 import evaluation.codegen.infrastructure.context.access_path.ArrowVectorWithSelectionVectorAccessPath;
+import evaluation.codegen.infrastructure.context.access_path.ArrowVectorWithValidityMaskAccessPath;
 import evaluation.codegen.infrastructure.context.access_path.ScalarVariableAccessPath;
 import evaluation.codegen.infrastructure.janino.JaninoMethodGen;
 import org.apache.calcite.rel.RelNode;
@@ -37,7 +38,7 @@ public class QueryResultPrinterOperator extends CodeGenOperator<RelNode> {
      * @param child The {@link CodeGenOperator} producing the actual query result.
      */
     public QueryResultPrinterOperator(RelNode logicalSubplan, CodeGenOperator<?> child) {
-        super(logicalSubplan);
+        super(logicalSubplan, false);
         this.child = child;
         this.child.setParent(this);
     }
@@ -147,6 +148,23 @@ public class QueryResultPrinterOperator extends CodeGenOperator<RelNode> {
                                         avwsvap.readArrowVector(),
                                         avwsvap.readSelectionVector(),
                                         avwsvap.readSelectionVectorLength()
+                                }
+                        )
+                );
+
+            } else if (ordinalAccessPath instanceof ArrowVectorWithValidityMaskAccessPath avwvmap) {
+                codegenResult.add(
+                        createMethodInvocationStm(
+                                getLocation(),
+                                createAmbiguousNameRef(
+                                        getLocation(),
+                                        "evaluation.vector_support.VectorisedPrintOperators"
+                                ),
+                                "print",
+                                new Java.Rvalue[] {
+                                        avwvmap.readArrowVector(),
+                                        avwvmap.readValidityMask(),
+                                        avwvmap.readValidityMaskLength()
                                 }
                         )
                 );

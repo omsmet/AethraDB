@@ -25,4 +25,15 @@ public class DirectAllocationManager extends AllocationManager {
         // Do nothing since we do not keep track of vectors which are in circulation.
     }
 
+    @Override
+    public boolean[] getBooleanVector() {
+        // Simply return a new vector
+        return new boolean[VectorisedOperators.VECTOR_LENGTH];
+    }
+
+    @Override
+    public void release(boolean[] vector) {
+        // Do nothing since we do not keep track of vectors which are in circulation.
+    }
+
 }

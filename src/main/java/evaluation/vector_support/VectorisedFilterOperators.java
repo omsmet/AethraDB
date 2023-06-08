@@ -1,5 +1,14 @@
 package evaluation.vector_support;
 
+import jdk.incubator.vector.VectorMask;
+import jdk.incubator.vector.VectorOperators;
+import org.apache.arrow.vector.IntVector;
+
+import java.lang.foreign.MemorySegment;
+import java.nio.ByteOrder;
+
+import static evaluation.codegen.infrastructure.context.OptimisationContext.INT_VECTOR_SPECIES;
+
 /**
  * Class containing vectorised primitives for filter operations.
  */
@@ -59,6 +68,102 @@ public class VectorisedFilterOperators extends VectorisedOperators {
         }
 
         return selectionVectorIndex;
+    }
+
+    /**
+     * Primitive for performing a selection over {@link org.apache.arrow.vector.IntVector} with a
+     * given less-than condition using SIMD-ed code.
+     * @param vector The vector to perform the selection over.
+     * @param condition Specifies the maximum value of a valid record in the vector.
+     * @param validityMask The mask into which to produce the boolean indicating the validity of
+     *                     each record in the vector.
+     * @return The length of the valid section of {@code validityMask}.
+     */
+    public static int lessThanSIMD(
+        org.apache.arrow.vector.IntVector vector,
+        int condition,
+        boolean[] validityMask
+    ) {
+        // Initialise the memory segment
+        int vectorLength = vector.getValueCount();
+        long bufferSize = (long) vectorLength * IntVector.TYPE_WIDTH;
+        MemorySegment vectorSegment =
+                MemorySegment.ofAddress(vector.getDataBufferAddress(), bufferSize);
+
+        // Perform vectorised processing
+        int currentIndex = 0;
+        for (; currentIndex < INT_VECTOR_SPECIES.loopBound(vectorLength); currentIndex += INT_VECTOR_SPECIES.length()) {
+            var simdVector = jdk.incubator.vector.IntVector.fromMemorySegment(
+                    INT_VECTOR_SPECIES,
+                    vectorSegment,
+                    (long) currentIndex * IntVector.TYPE_WIDTH,
+                    ByteOrder.LITTLE_ENDIAN);
+            var validityMaskVector = simdVector.lt(condition);
+            validityMaskVector.intoArray(validityMask, currentIndex);
+        }
+
+        // Process the tail
+        for (; currentIndex < vectorLength; currentIndex++) {
+            validityMask[currentIndex] = vector.get(currentIndex) < condition;
+        }
+
+        return vectorLength;
+    }
+
+    /**
+     * Primitive for performing a selection over {@link org.apache.arrow.vector.IntVector} with a
+     * given less-than condition using SIMD-ed code where only some indices of the vector are valid.
+     * @param vector The vector to perform the selection over.
+     * @param condition Specifies the maximum value of a valid record in the vector.
+     * @param validityMask The mask into which to produce the boolean indicating the validity of
+     *                     each record in the vector.
+     * @param validIndicesMask The mask indicating which indices of {@code vector} are valid.
+     * @param validIndicesMaskLength The length of the valid portion of {@code validIndicesMask}.
+     * @return The length of the valid section of {@code validityMask}.
+     */
+    public static int lessThanSIMD(
+            org.apache.arrow.vector.IntVector vector,
+            int condition,
+            boolean[] validityMask,
+            boolean[] validIndicesMask,
+            int validIndicesMaskLength
+    ) {
+        // Initialise the memory segment
+        int vectorLength = vector.getValueCount();
+        long bufferSize = (long) vectorLength * IntVector.TYPE_WIDTH;
+        MemorySegment vectorSegment =
+                MemorySegment.ofAddress(vector.getDataBufferAddress(), bufferSize);
+
+        // Perform vectorised processing
+        int currentIndex = 0;
+        for (; currentIndex < INT_VECTOR_SPECIES.loopBound(vectorLength); currentIndex += INT_VECTOR_SPECIES.length()) {
+            // Initialise the SIMD vector and mask indicating the entries that are valid
+            var simdVector = jdk.incubator.vector.IntVector.fromMemorySegment(
+                    INT_VECTOR_SPECIES,
+                    vectorSegment,
+                    (long) currentIndex * IntVector.TYPE_WIDTH,
+                    ByteOrder.LITTLE_ENDIAN);
+            VectorMask<Integer> validityMaskVector = VectorMask.fromArray(
+                    INT_VECTOR_SPECIES,
+                    validIndicesMask,
+                    currentIndex
+            );
+
+            // Compute the valid entries which match the condition as a vector mask
+            var resultValidityMaskVector = simdVector.compare(
+                    VectorOperators.LT,
+                    condition,
+                    validityMaskVector);
+            resultValidityMaskVector.intoArray(validityMask, currentIndex);
+        }
+
+        // Process the tail
+        for (; currentIndex < vectorLength; currentIndex++) {
+            validityMask[currentIndex] =
+                    validIndicesMask[currentIndex] && (vector.get(currentIndex) < condition);
+        }
+
+        return vectorLength;
     }
 
 }

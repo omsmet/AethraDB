@@ -33,7 +33,7 @@ public class ResultConsumptionOperator extends CodeGenOperator<RelNode> {
      * @param child The {@link CodeGenOperator} producing the actual query result.
      */
     public ResultConsumptionOperator(RelNode logicalSubplan, CodeGenOperator<?> child) {
-        super(logicalSubplan);
+        super(logicalSubplan, false);
         this.child = child;
         this.child.setParent(this);
     }

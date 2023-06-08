@@ -36,12 +36,19 @@ public abstract class CodeGenOperator<T extends RelNode> {
     private final T logicalSubplan;
 
     /**
+     * Whether a {@link CodeGenOperator} is allowed to use SIMD for processing.
+     */
+    protected final boolean simdEnabled;
+
+    /**
      * Initialises a new instance of a specific {@link CodeGenOperator}.
      * @param logicalSubplan The logical sub-plan that should be implemented by this operator.
+     * @param simdEnabled Whether the operator is allowed to use SIMD for processing.
      */
-    protected CodeGenOperator(T logicalSubplan) {
+    protected CodeGenOperator(T logicalSubplan, boolean simdEnabled) {
         this.parent = null;
         this.logicalSubplan = logicalSubplan;
+        this.simdEnabled = simdEnabled;
     }
 
     /**
