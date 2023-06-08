@@ -1,5 +1,6 @@
 package evaluation.codegen.infrastructure.context;
 
+import benchmarks.util.ResultConsumptionTarget;
 import evaluation.codegen.infrastructure.context.access_path.AccessPath;
 import evaluation.codegen.infrastructure.data.AllocationManager;
 import evaluation.codegen.infrastructure.data.ArrowTableReader;
@@ -69,6 +70,11 @@ public class CodeGenContext implements AutoCloseable {
     private AllocationManager allocationManager;
 
     /**
+     * A {@link ResultConsumptionTarget} for transferring the query result outside the generated query code.
+     */
+    private ResultConsumptionTarget resultConsumptionTarget;
+
+    /**
      * Creates a new empty {@link CodeGenContext} instance.
      */
     public CodeGenContext() {
@@ -86,6 +92,7 @@ public class CodeGenContext implements AutoCloseable {
         this.arrowRootAllocator = null;
         this.arrowTableReaders = null;
         this.allocationManager = null;
+        this.resultConsumptionTarget = null;
     }
 
     /**
@@ -227,6 +234,14 @@ public class CodeGenContext implements AutoCloseable {
     }
 
     /**
+     * Method for obtaining all {@link ArrowTableReader}s belonging to the query.
+     * @return The list of {@link ArrowTableReader}s belonging to the query.
+     */
+    public List<ArrowTableReader> getArrowReaders() {
+        return this.arrowTableReaders;
+    }
+
+    /**
      * Method for obtaining a specific {@link ArrowTableReader} belonging to the query.
      * @param index The index of the {@link ArrowTableReader} to return.
      * @return The {@link ArrowTableReader} corresponding to the given index.
@@ -243,6 +258,24 @@ public class CodeGenContext implements AutoCloseable {
         if (this.allocationManager == null)
             this.allocationManager = new DirectAllocationManager();
         return this.allocationManager;
+    }
+
+    /**
+     * Method for setting the {@link ResultConsumptionTarget} of this {@link CodeGenContext}.
+     * @param resultConsumptionTarget The {@link ResultConsumptionTarget} to set.
+     */
+    public void setResultConsumptionTarget(ResultConsumptionTarget resultConsumptionTarget) {
+        this.resultConsumptionTarget = resultConsumptionTarget;
+    }
+
+    /**
+     * Method to obtain the {@link ResultConsumptionTarget} of this {@link CodeGenContext}.
+      * @return The {@link ResultConsumptionTarget} of this {@link CodeGenContext}.
+     */
+    public ResultConsumptionTarget getResultConsumptionTarget() {
+        if (this.resultConsumptionTarget == null)
+            throw new IllegalStateException("The ResultConsumptionTarget has not been set on this CodeGenContext");
+        return this.resultConsumptionTarget;
     }
 
     /**

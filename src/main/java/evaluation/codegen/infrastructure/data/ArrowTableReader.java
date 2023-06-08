@@ -35,6 +35,11 @@ public abstract class ArrowTableReader implements AutoCloseable {
     }
 
     /**
+     * Method to reset the {@link ArrowTableReader} so it can once more be read from.
+     */
+    public abstract void reset() throws Exception;
+
+    /**
      * Method for loading the next arrow batch to be processed.
      * @return {@code true} if a new batch could be loaded, {@code false} if there are no more batches to process.
      * @throws IOException when an I/O issue occurs during batch loading.

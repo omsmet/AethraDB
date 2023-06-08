@@ -17,7 +17,6 @@ import org.apache.calcite.sql.type.SqlTypeName;
 import org.codehaus.janino.Java;
 import util.arrow.ArrowTable;
 
-import java.io.FileNotFoundException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -180,8 +179,8 @@ public class ArrowTableScanOperator extends CodeGenOperator<LogicalArrowTableSca
                     arrowTable.getArrowFile(),
                     cCtx.getArrowRootAllocator()
             );
-        } catch (FileNotFoundException e) {
-            throw new RuntimeException("Could not locate Arrow file in query compilation stage.", e);
+        } catch (Exception e) {
+            throw new RuntimeException("Could not create ArrowTableReader in query compilation stage.", e);
         }
 
         // Store the arrow reader in the CodeGenContext

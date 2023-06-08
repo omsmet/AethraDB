@@ -1,7 +1,6 @@
 package evaluation.codegen.translation;
 
 import calcite.operators.LogicalArrowTableScan;
-import evaluation.codegen.QueryCodeGenerator;
 import evaluation.codegen.operators.AggregationOperator;
 import evaluation.codegen.operators.ArrowTableScanOperator;
 import evaluation.codegen.operators.CodeGenOperator;
@@ -11,17 +10,21 @@ import org.apache.calcite.rel.logical.LogicalAggregate;
 import org.apache.calcite.rel.logical.LogicalFilter;
 
 /**
- * Interface implemented by classes which can translate a Calcite logical plan into a {@link QueryCodeGenerator}.
+ * Class which can translate a Calcite logical plan into a tree of {@link CodeGenOperator}s that
+ * can be used to generate query code.
  */
-public abstract class QueryTranslator {
+public class QueryTranslator {
 
     /**
-     * Method to translate a logical plan into a {@link QueryCodeGenerator}.
+     * Method to translate a logical plan into a tree of {@link CodeGenOperator}s that can be used
+     * to generate query code.
      * @param logicalPlanRoot The logical plan to translate.
-     * @return A {@link QueryCodeGenerator} that can generate an executable query corresponding to
+     * @return The {@link CodeGenOperator} tree that can generate an executable query corresponding to
      * {@code logicalPlanRoot}.
      */
-    public abstract QueryCodeGenerator translate(RelNode logicalPlanRoot);
+    public CodeGenOperator<?> translate(RelNode logicalPlanRoot) {
+        return convert(logicalPlanRoot);
+    };
 
     /**
      * Method to translate a given {@link RelNode} of a logical plan into a {@link CodeGenOperator}.
