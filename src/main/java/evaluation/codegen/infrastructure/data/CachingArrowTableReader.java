@@ -72,6 +72,7 @@ public class CachingArrowTableReader extends ArrowTableReader {
                     throw new UnsupportedOperationException("CachingArrowTableReader.reset could not cache the current field vector type");
                 }
             }
+            cvi++;
         }
 
         // Set the correct state

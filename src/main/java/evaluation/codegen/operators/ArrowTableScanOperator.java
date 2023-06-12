@@ -12,6 +12,7 @@ import evaluation.codegen.infrastructure.context.access_path.SIMDVectorMaskAcces
 import evaluation.codegen.infrastructure.context.access_path.SIMDVectorSpeciesAccessPath;
 import evaluation.codegen.infrastructure.context.access_path.ScalarVariableAccessPath;
 import evaluation.codegen.infrastructure.data.ArrowTableReader;
+import evaluation.codegen.infrastructure.data.CachingArrowTableReader;
 import evaluation.codegen.infrastructure.data.DirectArrowTableReader;
 import evaluation.codegen.infrastructure.janino.JaninoOperatorGen;
 import org.apache.calcite.prepare.RelOptTableImpl;
@@ -398,7 +399,7 @@ public class ArrowTableScanOperator extends CodeGenOperator<LogicalArrowTableSca
 
         ArrowTableReader arrowReader;
         try {
-            arrowReader = new DirectArrowTableReader(
+            arrowReader = new CachingArrowTableReader(
                     arrowTable.getArrowFile(),
                     cCtx.getArrowRootAllocator()
             );
