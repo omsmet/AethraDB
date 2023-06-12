@@ -10,10 +10,8 @@ import org.apache.calcite.util.Pair;
 import org.codehaus.janino.Java;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.Stack;
 

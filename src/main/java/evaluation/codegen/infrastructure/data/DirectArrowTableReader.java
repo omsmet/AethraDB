@@ -1,6 +1,7 @@
 package evaluation.codegen.infrastructure.data;
 
 import org.apache.arrow.memory.RootAllocator;
+import org.apache.arrow.vector.FieldVector;
 import org.apache.arrow.vector.VectorSchemaRoot;
 import org.apache.arrow.vector.ipc.ArrowFileReader;
 import org.apache.arrow.vector.ipc.ArrowReader;
@@ -27,6 +28,11 @@ public class DirectArrowTableReader extends ArrowTableReader {
     private ArrowReader arrowReader;
 
     /**
+     * The {@link VectorSchemaRoot} used for reading the Arrow file.
+     */
+    private VectorSchemaRoot vectorSchemaRoot;
+
+    /**
      * Creates a new {@link ArrowTableReader} instance
      * @param arrowFile The Arrow IPC file representing the table.
      * @param rootAllocator The {@link RootAllocator} used for Arrow operations.
@@ -44,6 +50,7 @@ public class DirectArrowTableReader extends ArrowTableReader {
 
         this.arrowFileStream = new FileInputStream(this.arrowFile);
         this.arrowReader = new ArrowFileReader(this.arrowFileStream.getChannel(), this.tableAllocator);
+        this.vectorSchemaRoot = this.arrowReader.getVectorSchemaRoot();
     }
 
     @Override
@@ -52,12 +59,13 @@ public class DirectArrowTableReader extends ArrowTableReader {
     }
 
     @Override
-    public VectorSchemaRoot getVectorSchemaRoot() throws IOException {
-        return this.arrowReader.getVectorSchemaRoot();
+    public FieldVector getVector(int index) {
+        return this.vectorSchemaRoot.getVector(index);
     }
 
     @Override
     protected void specificClose() throws IOException {
+        this.vectorSchemaRoot.close();
         this.arrowReader.close();
         this.arrowFileStream.close();
     }

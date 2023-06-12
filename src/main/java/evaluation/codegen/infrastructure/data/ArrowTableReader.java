@@ -2,7 +2,7 @@ package evaluation.codegen.infrastructure.data;
 
 import org.apache.arrow.memory.BufferAllocator;
 import org.apache.arrow.memory.RootAllocator;
-import org.apache.arrow.vector.VectorSchemaRoot;
+import org.apache.arrow.vector.FieldVector;
 
 import java.io.File;
 import java.io.IOException;
@@ -47,11 +47,11 @@ public abstract class ArrowTableReader implements AutoCloseable {
     public abstract boolean loadNextBatch() throws IOException;
 
     /**
-     * Method for obtaining the {@link VectorSchemaRoot} of the current arrow batch.
-     * @return the {@link VectorSchemaRoot} of the current arrow batch.
-     * @throws IOException when an I/O issue occurs during schema root loading.
+     * Method for obtaining a specific {@link FieldVector} of the current arrow batch.
+     * @param index The index of the {@link FieldVector} to retrieve.
+     * @return The {@link FieldVector} of the current arrow batch corresponding to {@code index}.
      */
-    public abstract VectorSchemaRoot getVectorSchemaRoot() throws IOException;
+    public abstract FieldVector getVector(int index);
 
     @Override
     public final void close() throws Exception {

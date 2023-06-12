@@ -18,7 +18,6 @@ import org.apache.calcite.prepare.RelOptTableImpl;
 import org.apache.calcite.rel.type.RelDataTypeField;
 import org.apache.calcite.sql.type.BasicSqlType;
 import org.apache.calcite.sql.type.SqlTypeName;
-import org.apache.calcite.util.Pair;
 import org.codehaus.janino.Java;
 import util.arrow.ArrowTable;
 
@@ -436,23 +435,6 @@ public class ArrowTableScanOperator extends CodeGenOperator<LogicalArrowTableSca
                 )
         );
 
-        // Obtain the VectorSchemaRoot for the Arrow reader
-        // VectorSchemaRoot [arrowReaderVariableName]_sr = [arrowReaderVariableName].getVectorSchemaRoot();
-        String schemaRootVariableName = cCtx.defineVariable(arrowReaderVariableName + "_sr");
-
-        codegenResult.add(
-                createLocalVariable(
-                        getLocation(),
-                        createReferenceType(getLocation(), "org.apache.arrow.vector.VectorSchemaRoot"),
-                        schemaRootVariableName,
-                        createMethodInvocation(
-                                getLocation(),
-                                createAmbiguousNameRef(getLocation(), arrowReaderVariableName),
-                                "getVectorSchemaRoot"
-                        )
-                )
-        );
-
         // Loop over the vectors in the arrow file
         // while ([arrowReaderVariableName].loadNextBatch()) { [whileLoopBody] }
         codegenResult.add(
@@ -469,7 +451,7 @@ public class ArrowTableScanOperator extends CodeGenOperator<LogicalArrowTableSca
 
         // Project by creating an arrow vector variable per projected column in the [whileLoopBody]
         // [vectorType] [arrowReaderVariableName]_vc_[outputColumnIndex] =
-        //     ([vectorType]) [schemaRootVariableName].get([originalColumnIndex])
+        //     ([vectorType]) [arrowReaderVariableName].get([originalColumnIndex])
 
         List<RelDataTypeField> rowType = relOptTable.getRowType().getFieldList();
         int numberOutputColumns = this.getLogicalSubplan().projects.size();
@@ -497,7 +479,7 @@ public class ArrowTableScanOperator extends CodeGenOperator<LogicalArrowTableSca
                                     projectedColumnType,
                                     createMethodInvocation(
                                             getLocation(),
-                                            createAmbiguousNameRef(getLocation(), schemaRootVariableName),
+                                            createAmbiguousNameRef(getLocation(), arrowReaderVariableName),
                                             "getVector",
                                             new Java.Rvalue[] {
                                                     createIntegerLiteral(getLocation(), originalColumnIndex)
