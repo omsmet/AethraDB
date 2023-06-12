@@ -18,7 +18,7 @@ public class JaninoOperatorGen {
 
     /**
      * Generate an addition/string concatenation operator.
-     * @param location The location at which teh operator is requested for generation.
+     * @param location The location at which the operator is requested for generation.
      * @param lhs The left-hand side of the addition/concatenation.
      * @param rhs The right-hand side of the addition/concatenation.
      * @return The generated addition/concatenation operator.
@@ -35,6 +35,17 @@ public class JaninoOperatorGen {
      */
     public static Java.Crement postIncrement(Location location, Java.Lvalue var) {
         return new Java.Crement(location, var, "++");
+    }
+
+    /**
+     * Generate a multiplication operator.
+     * @param location The location at which the operator is requested for generation.
+     * @param lhs The left-hand side of the multiplication.
+     * @param rhs The right-hand side of the multiplication.
+     * @return The generated multiplication operator.
+     */
+    public static Java.BinaryOperation mul(Location location, Java.Rvalue lhs, Java.Rvalue rhs) {
+        return new Java.BinaryOperation(location, lhs, "*", rhs);
     }
 
     /**

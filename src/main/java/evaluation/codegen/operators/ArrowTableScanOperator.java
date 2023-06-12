@@ -6,6 +6,10 @@ import evaluation.codegen.infrastructure.context.OptimisationContext;
 import evaluation.codegen.infrastructure.context.access_path.AccessPath;
 import evaluation.codegen.infrastructure.context.access_path.ArrowVectorAccessPath;
 import evaluation.codegen.infrastructure.context.access_path.IndexedArrowVectorElementAccessPath;
+import evaluation.codegen.infrastructure.context.access_path.SIMDLoopAccessPath;
+import evaluation.codegen.infrastructure.context.access_path.SIMDMemorySegmentAccessPath;
+import evaluation.codegen.infrastructure.context.access_path.SIMDVectorMaskAccessPath;
+import evaluation.codegen.infrastructure.context.access_path.SIMDVectorSpeciesAccessPath;
 import evaluation.codegen.infrastructure.context.access_path.ScalarVariableAccessPath;
 import evaluation.codegen.infrastructure.data.ArrowTableReader;
 import evaluation.codegen.infrastructure.data.DirectArrowTableReader;
@@ -14,10 +18,12 @@ import org.apache.calcite.prepare.RelOptTableImpl;
 import org.apache.calcite.rel.type.RelDataTypeField;
 import org.apache.calcite.sql.type.BasicSqlType;
 import org.apache.calcite.sql.type.SqlTypeName;
+import org.apache.calcite.util.Pair;
 import org.codehaus.janino.Java;
 import util.arrow.ArrowTable;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -26,13 +32,17 @@ import static evaluation.codegen.infrastructure.janino.JaninoControlGen.createWh
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createAmbiguousNameRef;
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createCast;
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createIntegerLiteral;
+import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createPrimitiveType;
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createReferenceType;
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.getLocation;
 import static evaluation.codegen.infrastructure.janino.JaninoMethodGen.createBlock;
 import static evaluation.codegen.infrastructure.janino.JaninoMethodGen.createMethodInvocation;
 import static evaluation.codegen.infrastructure.janino.JaninoMethodGen.createMethodInvocationStm;
+import static evaluation.codegen.infrastructure.janino.JaninoOperatorGen.lt;
+import static evaluation.codegen.infrastructure.janino.JaninoOperatorGen.mul;
 import static evaluation.codegen.infrastructure.janino.JaninoVariableGen.createLocalVariable;
 import static evaluation.codegen.infrastructure.janino.JaninoVariableGen.createPrimitiveLocalVar;
+import static evaluation.codegen.infrastructure.janino.JaninoVariableGen.createVariableAdditionAssignment;
 
 /**
  * {@link CodeGenOperator} which generates code for reading data from an Arrow file.
@@ -73,38 +83,251 @@ public class ArrowTableScanOperator extends CodeGenOperator<LogicalArrowTableSca
         // rows in the projected columns and update the ordinal mapping to the access path for the
         // row-values. Finally, make sure the parent operator fills the resulting for-loop body.
 
-        // for (int aviv = 0; aviv < firstColumnVector.getValueCount; aviv++) { [forLoopBody] }
-        String avivName = cCtx.defineVariable("aviv");
-        ScalarVariableAccessPath avivAccessPath = new ScalarVariableAccessPath(avivName);
+        // The specific for-loop that needs to be generated depends on whether SIMD is enabled
         Java.Block forLoopBody = createBlock(getLocation());
-        whileLoopBody.addStatement(
-                createForLoop(
-                        getLocation(),
-                        createPrimitiveLocalVar(getLocation(), Java.Primitive.INT, avivName, "0"),
-                        JaninoOperatorGen.lt(
-                                getLocation(),
-                                avivAccessPath.read(),
+        if (!this.simdEnabled) {
+            // for (int aviv = 0; aviv < firstColumnVector.getValueCount; aviv++) { [forLoopBody] }
+            String avivName = cCtx.defineVariable("aviv");
+            ScalarVariableAccessPath avivAccessPath = new ScalarVariableAccessPath(avivName);
+            whileLoopBody.addStatement(
+                    createForLoop(
+                            getLocation(),
+                            createPrimitiveLocalVar(getLocation(), Java.Primitive.INT, avivName, "0"),
+                            lt(
+                                    getLocation(),
+                                    avivAccessPath.read(),
+                                    createMethodInvocation(
+                                            getLocation(),
+                                            // Valid to cast to ArrowVectorAccessPath as this is delivered by genericProduce(..)
+                                            ((ArrowVectorAccessPath) cCtx.getCurrentOrdinalMapping().get(0)).read(),
+                                            "getValueCount"
+                                    )
+                            ),
+                            JaninoOperatorGen.postIncrement(getLocation(), createAmbiguousNameRef(getLocation(), avivName)),
+                            forLoopBody
+                    )
+            );
+
+            // Update the ordinal to access path mapping by building a new mapping that replaces each
+            // arrow vector variable in the current mapping with one that performs an indexed read using
+            // the aviv index variable
+            List<AccessPath> updatedOrdinalMapping =
+                    cCtx.getCurrentOrdinalMapping().stream().map(entry ->
+                            // Valid to cast to entry ArrowVectorAccessPath as this is delivered by genericProduce(..)
+                            (AccessPath) new IndexedArrowVectorElementAccessPath((ArrowVectorAccessPath) entry, avivAccessPath)
+                    ).toList();
+            cCtx.setCurrentOrdinalMapping(updatedOrdinalMapping);
+        } else {
+            // int commonSIMDVectorLength = ...; (allocated as scan surrounding variable for reuse)
+            int commonSIMDVectorLength =
+                    OptimisationContext.computeCommonSIMDVectorLength(this.getLogicalSubplan().getRowType().getFieldList());
+            String commonSIMDVectorLengthName = cCtx.defineScanSurroundingVariables(
+                    "commonSIMDVectorLength",
+                    createPrimitiveType(getLocation(), Java.Primitive.INT),
+                    createIntegerLiteral(getLocation(), commonSIMDVectorLength),
+                    false);
+            ScalarVariableAccessPath commonSIMDVectorLengthAP = new ScalarVariableAccessPath(commonSIMDVectorLengthName);
+
+            // int arrowVectorLength = firstColumnVector.getValueCount();
+            String arrowVectorLengthName = cCtx.defineVariable("arrowVectorLength");
+            ScalarVariableAccessPath arrowVectorLengthAP = new ScalarVariableAccessPath(arrowVectorLengthName);
+            whileLoopBody.addStatement(
+                    createLocalVariable(
+                            getLocation(),
+                            createPrimitiveType(getLocation(), Java.Primitive.INT),
+                            arrowVectorLengthName,
+                            createMethodInvocation(
+                                    getLocation(),
+                                    // Valid to cast to ArrowVectorAccessPath as this is delivered by genericProduce(..)
+                                    ((ArrowVectorAccessPath) cCtx.getCurrentOrdinalMapping().get(0)).read(),
+                                    "getValueCount"
+                            )
+                    )
+            );
+
+            // Wrap compatible arrow vectors in a memory segment (based on the row type)
+            // and store them so they can be added to the access path
+            List<AccessPath> currentOrdinalMapping = cCtx.getCurrentOrdinalMapping();
+            List<RelDataTypeField> columnTypes = this.getLogicalSubplan().getRowType().getFieldList();
+            List<SIMDMemorySegmentAccessPath> memorySegmentAccessPaths = new ArrayList<>(currentOrdinalMapping.size());
+            for (int i = 0; i < currentOrdinalMapping.size(); i++) {
+                if (columnTypes.get(i).getType().getSqlTypeName() == SqlTypeName.INTEGER) {
+                    // MemorySegment col_[i]_ms = MemorySegment.ofAddress(
+                    //                    [currentOrdinalMapping.get(i)].getDataBufferAddress(),
+                    //                    [arrowVectorLength] * [currentOrdinalMapping.get(i)].TYPE_WIDTH);
+                    String memorySegmentName = cCtx.defineVariable("col_" + i + "_ms");
+                    whileLoopBody.addStatement(
+                            createLocalVariable(
+                                    getLocation(),
+                                    createReferenceType(getLocation(), "java.lang.foreign.MemorySegment"),
+                                    memorySegmentName,
+                                    createMethodInvocation(
+                                            getLocation(),
+                                            createAmbiguousNameRef(getLocation(), "oCtx"),
+                                            "createMemorySegmentForAddress",
+                                            new Java.Rvalue[] {
+                                                    createMethodInvocation(
+                                                            getLocation(),
+                                                            // Valid to cast to ArrowVectorAccessPath as this is delivered by genericProduce(..)
+                                                            ((ArrowVectorAccessPath) cCtx.getCurrentOrdinalMapping().get(i)).read(),
+                                                            "getDataBufferAddress"
+                                                    ),
+                                                    mul(
+                                                            getLocation(),
+                                                            arrowVectorLengthAP.read(),
+                                                            createAmbiguousNameRef(
+                                                                    getLocation(),
+                                                                    ((ArrowVectorAccessPath) cCtx.getCurrentOrdinalMapping().get(i)).getVariableName() + ".TYPE_WIDTH"
+                                                            )
+                                                    )
+                                            }
+                                    )
+                            )
+                    );
+                    memorySegmentAccessPaths.add(i, new SIMDMemorySegmentAccessPath(memorySegmentName));
+
+                } else {
+                    throw new UnsupportedOperationException("ArrowScanOperator.produceNonVec: Cannot wrap this arrow vector in a memory segment");
+                }
+            }
+
+            // for (int currentVectorOffset = 0; currentVectorOffset < arrowVectorLength; currentVectorOffset += commonSIMDVectorLength) { [forLoopBody] }
+            String currentVectorOffsetName = cCtx.defineVariable("currentVectorOffset");
+            ScalarVariableAccessPath currentVectorOffsetAccessPath = new ScalarVariableAccessPath(currentVectorOffsetName);
+            whileLoopBody.addStatement(
+                    createForLoop(                      // for (
+                            getLocation(),
+                            createPrimitiveLocalVar(    // int currentVectorOffset = 0;
+                                    getLocation(),
+                                    Java.Primitive.INT,
+                                    currentVectorOffsetName,
+                                    "0"
+                            ),
+                            lt(                         // currentVectorOffset < firstColumnVector.getValueCount()
+                                        getLocation(),
+                                        currentVectorOffsetAccessPath.read(),
+                                        arrowVectorLengthAP.read()
+                            ),
+                            createVariableAdditionAssignment(
+                                    getLocation(),
+                                    createAmbiguousNameRef(getLocation(), currentVectorOffsetName),
+                                    commonSIMDVectorLengthAP.read()
+                            ),
+                            forLoopBody
+                    )
+            );
+
+            // Add the in-range mask to the for-loop body: assume an int vector for now as most common
+            // Todo: fix properly
+
+            // Define integer vector species outside the scan
+            // VectorSpecies<Integer> [intVectorSpeciesVarName] = oCtx.getIntVectorSpecies(commonSIMDVectorLength);
+            String intVectorSpeciesVarName = cCtx.defineScanSurroundingVariables(
+                "IntVectorSpecies",
+                    createReferenceType(
+                            getLocation(),
+                            "jdk.incubator.vector.VectorSpecies",
+                            "Integer"
+                    ),
+                    createMethodInvocation(
+                            getLocation(),
+                            createAmbiguousNameRef(getLocation(), "oCtx"),
+                            "getIntVectorSpecies",
+                            new Java.Rvalue[] {
+                                    commonSIMDVectorLengthAP.read()
+                            }
+                    ),
+                    false
+            );
+            // Note this vector species has been defined
+            Map<SqlTypeName, SIMDVectorSpeciesAccessPath> definedVectorSpecies = new HashMap<>();
+            definedVectorSpecies.put(SqlTypeName.INTEGER, new SIMDVectorSpeciesAccessPath(intVectorSpeciesVarName));
+
+            // VectorMask<Integer> inRangeSIMDMask = [intVectorSpeciesVarName].indexInRange(
+            //      [currentVectorOffsetAccessPath.read()],
+            //      [arrowVectorLengthAP.read()]
+            // );
+            String inRangeSIMDMaskName = cCtx.defineVariable("inRangeSIMDMask");
+            SIMDVectorMaskAccessPath inRangeSIMDMaskAP = new SIMDVectorMaskAccessPath(inRangeSIMDMaskName);
+            forLoopBody.addStatement(
+                    createLocalVariable(
+                            getLocation(),
+                            createReferenceType(
+                                    getLocation(),
+                                    "jdk.incubator.vector.VectorMask",
+                                    "Integer"
+                            ),
+                            inRangeSIMDMaskName,
+                            createMethodInvocation(
+                                    getLocation(),
+                                    createAmbiguousNameRef(getLocation(), intVectorSpeciesVarName),
+                                    "indexInRange",
+                                    new Java.Rvalue[] {
+                                            currentVectorOffsetAccessPath.read(),
+                                            arrowVectorLengthAP.read()
+                                    }
+                            )
+                    )
+            );
+
+            // Update the ordinal to access path mapping by building a new mapping that replaces each
+            // arrow vector variable in the current mapping with one that symbolises the current SIMD
+            // compatible wrapping
+            List<AccessPath> updatedOrdinalMapping = new ArrayList<>();
+            for (int i = 0; i < currentOrdinalMapping.size(); i++) {
+                // Compute the vector species required for this Arrow vector row values based on its type
+                SIMDVectorSpeciesAccessPath svsap;
+                SqlTypeName currentVectorType =
+                        this.getLogicalSubplan().getRowType().getFieldList().get(i).getType().getSqlTypeName();
+
+                if (currentVectorType == SqlTypeName.INTEGER) {
+                    if (!definedVectorSpecies.containsKey(currentVectorType)) {
+                        // Need to define the vector species first
+                        String vectorSpeciesVarName = cCtx.defineScanSurroundingVariables(
+                                "IntVectorSpecies",
+                                createReferenceType(
+                                        getLocation(),
+                                        "jdk.incubator.vector.VectorSpecies",
+                                        "Integer"
+                                ),
                                 createMethodInvocation(
                                         getLocation(),
-                                        // Valid to cast to ArrowVectorAccessPath as this is delivered by genericProduce(..)
-                                        ((ArrowVectorAccessPath) cCtx.getCurrentOrdinalMapping().get(0)).read(),
-                                        "getValueCount"
-                                )
-                        ),
-                        JaninoOperatorGen.postIncrement(getLocation(), createAmbiguousNameRef(getLocation(), avivName)),
-                        forLoopBody
-                )
-        );
+                                        createAmbiguousNameRef(getLocation(), "oCtx"),
+                                        "getIntVectorSpecies",
+                                        new Java.Rvalue[] {
+                                                commonSIMDVectorLengthAP.read()
+                                        }
+                                ),
+                                false
+                        );
 
-        // Update the ordinal to access path mapping by building a new mapping that replaces each
-        // arrow vector variable in the current mapping with one that performs an indexed read using
-        // the aviv index variable
-        List<AccessPath> updatedOrdinalMapping =
-                cCtx.getCurrentOrdinalMapping().stream().map(entry ->
+                        definedVectorSpecies.put(
+                                currentVectorType,
+                                new SIMDVectorSpeciesAccessPath(vectorSpeciesVarName)
+                        );
+                    }
+
+                    svsap = definedVectorSpecies.get(currentVectorType);
+                } else {
+                    throw new UnsupportedOperationException(
+                            "ArrowTableScanOperator.produceNonVec does not support this data type for SIMD wrapping");
+                }
+
+                // Create the updated access path
+                updatedOrdinalMapping.add(i, new SIMDLoopAccessPath(
                         // Valid to cast to entry ArrowVectorAccessPath as this is delivered by genericProduce(..)
-                        (AccessPath) new IndexedArrowVectorElementAccessPath((ArrowVectorAccessPath) entry, avivAccessPath)
-                ).toList();
-        cCtx.setCurrentOrdinalMapping(updatedOrdinalMapping);
+                        (ArrowVectorAccessPath) currentOrdinalMapping.get(i),
+                        arrowVectorLengthAP,
+                        currentVectorOffsetAccessPath,
+                        commonSIMDVectorLengthAP,
+                        inRangeSIMDMaskAP,
+                        memorySegmentAccessPaths.get(i),
+                        svsap
+                ));
+            }
+
+            cCtx.setCurrentOrdinalMapping(updatedOrdinalMapping);
+        }
 
         // Have the parent operator consume the result within the for loop
         forLoopBody.addStatements(nonVecParentConsume(cCtx, oCtx));
@@ -305,14 +528,14 @@ public class ArrowTableScanOperator extends CodeGenOperator<LogicalArrowTableSca
         List<Java.Statement> result = new ArrayList<>();
 
         // Allocate the variables
-        Map<String, Java.Statement> scanSurroundingAllocations = cCtx.getScanSurroundingVariables();
-        result.addAll(scanSurroundingAllocations.values());
+        var scanSurroundingAllocations = cCtx.getScanSurroundingVariables();
+        result.addAll(scanSurroundingAllocations.left);
 
         // Add the code of the scan operator
         result.addAll(scanCodeToWrap);
 
         // Deallocate the scan variables
-        for (String varToDallocate : scanSurroundingAllocations.keySet()) {
+        for (String varToDallocate : scanSurroundingAllocations.right) {
             result.add(
                     createMethodInvocationStm(
                             getLocation(),

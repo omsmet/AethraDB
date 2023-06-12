@@ -7,7 +7,7 @@ import org.apache.arrow.vector.IntVector;
 import java.lang.foreign.MemorySegment;
 import java.nio.ByteOrder;
 
-import static evaluation.codegen.infrastructure.context.OptimisationContext.INT_VECTOR_SPECIES;
+import static evaluation.codegen.infrastructure.context.OptimisationContext.MAX_LEN_INT_VECTOR_SPECIES;
 
 /**
  * Class containing vectorised primitives for filter operations.
@@ -92,9 +92,9 @@ public class VectorisedFilterOperators extends VectorisedOperators {
 
         // Perform vectorised processing
         int currentIndex = 0;
-        for (; currentIndex < INT_VECTOR_SPECIES.loopBound(vectorLength); currentIndex += INT_VECTOR_SPECIES.length()) {
+        for (; currentIndex < MAX_LEN_INT_VECTOR_SPECIES.loopBound(vectorLength); currentIndex += MAX_LEN_INT_VECTOR_SPECIES.length()) {
             var simdVector = jdk.incubator.vector.IntVector.fromMemorySegment(
-                    INT_VECTOR_SPECIES,
+                    MAX_LEN_INT_VECTOR_SPECIES,
                     vectorSegment,
                     (long) currentIndex * IntVector.TYPE_WIDTH,
                     ByteOrder.LITTLE_ENDIAN);
@@ -136,15 +136,15 @@ public class VectorisedFilterOperators extends VectorisedOperators {
 
         // Perform vectorised processing
         int currentIndex = 0;
-        for (; currentIndex < INT_VECTOR_SPECIES.loopBound(vectorLength); currentIndex += INT_VECTOR_SPECIES.length()) {
+        for (; currentIndex < MAX_LEN_INT_VECTOR_SPECIES.loopBound(vectorLength); currentIndex += MAX_LEN_INT_VECTOR_SPECIES.length()) {
             // Initialise the SIMD vector and mask indicating the entries that are valid
             var simdVector = jdk.incubator.vector.IntVector.fromMemorySegment(
-                    INT_VECTOR_SPECIES,
+                    MAX_LEN_INT_VECTOR_SPECIES,
                     vectorSegment,
                     (long) currentIndex * IntVector.TYPE_WIDTH,
                     ByteOrder.LITTLE_ENDIAN);
             VectorMask<Integer> validityMaskVector = VectorMask.fromArray(
-                    INT_VECTOR_SPECIES,
+                    MAX_LEN_INT_VECTOR_SPECIES,
                     validIndicesMask,
                     currentIndex
             );

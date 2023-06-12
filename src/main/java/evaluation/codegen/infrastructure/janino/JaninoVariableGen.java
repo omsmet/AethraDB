@@ -144,7 +144,7 @@ public class JaninoVariableGen {
      * @param rhs The value to add to the variable.
      * @return The variable addition assignment.
      */
-    private static Java.Assignment createVariableAdditionAssignment(Location location, Java.Lvalue lhs, Java.Rvalue rhs) {
+    public static Java.Assignment createVariableAdditionAssignment(Location location, Java.Lvalue lhs, Java.Rvalue rhs) {
         return new Java.Assignment(
                 location,
                 lhs,

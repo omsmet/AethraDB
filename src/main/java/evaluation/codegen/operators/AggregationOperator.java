@@ -6,6 +6,7 @@ import evaluation.codegen.infrastructure.context.access_path.AccessPath;
 import evaluation.codegen.infrastructure.context.access_path.ArrowVectorAccessPath;
 import evaluation.codegen.infrastructure.context.access_path.ArrowVectorWithSelectionVectorAccessPath;
 import evaluation.codegen.infrastructure.context.access_path.ArrowVectorWithValidityMaskAccessPath;
+import evaluation.codegen.infrastructure.context.access_path.SIMDLoopAccessPath;
 import evaluation.codegen.infrastructure.context.access_path.ScalarVariableAccessPath;
 import org.apache.calcite.rel.core.AggregateCall;
 import org.apache.calcite.rel.logical.LogicalAggregate;
@@ -158,13 +159,31 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
                             "AggregationOperator.consumeNonVec does not support DISTINCT keyword");
 
                 // Update code depends on the aggregation function
-                if (currentAggregationFunction instanceof SqlCountAggFunction) {
-                    // For a count aggregation simply increment the relevant variable.
-                    codeGenResult.add(
-                            postIncrementStm(
-                                    getLocation(),
-                                    createAmbiguousNameRef(getLocation(), this.aggCallToStateVariableNameMapping.get(i))
-                            ));
+                if (currentAggregationFunction instanceof SqlCountAggFunction) { // COUNT aggregation
+
+                    // Check the type of the first ordinal to be able to generate the correct count update statements
+                    AccessPath firstOrdinalAP = cCtx.getCurrentOrdinalMapping().get(0);
+                    if (firstOrdinalAP instanceof ScalarVariableAccessPath svap) {
+                        // For a count aggregation over scalar varaibles simply increment the relevant variable.
+                        codeGenResult.add(
+                                postIncrementStm(
+                                        getLocation(),
+                                        createAmbiguousNameRef(getLocation(), this.aggCallToStateVariableNameMapping.get(i))
+                                ));
+                    } else if (firstOrdinalAP instanceof SIMDLoopAccessPath slap) {
+                        // For a count aggregation over a SIMD loop access path, add the number of true entries in the valid mask
+                        codeGenResult.add(
+                                createVariableAdditionAssignmentStm(
+                                        getLocation(),
+                                        createAmbiguousNameRef(getLocation(), this.aggCallToStateVariableNameMapping.get(i)),
+                                        createMethodInvocation(
+                                                getLocation(),
+                                                slap.readSIMDMask(),
+                                                "trueCount"
+                                        )
+                                )
+                        );
+                    }
 
                 } else {
                     throw new UnsupportedOperationException(

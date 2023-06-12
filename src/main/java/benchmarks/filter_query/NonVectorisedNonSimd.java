@@ -71,7 +71,7 @@ public class NonVectorisedNonSimd implements ResultConsumptionTarget {
     private CodeGenContext generatedQueryCCtx;
 
     /**
-     * State: the result of the query (-1 if the query has not been executed yet.
+     * State: the result of the query (-1 if the query has not been executed yet).
      */
     private long result;
 
@@ -139,7 +139,8 @@ public class NonVectorisedNonSimd implements ResultConsumptionTarget {
             "--add-modules=jdk.incubator.vector",
             "--add-opens=java.base/java.nio=ALL-UNNAMED",
             "-Darrow.enable_unsafe_memory_access=true",
-            "-Darrow.enable_null_check_for_get=false"
+            "-Darrow.enable_null_check_for_get=false",
+            "--enable-preview"
     })
     public void executeFilterQuery() throws IOException {
         this.generatedQuery.execute();

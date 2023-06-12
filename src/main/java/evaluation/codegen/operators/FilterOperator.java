@@ -6,6 +6,8 @@ import evaluation.codegen.infrastructure.context.access_path.AccessPath;
 import evaluation.codegen.infrastructure.context.access_path.ArrowVectorAccessPath;
 import evaluation.codegen.infrastructure.context.access_path.ArrowVectorWithSelectionVectorAccessPath;
 import evaluation.codegen.infrastructure.context.access_path.ArrowVectorWithValidityMaskAccessPath;
+import evaluation.codegen.infrastructure.context.access_path.SIMDLoopAccessPath;
+import evaluation.codegen.infrastructure.context.access_path.SIMDVectorMaskAccessPath;
 import org.apache.calcite.rel.logical.LogicalFilter;
 import org.apache.calcite.rex.RexCall;
 import org.apache.calcite.rex.RexInputRef;
@@ -22,9 +24,11 @@ import static evaluation.codegen.infrastructure.janino.JaninoControlGen.createIf
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createAmbiguousNameRef;
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createPrimitiveArrayType;
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createPrimitiveType;
+import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createReferenceType;
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.getLocation;
 import static evaluation.codegen.infrastructure.janino.JaninoMethodGen.createMethodInvocation;
 import static evaluation.codegen.infrastructure.janino.JaninoOperatorGen.lt;
+import static evaluation.codegen.infrastructure.janino.JaninoOperatorGen.mul;
 import static evaluation.codegen.infrastructure.janino.JaninoVariableGen.createLocalVariable;
 
 /**
@@ -164,19 +168,112 @@ public class FilterOperator extends CodeGenOperator<LogicalFilter> {
         RexNode lhs = filterOperator.getOperands().get(0);
         RexNode rhs = filterOperator.getOperands().get(1);
 
-        // Convert the operands
-        Java.Rvalue lhsRvalue = codeGenOperandNonVec(cCtx, oCtx, lhs, codegenResult);
-        Java.Rvalue rhsRvalue = codeGenOperandNonVec(cCtx, oCtx, rhs, codegenResult);
+        // Check if we are in a SIMD enabled setting with a SIMD-compatible access path
+        // or if we can simply perform a scalar code-gen path.
+        // Currently, the only SIMD supported path is an lhs RexInputRef and rhs RexLiteral
+        if (this.simdEnabled
+                && lhs instanceof RexInputRef lhsRef && rhs instanceof RexLiteral rhsLit
+                && cCtx.getCurrentOrdinalMapping().get(lhsRef.getIndex()) instanceof SIMDLoopAccessPath lhsAP) {
+            // SIMD enabled path: handle acceleration according to the datatype
+            if (lhsRef.getType().getSqlTypeName() == SqlTypeName.INTEGER
+                    && rhsLit.getType().getSqlTypeName() == SqlTypeName.INTEGER) {
+                // Extend the SIMD validity mask using a SIMD comparison
+                // IntVector [SIMDVector] = IntVector.fromSegment(
+                //      [lhsAP.readVectorSpecies()],
+                //      [lhsAP.readMemorySegment()],
+                //      [lhsAP.readArrowVectorOffset()] * [lhsAP.readArrowVector().TYPE_WIDTH],
+                //      java.nio.ByteOrder.LITTLE_ENDIAN,
+                //      [lhsAP.readSIMDMask()]
+                // );
+                String SIMDVectorName = cCtx.defineVariable("SIMDVector");
+                codegenResult.add(
+                    createLocalVariable(
+                            getLocation(),
+                            createReferenceType(getLocation(), "jdk.incubator.vector.IntVector"),
+                            SIMDVectorName,
+                            createMethodInvocation(
+                                    getLocation(),
+                                    createAmbiguousNameRef(getLocation(), "oCtx"),
+                                    "createIntVector",
+                                    new Java.Rvalue[] {
+                                            lhsAP.readVectorSpecies(),
+                                            lhsAP.readMemorySegment(),
+                                            mul(
+                                                    getLocation(),
+                                                    lhsAP.readArrowVectorOffset(),
+                                                    createAmbiguousNameRef(getLocation(), lhsAP.getArrowVectorVariableName() + ".TYPE_WIDTH")
+                                            ),
+                                            createAmbiguousNameRef(getLocation(), "java.nio.ByteOrder.LITTLE_ENDIAN"),
+                                            lhsAP.readSIMDMask()
+                                    }
+                            )
+                    )
+                );
 
-        // Generate the required control flow
-        // if (!(lhsRvalue < rhsRvalue))
-        //     continue;
-        codegenResult.add(
-                createIfNotContinue(
-                        getLocation(),
-                        lt(getLocation(), lhsRvalue, rhsRvalue)
-                )
-        );
+                // Do the comparison and mask extension
+                // VectorMask<Integer> [SIMDVector]_sel_mask = [SIMDVector].compare(VectorOperators.LT, [rhsLit], [lhsAP.readSIMDMask()])
+                String SIMDVectorSelMaskName = cCtx.defineVariable(SIMDVectorName + "_sel_mask");
+                codegenResult.add(
+                        createLocalVariable(
+                                getLocation(),
+                                createReferenceType(
+                                        getLocation(),
+                                        "jdk.incubator.vector.VectorMask",
+                                        "Integer"
+                                ),
+                                SIMDVectorSelMaskName,
+                                createMethodInvocation(
+                                        getLocation(),
+                                        createAmbiguousNameRef(getLocation(), SIMDVectorName),
+                                        "compare",
+                                        new Java.Rvalue[] {
+                                                createAmbiguousNameRef(getLocation(), "jdk.incubator.vector.VectorOperators.LT"),
+                                                codeGenOperandNonVec(cCtx, oCtx, rhs, codegenResult),
+                                                lhsAP.readSIMDMask()
+                                        }
+                                )
+                        )
+                );
+
+                // Update the ordinal mapping so it reflects the new validity mask
+                List<AccessPath> updatedOrdinalMapping = cCtx.getCurrentOrdinalMapping().stream().map(
+                        entry -> {
+                            if (entry instanceof SIMDLoopAccessPath slAP)
+                                return (AccessPath) new SIMDLoopAccessPath(
+                                        slAP.getArrowVectorAccessPath(),
+                                        slAP.getArrowVectorLengthAccessPath(),
+                                        slAP.getCurrentArrowVectorOffsetAccessPath(),
+                                        slAP.getSIMDVectorLengthAccessPath(),
+                                        new SIMDVectorMaskAccessPath(SIMDVectorSelMaskName),
+                                        slAP.getMemorySegmentAccessPath(),
+                                        slAP.getVectorSpeciesAccessPath()
+                                );
+                            else
+                                throw new UnsupportedOperationException(
+                                        "Unsupported AccessPath for SIMD handling");
+                        }).toList();
+                cCtx.setCurrentOrdinalMapping(updatedOrdinalMapping);
+
+            } else {
+                throw new UnsupportedOperationException("FilterOperator.consumeNonVec is not able to" +
+                        "handle this operand combination under SIMD acceleration");
+            }
+        } else {
+            // Scalar path
+            // Convert the operands
+            Java.Rvalue lhsRvalue = codeGenOperandNonVec(cCtx, oCtx, lhs, codegenResult);
+            Java.Rvalue rhsRvalue = codeGenOperandNonVec(cCtx, oCtx, rhs, codegenResult);
+
+            // Generate the required control flow
+            // if (!(lhsRvalue < rhsRvalue))
+            //     continue;
+            codegenResult.add(
+                    createIfNotContinue(
+                            getLocation(),
+                            lt(getLocation(), lhsRvalue, rhsRvalue)
+                    )
+            );
+        }
 
         // The condition matches. Invoke the parent consumption method if required.
         if (callParentConsumeOnMatch)
@@ -355,7 +452,8 @@ public class FilterOperator extends CodeGenOperator<LogicalFilter> {
                                     "getAllocationManager"
                             ),
                             "getBooleanVector"
-                    )
+                    ),
+                    true
             );
         } else {
             // int[] ordinal_[index]_sel_vec = cCtx.getAllocationManager().getIntVector()
@@ -370,7 +468,8 @@ public class FilterOperator extends CodeGenOperator<LogicalFilter> {
                                     "getAllocationManager"
                             ),
                             "getIntVector"
-                    )
+                    ),
+                    true
             );
         }
 
