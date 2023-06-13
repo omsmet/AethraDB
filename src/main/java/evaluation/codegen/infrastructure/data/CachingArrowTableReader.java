@@ -37,6 +37,11 @@ public class CachingArrowTableReader extends ArrowTableReader {
     private FieldVector[][] fieldVectors;
 
     /**
+     * Boolean keeping track of whether the {@code fieldVectors} variable has been initialised already.
+     */
+    private boolean fieldVectorsInitialised;
+
+    /**
      * Creates a new {@link ArrowTableReader} instance
      * @param arrowFile The Arrow IPC file representing the table.
      * @param rootAllocator The {@link RootAllocator} used for Arrow operations.
@@ -44,11 +49,22 @@ public class CachingArrowTableReader extends ArrowTableReader {
      */
     public CachingArrowTableReader(File arrowFile, RootAllocator rootAllocator) throws Exception {
         super(arrowFile, rootAllocator);
+        this.fieldVectorsInitialised = false;
         this.reset();
+        this.fieldVectorsInitialised = true;
     }
 
     @Override
     public void reset() throws Exception {
+        // Deallocate previous vectors if necessary
+        if (fieldVectorsInitialised) {
+            for (int i = 0; i < this.numberOfVectors; i++) {
+                for (int j = 0; j < this.columnCount; j++) {
+                    this.fieldVectors[i][j].close();
+                }
+            }
+        }
+
         // Initialise the reader
         FileInputStream tableInputStream = new FileInputStream(this.arrowFile);
         ArrowFileReader tableFileReader =
