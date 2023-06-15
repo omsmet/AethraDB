@@ -89,7 +89,12 @@ public class QueryCodeGenerator extends SimpleCompiler {
         this.generated = false;
         this.generatedQuery = null;
         this.generatedQueryClassName = "GeneratedQuery_" + rootOperator.hashCode();
-        this.defaultImports = new String[0];
+        this.defaultImports = new String[] {
+                "evaluation.general_support.hashmaps.Simple_Int_Int_Map",
+                "evaluation.general_support.hashmaps.Simple_Int_Int_Map.Simple_Int_Int_Map_Iterator",
+
+                "evaluation.codegen.infrastructure.data.ArrowTableReader"
+        };
 
         // Initialise the compiler, so it will allow us to generate a class which extends
         // the GeneratedQuery class and import necessary dependencies

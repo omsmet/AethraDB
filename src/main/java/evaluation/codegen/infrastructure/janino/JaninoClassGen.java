@@ -59,4 +59,29 @@ public class JaninoClassGen {
         return tlcd;
     }
 
+    /**
+     * Method to add a new class instance.
+     * @param location The location from which the class instance creation is requested for generation.
+     * @param classType The type of the class for which an instance should be created.
+     * @return A {@link Java.NewClassInstance} corresponding to the class instance creation.
+     */
+    public static Java.NewClassInstance createClassInstance(Location location, Java.Type classType) {
+        return createClassInstance(location, classType, new Java.Rvalue[]{});
+    }
+
+    /**
+     * Method to add a new class instance.
+     * @param location The location from which the class instance creation is requested for generation.
+     * @param classType The type of the class for which an instance should be created.
+     * @param arguments The arguments required for the constructor invocation.
+     * @return A {@link Java.NewClassInstance} corresponding to the class instance creation.
+     */
+    public static Java.NewClassInstance createClassInstance(
+            Location location,
+            Java.Type classType,
+            Java.Rvalue[] arguments
+    ) {
+        return new Java.NewClassInstance(location, null, classType, arguments);
+    }
+
 }

@@ -278,4 +278,56 @@ public class Simple_Int_Int_Map {
             throw new IllegalArgumentException("Simple_Int_Int_Map does not support negative keys");
     }
 
+    /**
+     * Method to obtain a primitive-type specific iterator to iterate over the keys of this map.
+     * @return A new {@link Simple_Int_Int_Map_Iterator} for this map.
+     */
+    public Simple_Int_Int_Map_Iterator getIterator() {
+        return new Simple_Int_Int_Map_Iterator();
+    }
+
+    /**
+     * Class definition for iterating over the keys of a {@link Simple_Int_Int_Map}.
+     */
+    public class Simple_Int_Int_Map_Iterator {
+
+        /**
+         * Variable for keeping track of the current key index in the iteration.
+         */
+        private int currentIndex;
+
+        /**
+         * Variable for keeping track of the number of keys in the iteration.
+         */
+        private final int totalNumberOfRecords;
+
+        /**
+         * Creates a new {@link Simple_Int_Int_Map_Iterator} instance.
+         * @return The new {@link Simple_Int_Int_Map_Iterator} instance.
+         */
+        private Simple_Int_Int_Map_Iterator() {
+            this.currentIndex = 0;
+            this.totalNumberOfRecords = numberOfRecords;
+        }
+
+        /**
+         * Method indicating whether there are more keys to iterate over.
+         * @return {@code true} iff there are more keys to iterate over.
+         */
+        public boolean hasNext() {
+            return currentIndex < totalNumberOfRecords;
+        }
+
+        /**
+         * Method to obtain the next key in the iteration if there are keys left.
+         * @return The next key in the current iteration if one exists.
+         * @throws NoSuchElementException If there are no more keys left to iterate over.
+         */
+        public int next() throws NoSuchElementException {
+            if (!this.hasNext())
+                throw new NoSuchElementException("Simple_Int_Int_Map_Iterator has reached the end of the iteration");
+
+            return keys[this.currentIndex++];
+        }
+    }
 }

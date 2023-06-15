@@ -421,7 +421,7 @@ public class ArrowTableScanOperator extends CodeGenOperator<LogicalArrowTableSca
                         getLocation(),
                         createReferenceType(
                                 getLocation(),
-                                "evaluation.codegen.infrastructure.data.ArrowTableReader"
+                                "ArrowTableReader"
                         ),
                         arrowReaderVariableName,
                         createMethodInvocation(

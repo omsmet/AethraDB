@@ -4,6 +4,7 @@ import evaluation.codegen.infrastructure.context.CodeGenContext;
 import evaluation.codegen.infrastructure.context.OptimisationContext;
 import evaluation.codegen.infrastructure.context.access_path.AccessPath;
 import evaluation.codegen.infrastructure.context.access_path.IndexedArrowVectorElementAccessPath;
+import evaluation.codegen.infrastructure.context.access_path.IndexedMapAccessPath;
 import evaluation.codegen.infrastructure.context.access_path.ScalarVariableAccessPath;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rex.RexLiteral;
@@ -238,6 +239,7 @@ public abstract class CodeGenOperator<T extends RelNode> {
         // This is done to reduce method calls where possible
         if (ordinalAccessPath instanceof ScalarVariableAccessPath svap) {
             return svap.read();
+
         } else if (ordinalAccessPath instanceof IndexedArrowVectorElementAccessPath iaveap) {
             // Need to allocate a new variable
             // var ordinal_[ordinalIndex] = $arrowVectorVar$.get($indexVar$)
@@ -257,6 +259,27 @@ public abstract class CodeGenOperator<T extends RelNode> {
 
             // Return the access path code
             return newOrdinalAccessPath.read();
+
+        } else if (ordinalAccessPath instanceof IndexedMapAccessPath imap) {
+            // Need to allocate a new variable
+            // var ordinal_[ordinalIndex] = $mapVariable$.get($indexVariable$)
+            String operandVariableName = cCtx.defineVariable("ordinal_" + accessPathIndex);
+            codegenTarget.add(
+                    createLocalVariable(
+                            getLocation(),
+                            accessPathResultType,
+                            operandVariableName,
+                            imap.read()
+                    )
+            );
+
+            // Update the ordinal access path in the mapping to reflect the allocation of the variable
+            var newOrdinalAccessPath = new ScalarVariableAccessPath(operandVariableName);
+            cCtx.getCurrentOrdinalMapping().set(accessPathIndex, newOrdinalAccessPath);
+
+            // Return the access path code
+            return newOrdinalAccessPath.read();
+
         } else {
             throw new IllegalStateException(
                     "CodeGenOperator.getRValueFromAccessPathNonVec should never receive a vectorised access path");
