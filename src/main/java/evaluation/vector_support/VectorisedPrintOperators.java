@@ -65,4 +65,30 @@ public class VectorisedPrintOperators extends VectorisedOperators {
         System.out.println("]");
     }
 
+    /**
+     * Primitive for printing a primitive array representing a vector to the standard output.
+     * @param vector The vector to output.
+     * @param vectorLength The length of the valid portion of {@code vector} to print.
+     */
+    public static void print(int[] vector, int vectorLength) {
+        System.out.print("[");
+        int lastVectorIndex = vectorLength - 1;
+        for (int i = 0; i < lastVectorIndex; i++)
+            System.out.print(vector[i] + ", ");
+        System.out.println(vector[lastVectorIndex] + "]");
+    }
+
+    /**
+     * Primitive for printing a primitive array representing a vector to the standard output.
+     * @param vector The vector to output.
+     * @param vectorLength The length of the valid portion of {@code vector} to print.
+     */
+    public static void print(long[] vector, int vectorLength) {
+        System.out.print("[");
+        int lastVectorIndex = vectorLength - 1;
+        for (int i = 0; i < lastVectorIndex; i++)
+            System.out.print(vector[i] + ", ");
+        System.out.println(vector[lastVectorIndex] + "]");
+    }
+
 }

@@ -3,6 +3,7 @@ package evaluation.codegen.operators;
 import evaluation.codegen.infrastructure.context.CodeGenContext;
 import evaluation.codegen.infrastructure.context.OptimisationContext;
 import evaluation.codegen.infrastructure.context.access_path.AccessPath;
+import evaluation.codegen.infrastructure.context.access_path.ArrayVectorAccessPath;
 import evaluation.codegen.infrastructure.context.access_path.ArrowVectorAccessPath;
 import evaluation.codegen.infrastructure.context.access_path.ArrowVectorWithSelectionVectorAccessPath;
 import evaluation.codegen.infrastructure.context.access_path.ArrowVectorWithValidityMaskAccessPath;
@@ -120,10 +121,7 @@ public class QueryResultPrinterOperator extends CodeGenOperator<RelNode> {
                 codegenResult.add(
                         createMethodInvocationStm(
                                 getLocation(),
-                                createAmbiguousNameRef(
-                                        getLocation(),
-                                        "evaluation.vector_support.VectorisedPrintOperators"
-                                ),
+                                createAmbiguousNameRef(getLocation(), "VectorisedPrintOperators"),
                                 "print",
                                 new Java.Rvalue[] {
                                         avap.read()
@@ -135,10 +133,7 @@ public class QueryResultPrinterOperator extends CodeGenOperator<RelNode> {
                 codegenResult.add(
                         createMethodInvocationStm(
                                 getLocation(),
-                                createAmbiguousNameRef(
-                                        getLocation(),
-                                        "evaluation.vector_support.VectorisedPrintOperators"
-                                ),
+                                createAmbiguousNameRef(getLocation(), "VectorisedPrintOperators"),
                                 "print",
                                 new Java.Rvalue[] {
                                         avwsvap.readArrowVector(),
@@ -152,15 +147,25 @@ public class QueryResultPrinterOperator extends CodeGenOperator<RelNode> {
                 codegenResult.add(
                         createMethodInvocationStm(
                                 getLocation(),
-                                createAmbiguousNameRef(
-                                        getLocation(),
-                                        "evaluation.vector_support.VectorisedPrintOperators"
-                                ),
+                                createAmbiguousNameRef(getLocation(), "VectorisedPrintOperators"),
                                 "print",
                                 new Java.Rvalue[] {
                                         avwvmap.readArrowVector(),
                                         avwvmap.readValidityMask(),
                                         avwvmap.readValidityMaskLength()
+                                }
+                        )
+                );
+
+            } else if (ordinalAccessPath instanceof ArrayVectorAccessPath avap) {
+                codegenResult.add(
+                        createMethodInvocationStm(
+                                getLocation(),
+                                createAmbiguousNameRef(getLocation(), "VectorisedPrintOperators"),
+                                "print",
+                                new Java.Rvalue[]{
+                                        avap.getVectorVariable().read(),
+                                        avap.getVectorLengthVariable().read()
                                 }
                         )
                 );

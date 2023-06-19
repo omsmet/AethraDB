@@ -496,10 +496,7 @@ public class FilterOperator extends CodeGenOperator<LogicalFilter> {
                             selectionResultLengthAP.getVariableName(),
                             createMethodInvocation(
                                     getLocation(),
-                                    createAmbiguousNameRef(
-                                            getLocation(),
-                                            "evaluation.vector_support.VectorisedFilterOperators"
-                                    ),
+                                    createAmbiguousNameRef(getLocation(), "VectorisedFilterOperators"),
                                     "lessThan",
                                     new Java.Rvalue[]{
                                             lhsArrowVecAP.read(),
@@ -522,7 +519,7 @@ public class FilterOperator extends CodeGenOperator<LogicalFilter> {
                                     getLocation(),
                                     createAmbiguousNameRef(
                                             getLocation(),
-                                            "evaluation.vector_support.VectorisedFilterOperators"
+                                            "VectorisedFilterOperators"
                                     ),
                                     "lessThanSIMD",
                                     new Java.Rvalue[] {
@@ -545,10 +542,7 @@ public class FilterOperator extends CodeGenOperator<LogicalFilter> {
                             selectionResultLengthAP.getVariableName(),
                             createMethodInvocation(
                                     getLocation(),
-                                    createAmbiguousNameRef(
-                                            getLocation(),
-                                            "evaluation.vector_support.VectorisedFilterOperators"
-                                    ),
+                                    createAmbiguousNameRef(getLocation(),"VectorisedFilterOperators"),
                                     "lessThan",
                                     new Java.Rvalue[] {
                                             lhsArrowVecWSAP.readArrowVector(),
@@ -572,10 +566,7 @@ public class FilterOperator extends CodeGenOperator<LogicalFilter> {
                             selectionResultLengthAP.getVariableName(),
                             createMethodInvocation(
                                     getLocation(),
-                                    createAmbiguousNameRef(
-                                            getLocation(),
-                                            "evaluation.vector_support.VectorisedFilterOperators"
-                                    ),
+                                    createAmbiguousNameRef(getLocation(), "VectorisedFilterOperators"),
                                     "lessThanSIMD",
                                     new Java.Rvalue[] {
                                             lhsAvwvmAP.readArrowVector(),

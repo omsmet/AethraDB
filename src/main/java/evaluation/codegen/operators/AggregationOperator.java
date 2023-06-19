@@ -4,6 +4,8 @@ import evaluation.codegen.infrastructure.context.CodeGenContext;
 import evaluation.codegen.infrastructure.context.OptimisationContext;
 import evaluation.codegen.infrastructure.context.QueryVariableType;
 import evaluation.codegen.infrastructure.context.access_path.AccessPath;
+import evaluation.codegen.infrastructure.context.access_path.ArrayAccessPath;
+import evaluation.codegen.infrastructure.context.access_path.ArrayVectorAccessPath;
 import evaluation.codegen.infrastructure.context.access_path.ArrowVectorAccessPath;
 import evaluation.codegen.infrastructure.context.access_path.ArrowVectorWithSelectionVectorAccessPath;
 import evaluation.codegen.infrastructure.context.access_path.ArrowVectorWithValidityMaskAccessPath;
@@ -22,7 +24,12 @@ import org.codehaus.janino.Java;
 import java.util.ArrayList;
 import java.util.List;
 
+import static evaluation.codegen.infrastructure.context.QueryVariableType.ARRAY_INT_VECTOR;
+import static evaluation.codegen.infrastructure.context.QueryVariableType.ARRAY_LONG_VECTOR;
+import static evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_INT_VECTOR;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.MAP_INT_LONG_SIMPLE;
+import static evaluation.codegen.infrastructure.context.QueryVariableType.P_A_INT;
+import static evaluation.codegen.infrastructure.context.QueryVariableType.P_A_LONG;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.P_INT;
 import static evaluation.codegen.infrastructure.context.QueryVariableTypeMethods.toJavaType;
 import static evaluation.codegen.infrastructure.context.QueryVariableTypeMethods.valueTypeForMap;
@@ -37,7 +44,9 @@ import static evaluation.codegen.infrastructure.janino.JaninoMethodGen.createMet
 import static evaluation.codegen.infrastructure.janino.JaninoMethodGen.createMethodInvocationStm;
 import static evaluation.codegen.infrastructure.janino.JaninoOperatorGen.postIncrementStm;
 import static evaluation.codegen.infrastructure.janino.JaninoVariableGen.createLocalVariable;
+import static evaluation.codegen.infrastructure.janino.JaninoVariableGen.createPrimitiveLocalVar;
 import static evaluation.codegen.infrastructure.janino.JaninoVariableGen.createVariableAdditionAssignmentStm;
+import static evaluation.codegen.infrastructure.janino.JaninoVariableGen.createVariableAssignmentStm;
 
 /**
  * A {@link CodeGenOperator} which computes some aggregation function over the records.
@@ -498,9 +507,217 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
             codeGenResult.addAll(this.vecParentConsume(cCtx, oCtx));
 
         } else {
-            // Group-by aggregation
-            throw new UnsupportedOperationException(
-                    "AggregationOperator.produceVec does not support group-by aggregates");
+            // Expose the result of the group-by aggregation
+            // For vectorised processing, we don't need to distinguish between SIMD and Non-SIMD processing
+            // since the vectorised operators will create SIMD vectors themselves.
+
+            // First gather and allocate the types of vectors that will be exposed in the result while updating the ordinal mapping
+            List<AccessPath> updatedOrdinalMapping = new ArrayList<>(this.aggregationStateMappings.size() + 1);
+
+            // Property: group-by aggregates always first expose the group-by key, followed by the aggregate results
+            // So, we first allocate the key vector based on the first aggregation state's first variable
+            // as well as a length variable that indicates the valid length of the aggregation result vectors.
+            AggregationStateMapping firstAggregationState = this.aggregationStateMappings.get(0);
+            QueryVariableType firstAggregationStateType = firstAggregationState.variableTypes[0];
+            ArrayVectorAccessPath groupKeyVectorAP;
+
+            // int aggregationResultVectorLength;
+            ScalarVariableAccessPath aggregationResultVectorLengthAP = new ScalarVariableAccessPath(
+                    cCtx.defineVariable("aggregationResultVectorLength"),
+                    P_INT
+            );
+            codeGenResult.add(createPrimitiveLocalVar(getLocation(), Java.Primitive.INT, aggregationResultVectorLengthAP.getVariableName()));
+
+            if (firstAggregationStateType == MAP_INT_LONG_SIMPLE) {
+                // We have an integer key type, so allocate an integer key vector
+                // int[] groupKeyVector = cCtx.getAllocationManager().getIntVector();
+                ArrayAccessPath groupKeyVectorArrayAP = new ArrayAccessPath(cCtx.defineVariable("groupKeyVector"), P_A_INT);
+                codeGenResult.add(createLocalVariable(
+                        getLocation(),
+                        toJavaType(getLocation(), groupKeyVectorArrayAP.getType()),
+                        groupKeyVectorArrayAP.getVariableName(),
+                        createMethodInvocation(
+                                getLocation(),
+                                createMethodInvocation(
+                                        getLocation(),
+                                        createAmbiguousNameRef(getLocation(), "cCtx"),
+                                        "getAllocationManager"
+                                ),
+                                "getIntVector"
+                        )
+                ));
+                groupKeyVectorAP = new ArrayVectorAccessPath(groupKeyVectorArrayAP, aggregationResultVectorLengthAP, ARRAY_INT_VECTOR);
+                updatedOrdinalMapping.add(0, groupKeyVectorAP);
+
+            } else {
+                throw new UnsupportedOperationException("AggregationOperator.produceVec does not currently support" +
+                        "obtaining keys from aggregation state type " + firstAggregationStateType);
+            }
+
+            // Allocate the vectors for the aggregation functions based on the aggregation function type
+            ArrayVectorAccessPath[] aggregationResultAPs = new ArrayVectorAccessPath[aggregationCalls.size()];
+            for (int i = 0; i < aggregationCalls.size(); i++) {
+                // Define the vector name as "aggCall_[i]_vector"
+                String aggregationResultVectorName = cCtx.defineVariable("aggCall_" + i + "_vector");
+
+                // Get information to classify the current aggregation call
+                AggregateCall currentCall = aggregationCalls.get(i);
+                SqlAggFunction currentCallFunction = currentCall.getAggregation();
+
+                if (currentCallFunction instanceof SqlSumEmptyIsZeroAggFunction) {
+                    // The vector type simply corresponds to the value type of the hash-map
+                    QueryVariableType aggregationMapType = this.aggregationStateMappings.get(i).variableTypes[0];
+                    if (aggregationMapType == MAP_INT_LONG_SIMPLE) {
+                        // Need to allocate a long vector
+                        ArrayAccessPath aggregationResultVectorAP = new ArrayAccessPath(aggregationResultVectorName, P_A_LONG);
+                        codeGenResult.add(createLocalVariable(
+                                getLocation(),
+                                toJavaType(getLocation(), aggregationResultVectorAP.getType()),
+                                aggregationResultVectorAP.getVariableName(),
+                                createMethodInvocation(
+                                        getLocation(),
+                                        createMethodInvocation(
+                                                getLocation(),
+                                                createAmbiguousNameRef(getLocation(), "cCtx"),
+                                                "getAllocationManager"
+                                        ),
+                                        "getLongVector"
+                                )
+                        ));
+
+                        aggregationResultAPs[i] = new ArrayVectorAccessPath(aggregationResultVectorAP, aggregationResultVectorLengthAP, ARRAY_LONG_VECTOR);
+
+                    } else {
+                        throw new UnsupportedOperationException("AggregationOperator.produceVec cannot allocate" +
+                                " a vector for the aggregation result of type " + aggregationMapType);
+                    }
+
+                } else {
+                    throw new UnsupportedOperationException(
+                            "AggregationOperator.produceVec does not support this group-by aggregation function: "
+                                    + currentCallFunction.getName());
+                }
+
+                updatedOrdinalMapping.add(i + 1, aggregationResultAPs[i]);
+            }
+
+            // Set the updated ordinal mapping
+            cCtx.setCurrentOrdinalMapping(updatedOrdinalMapping);
+
+            // Construct and expose the actual vectors
+            // Get an iterator for they keys based on the first aggregation state's first aggregation variable
+            String groupKeyIteratorName = cCtx.defineVariable("groupKeyIterator");
+
+            if (firstAggregationStateType == MAP_INT_LONG_SIMPLE) {
+                // Simple_Int_Long_Map [groupKeyIterator] = [firstAggregationState.variableNames[0]].getIterator();
+                codeGenResult.add(
+                        createLocalVariable(
+                                getLocation(),
+                                createReferenceType(getLocation(), "Simple_Int_Long_Map_Iterator"),
+                                groupKeyIteratorName,
+                                createMethodInvocation(
+                                        getLocation(),
+                                        createAmbiguousNameRef(getLocation(), firstAggregationState.variableNames[0]),
+                                        "getIterator"
+                                )
+                        )
+                );
+
+            } else {
+                throw new UnsupportedOperationException("AggregationOperator.produceVec does not currently support" +
+                        "obtaining keys from aggregation state type " + firstAggregationStateType);
+            }
+
+            // Construct the key and value vectors using this iterator
+            // while ([groupKeyIterator].hasNext()] {
+            //     [aggregationResultVectorLength] = VectorisedAggregationOperators.constructKeyVector([groupKeyVector], [groupKeyIterator]);
+            //     $ for each aggregationResult $
+            //     VectorisedAggregationOperators.constructValueVector([aggCall_$i$_vector], [groupKeyVector], [aggregationResultVectorLength], [aggCall_$i$_state]);
+            //     [whileLoopBody]
+            // }
+
+            // Iterate over the groupKeyIterator
+            Java.Block whileLoopBody = createBlock(getLocation());
+            codeGenResult.add(
+                    createWhileLoop(
+                            getLocation(),
+                            createMethodInvocation(
+                                    getLocation(),
+                                    createAmbiguousNameRef(getLocation(), groupKeyIteratorName),
+                                    "hasNext"
+                            ),
+                            whileLoopBody
+                    )
+            );
+
+            // Construct each key vector
+            whileLoopBody.addStatement(
+                    createVariableAssignmentStm(
+                            getLocation(),
+                            aggregationResultVectorLengthAP.write(),
+                            createMethodInvocation(
+                                    getLocation(),
+                                    createAmbiguousNameRef(getLocation(), "VectorisedAggregationOperators"),
+                                    "constructKeyVector",
+                                    new Java.Rvalue[] {
+                                            groupKeyVectorAP.getVectorVariable().read(),
+                                            createAmbiguousNameRef(getLocation(), groupKeyIteratorName)
+                                    }
+                            )
+                    )
+            );
+
+            // Create each value vector based on the aggregation type
+            for (int i = 0; i < aggregationCalls.size(); i++) {
+                // Get information to classify the current aggregation call
+                AggregateCall currentCall = aggregationCalls.get(i);
+                SqlAggFunction currentCallFunction = currentCall.getAggregation();
+
+                if (currentCallFunction instanceof SqlSumEmptyIsZeroAggFunction) {
+                    // The value vector can simply be constructed by obtaining values from the aggregation state map based on the keys
+                    String aggregationMapVariableName = this.aggregationStateMappings.get(i).variableNames[0];
+                    whileLoopBody.addStatement(
+                            createMethodInvocationStm(
+                                    getLocation(),
+                                    createAmbiguousNameRef(getLocation(), "VectorisedAggregationOperators"),
+                                    "constructValueVector",
+                                    new Java.Rvalue[] {
+                                            aggregationResultAPs[i].getVectorVariable().read(),
+                                            groupKeyVectorAP.getVectorVariable().read(),
+                                            aggregationResultVectorLengthAP.read(),
+                                            createAmbiguousNameRef(getLocation(), aggregationMapVariableName)
+                                    }
+                            )
+                    );
+
+                } else {
+                    throw new UnsupportedOperationException(
+                            "AggregationOperator.produceVec does not support this group-by aggregation function: "
+                                    + currentCallFunction.getName());
+                }
+            }
+
+            // Have the parent operator consume the result
+            whileLoopBody.addStatements(this.vecParentConsume(cCtx, oCtx));
+
+            // Generate the statements to deallocate the vectors as they won't be used anymore
+            for (int i = 0; i < updatedOrdinalMapping.size(); i++) {
+                // cCtx.getAllocationManager.release([updatedOrdinalMapping.get(i).getVectorVariable().read()]);
+                codeGenResult.add(
+                    createMethodInvocationStm(
+                            getLocation(),
+                            createMethodInvocation(
+                                    getLocation(),
+                                    createAmbiguousNameRef(getLocation(), "cCtx"),
+                                    "getAllocationManager"
+                            ),
+                            "release",
+                            new Java.Rvalue[] {
+                                    // Cast to ArrayVectorAccessPath valid as this is produced by this method
+                                    ((ArrayVectorAccessPath) updatedOrdinalMapping.get(i)).getVectorVariable().read()
+                            }
+                    ));
+            }
         }
 
         return codeGenResult;
@@ -570,7 +787,7 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
                                         ),
                                         createMethodInvocation(
                                                 getLocation(),
-                                                createAmbiguousNameRef(getLocation(), "evaluation.vector_support.VectorisedAggregationOperators"),
+                                                createAmbiguousNameRef(getLocation(), "VectorisedAggregationOperators"),
                                                 "count",
                                                 new Java.Rvalue[] {
                                                         avwvmap.readValidityMask(),
@@ -594,9 +811,73 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
             }
 
         } else {
-            // Group-by aggregation
-            throw new UnsupportedOperationException(
-                    "AggregationOperator.consumeVec does not support group-by aggregates");
+            // Group-by aggregation currently only supports single-column groups of the integer type (without mask)
+            // First we check if we received that
+            ImmutableBitSet groupSet = this.getLogicalSubplan().getGroupSet();
+            int firstGroupByColumnIndex = groupSet.nextSetBit(0); // There must be at least 1 column to group by
+            AccessPath keyColumnAccessPath = cCtx.getCurrentOrdinalMapping().get(firstGroupByColumnIndex);
+            QueryVariableType firstGroupByColumnType = keyColumnAccessPath.getType();
+
+            if (groupSet.cardinality() == 1 && firstGroupByColumnType == ARROW_INT_VECTOR) {
+                // Now, update each hash-table to reflect the correct state of each aggregate depending on the
+                // aggregation function and data type
+                for (int i = 0; i < aggregationCalls.size(); i++) {
+                    // Get information to classify the current aggregation call
+                    AggregateCall currentCall = aggregationCalls.get(i);
+                    SqlAggFunction currentCallFunction = currentCall.getAggregation();
+
+                    // Distinguish the required behaviour based on the aggregation type
+                    if (currentCallFunction instanceof SqlSumEmptyIsZeroAggFunction) {
+                        if (currentCall.getArgList().size() != 1) {
+                            throw new UnsupportedOperationException("AggregationOperator.consumeVec received an unexpected" +
+                                    "number of arguments for the SqlSumEmptyIsZeroAggFunction case");
+                        }
+
+                        int inputOrdinalIndex = currentCall.getArgList().get(0);
+                        AccessPath inputOrdinal = cCtx.getCurrentOrdinalMapping().get(inputOrdinalIndex);
+
+                        // Need to maintain a hash-table based on the input ordinal type and whether SIMD processing is enabled
+                        if (inputOrdinal.getType() == ARROW_INT_VECTOR && !this.simdEnabled) {
+                            // Key and value are both of type int --> we want to upgrade the result to a long
+                            // Set-up the correct aggregation state initialisation
+                            AggregationStateMapping aggregationStateMapping = this.aggregationStateMappings.get(i);
+                            aggregationStateMapping.variableTypes[0] = MAP_INT_LONG_SIMPLE;
+                            Java.Type intLongHashMapType = toJavaType(getLocation(), aggregationStateMapping.variableTypes[0]);
+                            aggregationStateMapping.variableInitialisationStatements[0] =
+                                    createClassInstance(getLocation(), intLongHashMapType);
+
+                            // We need to invoke the VectorisedAggregationOperators.maintainSum method
+                            codeGenResult.add(
+                                    createMethodInvocationStm(
+                                            getLocation(),
+                                            createAmbiguousNameRef(getLocation(), "VectorisedAggregationOperators"),
+                                            "maintainSum",
+                                            new Java.Rvalue[]{
+                                                    ((ArrowVectorAccessPath) keyColumnAccessPath).read(),   // Key column, cast valid due to branch
+                                                    ((ArrowVectorAccessPath) inputOrdinal).read(),          // Value column, cast valid due to branch
+                                                    createAmbiguousNameRef(getLocation(), aggregationStateMapping.variableNames[0]) // Map to maintain
+                                            }
+                                    )
+                            );
+
+                        } else {
+                            throw new UnsupportedOperationException(
+                                    "AggregationOperator.consumeVec does not support this ordinal + SIMD processing combination" +
+                                            " for the SqlSumEmptyIsZeroAggFunction");
+                        }
+
+                    } else {
+                        throw new UnsupportedOperationException(
+                                "AggregationOperator.consumeVec does not support this group-by aggregation function: "
+                                        + currentCallFunction.getName());
+                    }
+
+                }
+
+            } else {
+                throw new UnsupportedOperationException(
+                        "AggregationOperator.consumeVec currently only supports single integer-column group-by's (without masks)");
+            }
         }
 
         // Do not consume parent operator here, but in the produce method since the aggregation is a blocking operator

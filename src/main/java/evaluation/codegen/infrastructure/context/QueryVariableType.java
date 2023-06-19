@@ -27,6 +27,12 @@ public enum QueryVariableType {
     ARROW_INT_VECTOR,
     ARROW_LONG_VECTOR,
 
+    // Array vector types,
+    ARRAY_DOUBLE_VECTOR,
+    ARRAY_FLOAT_VECTOR,
+    ARRAY_INT_VECTOR,
+    ARRAY_LONG_VECTOR,
+
     // SIMD related types
     VECTOR_SPECIES_INT,
 

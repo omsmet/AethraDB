@@ -26,6 +26,18 @@ public abstract class AllocationManager {
     public abstract void release(int[] vector);
 
     /**
+     * Method for obtaining a long vector to use in query processing.
+     * @return A long vector of length {@code evaluation.vector_support.VectorisedOperators.VECTOR_LENGTH}.
+     */
+    public abstract long[] getLongVector();
+
+    /**
+     * Method to mark a long vector used in query processing as unused. ("free a vector")
+     * @param vector The vector to mark as unused.
+     */
+    public abstract void release(long[] vector);
+
+    /**
      * Method for obtaining a boolean vector to use in query processing.
      * @return A boolean vector of length {@code evaluation.vector_support.VectorisedOperators.VECTOR_LENGTH}.
      */

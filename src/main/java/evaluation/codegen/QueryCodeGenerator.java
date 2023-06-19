@@ -93,7 +93,12 @@ public class QueryCodeGenerator extends SimpleCompiler {
                 "evaluation.general_support.hashmaps.Simple_Int_Long_Map",
                 "evaluation.general_support.hashmaps.Simple_Int_Long_Map.Simple_Int_Long_Map_Iterator",
 
-                "evaluation.codegen.infrastructure.data.ArrowTableReader"
+                "evaluation.codegen.infrastructure.data.ArrowTableReader",
+
+                "evaluation.vector_support.VectorisedAggregationOperators",
+                "evaluation.vector_support.VectorisedFilterOperators",
+                "evaluation.vector_support.VectorisedOperators",
+                "evaluation.vector_support.VectorisedPrintOperators",
         };
 
         // Initialise the compiler, so it will allow us to generate a class which extends

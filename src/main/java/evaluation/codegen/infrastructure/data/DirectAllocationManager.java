@@ -26,6 +26,16 @@ public class DirectAllocationManager extends AllocationManager {
     }
 
     @Override
+    public long[] getLongVector() {
+        return new long[VectorisedOperators.VECTOR_LENGTH];
+    }
+
+    @Override
+    public void release(long[] vector) {
+        // Do nothing since we do not keep track of vectors which are in circulation.
+    }
+
+    @Override
     public boolean[] getBooleanVector() {
         // Simply return a new vector
         return new boolean[VectorisedOperators.VECTOR_LENGTH];
