@@ -1,5 +1,6 @@
 package evaluation.codegen.infrastructure.context.access_path;
 
+import evaluation.codegen.infrastructure.context.QueryVariableType;
 import org.codehaus.janino.Java;
 
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createAmbiguousNameRef;
@@ -20,8 +21,10 @@ public class MapAccessPath extends AccessPath {
     /**
      * Construct an {@link MapAccessPath} instance for a specific variable name.
      * @param variableToAccess The variable that should be accessible through {@code this}.
+     * @param type The type of the variable accessible through {@code this}.
      */
-    public MapAccessPath(String variableToAccess) {
+    public MapAccessPath(String variableToAccess, QueryVariableType type) {
+        super(type);
         this.variableToAccess = variableToAccess;
     }
 

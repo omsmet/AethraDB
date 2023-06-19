@@ -1,5 +1,6 @@
 package evaluation.codegen.infrastructure.context.access_path;
 
+import evaluation.codegen.infrastructure.context.QueryVariableType;
 import org.codehaus.janino.Java;
 
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.getLocation;
@@ -25,11 +26,14 @@ public class IndexedArrowVectorElementAccessPath extends AccessPath {
      * Create an {@link IndexedArrowVectorElementAccessPath} instance.
      * @param arrowVectorVariable The Arrow vector variable to access.
      * @param indexVariable The index variable to use.
+     * @param type The type of the variable accessible through {@code this}.
      */
     public IndexedArrowVectorElementAccessPath(
             ArrowVectorAccessPath arrowVectorVariable,
-            ScalarVariableAccessPath indexVariable
+            ScalarVariableAccessPath indexVariable,
+            QueryVariableType type
     ) {
+        super(type);
         this.arrowVectorVariable = arrowVectorVariable;
         this.indexVariable = indexVariable;
     }

@@ -7,9 +7,9 @@ import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createAm
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.getLocation;
 
 /**
- * {@link AccessPath} type for accessing java primitive types stored in a variable with a given name.
+ * {@link AccessPath} type for accessing a variable containing an array.
  */
-public class ScalarVariableAccessPath extends AccessPath {
+public class ArrayAccessPath extends AccessPath {
 
     /**
      * The variable that is accessible through {@code this}.
@@ -17,11 +17,11 @@ public class ScalarVariableAccessPath extends AccessPath {
     private final String variableToAccess;
 
     /**
-     * Construct an {@link ScalarVariableAccessPath} instance for a specific variable name.
+     * Construct an {@link ArrayAccessPath} instance for a specific variable name.
      * @param variableToAccess The variable that should be accessible through {@code this}.
      * @param type The type of the variable accessible through {@code this}.
      */
-    public ScalarVariableAccessPath(String variableToAccess, QueryVariableType type) {
+    public ArrayAccessPath(String variableToAccess, QueryVariableType type) {
         super(type);
         this.variableToAccess = variableToAccess;
     }
@@ -38,18 +38,6 @@ public class ScalarVariableAccessPath extends AccessPath {
      * @return A {@link Java.Rvalue} to read the value of the variable represented by {@code this}.
      */
     public Java.Rvalue read() {
-        return createAmbiguousNameRef(
-                getLocation(),
-                this.variableToAccess
-        );
-    }
-
-    /**
-     * Method for performing code generation that allows to write to the value of the variable
-     * represented by {@code this}.
-     * @return A {@link Java.Lvalue} to write to the value of the variable represented by {@code this}.
-     */
-    public Java.Lvalue write() {
         return createAmbiguousNameRef(
                 getLocation(),
                 this.variableToAccess

@@ -9,7 +9,6 @@ import evaluation.codegen.infrastructure.context.access_path.ArrowVectorWithVali
 import evaluation.codegen.infrastructure.context.access_path.ScalarVariableAccessPath;
 import evaluation.codegen.infrastructure.janino.JaninoMethodGen;
 import org.apache.calcite.rel.RelNode;
-import org.apache.calcite.sql.type.BasicSqlType;
 import org.codehaus.janino.Java;
 
 import java.util.ArrayList;
@@ -75,12 +74,9 @@ public class QueryResultPrinterOperator extends CodeGenOperator<RelNode> {
 
         // Generate the required print statements
         for (int i = 0; i < currentOrdinalMapping.size(); i++) {
-            Java.Type ordinalType = sqlTypeToScalarJavaType(
-                    (BasicSqlType) this.getLogicalSubplan().getRowType().getFieldList().get(i).getType());
-
             boolean lastElement = (i == currentOrdinalMapping.size() - 1);
             String methodName = lastElement ? "println" : "print";
-            Java.Rvalue printValue = getRValueFromAccessPathNonVec(cCtx, oCtx, i, ordinalType, codegenResult);
+            Java.Rvalue printValue = getRValueFromAccessPathNonVec(cCtx, i, codegenResult);
             if (!lastElement)
                 printValue = plus(
                         getLocation(),

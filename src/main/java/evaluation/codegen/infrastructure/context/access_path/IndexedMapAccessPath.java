@@ -1,5 +1,6 @@
 package evaluation.codegen.infrastructure.context.access_path;
 
+import evaluation.codegen.infrastructure.context.QueryVariableType;
 import org.codehaus.janino.Java;
 
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.getLocation;
@@ -26,8 +27,14 @@ public class IndexedMapAccessPath extends AccessPath {
      * Create an {@link IndexedMapAccessPath} instance.
      * @param hashmapVariable The hashmap variable to access.
      * @param indexVariable The index variable to use.
+     * @param type The type of the variable accessible through {@code this}.
      */
-    public IndexedMapAccessPath(MapAccessPath hashmapVariable, ScalarVariableAccessPath indexVariable) {
+    public IndexedMapAccessPath(
+            MapAccessPath hashmapVariable,
+            ScalarVariableAccessPath indexVariable,
+            QueryVariableType type
+    ) {
+        super(type);
         this.hashmapVariable = hashmapVariable;
         this.indexVariable = indexVariable;
     }

@@ -5,9 +5,9 @@ import java.util.NoSuchElementException;
 
 /**
  * This map provides a simple hash-map implementation for mapping primitive integer keys to primitive
- * integer values. We assume keys are non-negative to keep the implementation simple and efficient.
+ * long integer values. We assume keys are non-negative to keep the implementation simple and efficient.
  */
-public class Simple_Int_Int_Map {
+public class Simple_Int_Long_Map {
 
     /**
      * The initial capacity with which maps of this type are created.
@@ -27,7 +27,7 @@ public class Simple_Int_Int_Map {
     /**
      * Array containing the values of each element in the map (in insertion order).
      */
-    private int[] values;
+    private long[] values;
 
     /**
      * The table mapping a hash value to an index in the {@code keys} and {@code values} arrays.
@@ -48,23 +48,23 @@ public class Simple_Int_Int_Map {
     private int[] next;
 
     /**
-     * Creates an empty {@link Simple_Int_Int_Map} instance.
+     * Creates an empty {@link Simple_Int_Long_Map} instance.
      */
-    public Simple_Int_Int_Map() {
+    public Simple_Int_Long_Map() {
         this(INITIAL_CAPACITY);
     }
 
     /**
-     * Creates an empty {@link Simple_Int_Int_Map} instance.
+     * Creates an empty {@link Simple_Int_Long_Map} instance.
      * @param capacity The capacity to create the map with.
      */
-    public Simple_Int_Int_Map(int capacity) {
+    public Simple_Int_Long_Map(int capacity) {
         this.numberOfRecords = 0;
 
         this.keys = new int[capacity];
         Arrays.fill(this.keys, -1); // Mark unused entries
 
-        this.values = new int[capacity];
+        this.values = new long[capacity];
 
         this.hashTable = new int[capacity + capacity >> 1]; // Initialise at slightly larger size to prevent collisions
         Arrays.fill(this.hashTable, -1); // Mark unused entries
@@ -97,7 +97,7 @@ public class Simple_Int_Int_Map {
      * @param key The key to which to associate a value.
      * @param value The value to associate to the key.
      */
-    public void put(int key, int value) {
+    public void put(int key, long value) {
         checkKeyNonNegative(key);
 
         // Check if the map already contains the key
@@ -160,7 +160,7 @@ public class Simple_Int_Int_Map {
      * @param key The key to perform the operation for.
      * @param value The value to add/associate to the key.
      */
-    public void addToKeyOrPutIfNotExist(int key, int value) {
+    public void addToKeyOrPutIfNotExist(int key, long value) {
         checkKeyNonNegative(key);
 
         int index = find(key);
@@ -176,14 +176,14 @@ public class Simple_Int_Int_Map {
      * @return The value associated to the key (if the map contains the key).
      * @throws NoSuchElementException if the map does not contain the provided key.
      */
-    public int get(int key) throws NoSuchElementException {
+    public long get(int key) throws NoSuchElementException {
         checkKeyNonNegative(key);
         int index = find(key);
 
         if (index != -1)
             return values[index];
 
-        throw new NoSuchElementException("Simple_Int_Int_Map does not contain key " + key);
+        throw new NoSuchElementException("Simple_Int_Long_Map does not contain key " + key);
     }
 
     /**
@@ -229,14 +229,14 @@ public class Simple_Int_Int_Map {
         int currentSize = this.keys.length;
         int newSize = currentSize + Math.max(INITIAL_CAPACITY, currentSize >> 1);
         if (newSize > Integer.MAX_VALUE - 1)
-            throw new UnsupportedOperationException("Simple_Int_Int_Map has grown too large");
+            throw new UnsupportedOperationException("Simple_Int_Long_Map has grown too large");
 
         int[] newKeys = new int[newSize];
         System.arraycopy(this.keys, 0, newKeys, 0, currentSize);
         Arrays.fill(newKeys, currentSize, newSize, -1); // Mark unused entries
         this.keys = newKeys;
 
-        int[] newValues = new int[newSize];
+        long[] newValues = new long[newSize];
         System.arraycopy(this.values, 0, newValues, 0, currentSize);
         this.values = newValues;
 
@@ -275,21 +275,21 @@ public class Simple_Int_Int_Map {
      */
     private void checkKeyNonNegative(int key) throws IllegalArgumentException {
         if (key < 0)
-            throw new IllegalArgumentException("Simple_Int_Int_Map does not support negative keys");
+            throw new IllegalArgumentException("Simple_Int_Long_Map does not support negative keys");
     }
 
     /**
      * Method to obtain a primitive-type specific iterator to iterate over the keys of this map.
-     * @return A new {@link Simple_Int_Int_Map_Iterator} for this map.
+     * @return A new {@link Simple_Int_Long_Map_Iterator} for this map.
      */
-    public Simple_Int_Int_Map_Iterator getIterator() {
-        return new Simple_Int_Int_Map_Iterator();
+    public Simple_Int_Long_Map_Iterator getIterator() {
+        return new Simple_Int_Long_Map_Iterator();
     }
 
     /**
-     * Class definition for iterating over the keys of a {@link Simple_Int_Int_Map}.
+     * Class definition for iterating over the keys of a {@link Simple_Int_Long_Map}.
      */
-    public class Simple_Int_Int_Map_Iterator {
+    public class Simple_Int_Long_Map_Iterator {
 
         /**
          * Variable for keeping track of the current key index in the iteration.
@@ -302,10 +302,10 @@ public class Simple_Int_Int_Map {
         private final int totalNumberOfRecords;
 
         /**
-         * Creates a new {@link Simple_Int_Int_Map_Iterator} instance.
-         * @return The new {@link Simple_Int_Int_Map_Iterator} instance.
+         * Creates a new {@link Simple_Int_Long_Map_Iterator} instance.
+         * @return The new {@link Simple_Int_Long_Map_Iterator} instance.
          */
-        private Simple_Int_Int_Map_Iterator() {
+        private Simple_Int_Long_Map_Iterator() {
             this.currentIndex = 0;
             this.totalNumberOfRecords = numberOfRecords;
         }
@@ -325,7 +325,7 @@ public class Simple_Int_Int_Map {
          */
         public int next() throws NoSuchElementException {
             if (!this.hasNext())
-                throw new NoSuchElementException("Simple_Int_Int_Map_Iterator has reached the end of the iteration");
+                throw new NoSuchElementException("Simple_Int_Long_Map_Iterator has reached the end of the iteration");
 
             return keys[this.currentIndex++];
         }

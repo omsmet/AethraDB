@@ -26,7 +26,8 @@ public class ArrowTableScanRule extends RelRule<ArrowTableScanRule.Config> {
         super(config);
     }
 
-    @Override public void onMatch(RelOptRuleCall call) {
+    @Override
+    public void onMatch(RelOptRuleCall call) {
         if (call.rels.length == 1) {
             // the ordinary variant
             final LogicalTableScan scan = call.rel(0);
@@ -60,7 +61,7 @@ public class ArrowTableScanRule extends RelRule<ArrowTableScanRule.Config> {
     public interface Config extends RelRule.Config {
 
         /**
-         * Config that matches a LogicalTableScan.
+         * Config that matches a {@link LogicalTableScan}.
          */
         Config DEFAULT = ImmutableArrowTableScanRule.Config.builder()
                 .operandSupplier(b0 -> b0.operand(LogicalTableScan.class).noInputs())

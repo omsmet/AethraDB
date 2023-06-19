@@ -2,6 +2,7 @@ package evaluation.codegen.operators;
 
 import evaluation.codegen.infrastructure.context.CodeGenContext;
 import evaluation.codegen.infrastructure.context.OptimisationContext;
+import evaluation.codegen.infrastructure.context.QueryVariableType;
 import evaluation.codegen.infrastructure.context.access_path.AccessPath;
 import evaluation.codegen.infrastructure.context.access_path.IndexedArrowVectorElementAccessPath;
 import evaluation.codegen.infrastructure.context.access_path.IndexedMapAccessPath;
@@ -13,12 +14,11 @@ import org.codehaus.janino.Java;
 
 import java.util.List;
 
+import static evaluation.codegen.infrastructure.context.QueryVariableTypeMethods.toJavaType;
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createFloatingPointLiteral;
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createIntegerLiteral;
-import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createPrimitiveType;
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.getLocation;
 import static evaluation.codegen.infrastructure.janino.JaninoVariableGen.createLocalVariable;
-import static evaluation.codegen.infrastructure.janino.JaninoVariableGen.createPrimitiveLocalVar;
 
 /**
  * Class that is extended by all code generator operators.
@@ -181,100 +181,54 @@ public abstract class CodeGenOperator<T extends RelNode> {
     }
 
     /**
-     * Method for obtaining a scalar java type for a provided logical sql type.
-     * @param sqlType The type for which to obtain the java type.
-     * @return A {@link Java.Type} corresponding to the provided {@code sqlType}.
-     */
-    protected Java.Type sqlTypeToScalarJavaType(BasicSqlType sqlType) {
-        return switch (sqlType.getSqlTypeName()) {
-            case DOUBLE -> createPrimitiveType(getLocation(), Java.Primitive.DOUBLE);
-            case FLOAT -> createPrimitiveType(getLocation(), Java.Primitive.FLOAT);
-            case INTEGER -> createPrimitiveType(getLocation(), Java.Primitive.INT);
-            case BIGINT -> createPrimitiveType(getLocation(), Java.Primitive.LONG);
-            default -> throw new UnsupportedOperationException(
-                    "sqlTypeToScalarJavaType does not support the provided sqlType");
-        };
-    }
-
-    /**
-     * Method for obtaining an initialised java primitive variable declaration for a logical sql type.
-     * @param sqlType The type for which to obtain the variable.
-     * @param variableName The name to give to the variable.
-     * @return A {@link Java.Statement} corresponding to the declaration of the variable.
-     */
-    protected Java.Statement sqlTypeToScalarJavaVariable(BasicSqlType sqlType, String variableName) {
-        return switch (sqlType.getSqlTypeName()) {
-            case DOUBLE -> createPrimitiveLocalVar(getLocation(), Java.Primitive.DOUBLE, variableName, "0");
-            case FLOAT -> createPrimitiveLocalVar(getLocation(), Java.Primitive.FLOAT, variableName, "0");
-            case INTEGER -> createPrimitiveLocalVar(getLocation(), Java.Primitive.INT, variableName, "0");
-            case BIGINT -> createPrimitiveLocalVar(getLocation(), Java.Primitive.LONG, variableName, "0");
-            default -> throw new UnsupportedOperationException(
-                    "sqlTypeToScalarJavaVariable does not support the provided sqlType");
-        };
-    }
-
-    /**
      * Method to retrieve a {@link Java.Rvalue} for a non-vector {@link AccessPath}.
      * @param cCtx The {@link CodeGenContext} to use during the generation.
-     * @param oCtx The {@link OptimisationContext} to use during the generation and execution.
-     * @param accessPathIndex The index of the {@link AccessPath} in cCtx.getCurrentOrdinalMapping
-     *                        to generate the {@link Java.Rvalue} for. Must be a non-vector type.
-     * @param accessPathResultType The type of the value (to be) represented by the Rvalue.
+     * @param accessPathIndex The index in {@code cCtx.getCurrentOrdinalMapping()} of the
+     *                        {@link AccessPath} to generate the {@link Java.Rvalue} for. Must be
+     *                        a non-vector type.
      * @param codegenTarget The current list of statements being generated to perform allocations of
      *                      variables if necessary for creating the {@link Java.Rvalue}.
      * @return The {@link Java.Rvalue} corresponding to {@code accessPath}.
      */
     protected Java.Rvalue getRValueFromAccessPathNonVec(
             CodeGenContext cCtx,
-            OptimisationContext oCtx,
             int accessPathIndex,
-            Java.Type accessPathResultType,
             List<Java.Statement> codegenTarget
     ) {
-        List<AccessPath> currentOrdinalMapping = cCtx.getCurrentOrdinalMapping();
-        AccessPath ordinalAccessPath = currentOrdinalMapping.get(accessPathIndex);
+        AccessPath accessPath = cCtx.getCurrentOrdinalMapping().get(accessPathIndex);
 
-        // Expose the ordinal position value based on the supported type
-        // When the access path is not a simple scalar variable, transform it to one to guard efficiency
-        // This is done to reduce method calls where possible
-        if (ordinalAccessPath instanceof ScalarVariableAccessPath svap) {
+        // Expose the ordinal position value based on the supported type. When the access path is
+        // not a simple scalar variable, transform it to reduce method calls where possible.
+        if (accessPath instanceof ScalarVariableAccessPath svap) {
             return svap.read();
 
-        } else if (ordinalAccessPath instanceof IndexedArrowVectorElementAccessPath iaveap) {
+        } else if (accessPath instanceof IndexedArrowVectorElementAccessPath
+                || accessPath instanceof IndexedMapAccessPath) {
+            QueryVariableType ordinalType;
+            Java.Rvalue variableValue;
+            if (accessPath instanceof IndexedArrowVectorElementAccessPath iaveap) {
+                ordinalType = iaveap.getType();
+                variableValue = iaveap.read();
+            } else { // if (accessPath instanceof IndexedMapAccessPath imap) {
+                IndexedMapAccessPath imap = (IndexedMapAccessPath) accessPath;
+                ordinalType = imap.getType();
+                variableValue = imap.read();
+            }
+
             // Need to allocate a new variable
-            // var ordinal_[ordinalIndex] = $arrowVectorVar$.get($indexVar$)
-            String operandVariableName = cCtx.defineVariable("ordinal_" + accessPathIndex);
+            // [scalar java type] ordinal_value = $arrowVectorVar$.get($indexVar$)
+            String operandVariableName = cCtx.defineVariable("ordinal_value");
             codegenTarget.add(
                     createLocalVariable(
                             getLocation(),
-                            accessPathResultType,
+                            toJavaType(getLocation(), ordinalType),
                             operandVariableName,
-                            iaveap.read()
+                            variableValue
                     )
             );
 
             // Update the ordinal access path in the mapping to reflect the allocation of the variable
-            var newOrdinalAccessPath = new ScalarVariableAccessPath(operandVariableName);
-            cCtx.getCurrentOrdinalMapping().set(accessPathIndex, newOrdinalAccessPath);
-
-            // Return the access path code
-            return newOrdinalAccessPath.read();
-
-        } else if (ordinalAccessPath instanceof IndexedMapAccessPath imap) {
-            // Need to allocate a new variable
-            // var ordinal_[ordinalIndex] = $mapVariable$.get($indexVariable$)
-            String operandVariableName = cCtx.defineVariable("ordinal_" + accessPathIndex);
-            codegenTarget.add(
-                    createLocalVariable(
-                            getLocation(),
-                            accessPathResultType,
-                            operandVariableName,
-                            imap.read()
-                    )
-            );
-
-            // Update the ordinal access path in the mapping to reflect the allocation of the variable
-            var newOrdinalAccessPath = new ScalarVariableAccessPath(operandVariableName);
+            var newOrdinalAccessPath = new ScalarVariableAccessPath(operandVariableName, ordinalType);
             cCtx.getCurrentOrdinalMapping().set(accessPathIndex, newOrdinalAccessPath);
 
             // Return the access path code

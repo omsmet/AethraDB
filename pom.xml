@@ -67,6 +67,7 @@ THE POSSIBILITY OF SUCH DAMAGE.
         <arrow.version>12.0.0</arrow.version>
         <calcite.version>1.34.0</calcite.version>
         <commons-cli.version>1.5.0</commons-cli.version>
+        <commons-csv.version>1.10.0</commons-csv.version>
         <immutables.version>2.9.2</immutables.version>
         <janino.version>3.1.9</janino.version>
 
@@ -133,6 +134,11 @@ THE POSSIBILITY OF SUCH DAMAGE.
             <groupId>commons-cli</groupId>
             <artifactId>commons-cli</artifactId>
             <version>${commons-cli.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-csv</artifactId>
+            <version>${commons-csv.version}</version>
         </dependency>
 
         <!--

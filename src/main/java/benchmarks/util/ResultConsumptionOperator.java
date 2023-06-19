@@ -3,10 +3,10 @@ package benchmarks.util;
 import evaluation.codegen.infrastructure.context.CodeGenContext;
 import evaluation.codegen.infrastructure.context.OptimisationContext;
 import evaluation.codegen.infrastructure.context.access_path.AccessPath;
+import evaluation.codegen.infrastructure.context.access_path.ArrayAccessPath;
 import evaluation.codegen.infrastructure.context.access_path.ScalarVariableAccessPath;
 import evaluation.codegen.operators.CodeGenOperator;
 import org.apache.calcite.rel.RelNode;
-import org.apache.calcite.sql.type.BasicSqlType;
 import org.codehaus.janino.Java;
 
 import java.util.ArrayList;
@@ -63,9 +63,14 @@ public class ResultConsumptionOperator extends CodeGenOperator<RelNode> {
 
         // Generate the required consumption method invocation statement
         for (int i = 0; i < currentOrdinalMapping.size(); i++) {
-            Java.Type ordinalType = sqlTypeToScalarJavaType(
-                    (BasicSqlType) this.getLogicalSubplan().getRowType().getFieldList().get(i).getType());
-            Java.Rvalue resultValue = getRValueFromAccessPathNonVec(cCtx, oCtx, i, ordinalType, codegenResult);
+            Java.Rvalue resultValue;
+
+            // Set the result value based on whether we are dealing with a pattern that can occur in query processing or not
+            if (currentOrdinalMapping.get(i) instanceof ArrayAccessPath aap) { // ResultConsumptionOperator specific pattern
+                resultValue = aap.read();
+            } else { // Pattern which can occur in query processing too
+                resultValue = getRValueFromAccessPathNonVec(cCtx, i, codegenResult);
+            }
 
             codegenResult.add(
                     // cCtx.getResultConsumptionTarget().consumeResultItem(resultValue);

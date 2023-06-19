@@ -1,5 +1,6 @@
 package evaluation.codegen.infrastructure.context;
 
+import evaluation.codegen.infrastructure.context.access_path.AccessPath;
 import jdk.incubator.vector.ByteVector;
 import jdk.incubator.vector.DoubleVector;
 import jdk.incubator.vector.FloatVector;
@@ -7,7 +8,6 @@ import jdk.incubator.vector.IntVector;
 import jdk.incubator.vector.LongVector;
 import jdk.incubator.vector.VectorMask;
 import jdk.incubator.vector.VectorSpecies;
-import org.apache.calcite.rel.type.RelDataTypeField;
 
 import java.lang.foreign.MemorySegment;
 import java.nio.ByteOrder;
@@ -53,23 +53,24 @@ public class OptimisationContext {
 
     /**
      * Method to compute the vector length which is appropriate for all element types of a row.
-     * @param fieldList The list of fields for which a common SIMD vector length should be computed.
+     * @param columnList The list of columns for which a common SIMD vector length should be computed.
      * @return The common vector length computed.
      */
-    public static int computeCommonSIMDVectorLength(List<RelDataTypeField> fieldList) {
+    public static int computeCommonSIMDVectorLength(List<AccessPath> columnList) {
         // Compute the maximum length that any vector could ever have
         int commonLength = MAX_LEN_BYTE_VECTOR_SPECIES.length();
 
         // Check if we need to use a lower vector length due to any field
-        for (RelDataTypeField field : fieldList) {
+        for (AccessPath column : columnList) {
             commonLength = Math.min(
                     commonLength,
-                    switch (field.getType().getSqlTypeName()) {
-                        case DOUBLE -> MAX_LEN_DOUBLE_VECTOR_SPECIES.length();
-                        case FLOAT -> MAX_LEN_FLOAT_VECTOR_SPECIES.length();
-                        case INTEGER -> MAX_LEN_INT_VECTOR_SPECIES.length();
-                        case BIGINT -> MAX_LEN_LONG_VECTOR_SPECIES.length();
-                        default -> throw new UnsupportedOperationException("We do not have SIMD support for the current type");
+                    switch (column.getType()) {
+                        case ARROW_DOUBLE_VECTOR -> MAX_LEN_DOUBLE_VECTOR_SPECIES.length();
+                        case ARROW_FLOAT_VECTOR -> MAX_LEN_FLOAT_VECTOR_SPECIES.length();
+                        case ARROW_INT_VECTOR -> MAX_LEN_INT_VECTOR_SPECIES.length();
+                        case ARROW_LONG_VECTOR -> MAX_LEN_LONG_VECTOR_SPECIES.length();
+                        default -> throw new UnsupportedOperationException("" +
+                                "Cannot include the current type in the common SIMD vector length computation");
                     }
             );
         }

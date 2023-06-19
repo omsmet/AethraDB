@@ -193,6 +193,45 @@ public class JaninoGeneralGen {
     }
 
     /**
+     * Method to create a new array of a primitive java type.
+     * @param location The location where the new array is requested for generation.
+     * @param type The primitive type that the array should get.
+     * @param length The length to initialise the array with.
+     * @return A {@link Java.NewArray} corresponding to the provided parameters.
+     */
+    public static Java.NewArray createNewPrimitiveArray(
+            Location location,
+            Java.Primitive type,
+            int length
+    ) {
+        return createNewPrimitiveArray(
+                location,
+                createPrimitiveType(getLocation(), type),
+                length
+        );
+    }
+
+    /**
+     * Method to create a new array of a primitive java type.
+     * @param location The location where the new array is requested for generation.
+     * @param primitiveType The primitive type that the array should get.
+     * @param length The length to initialise the array with.
+     * @return A {@link Java.NewArray} corresponding to the provided parameters.
+     */
+    public static Java.NewArray createNewPrimitiveArray(
+            Location location,
+            Java.Type primitiveType,
+            int length
+    ) {
+        return new Java.NewArray(
+                location,
+                primitiveType,
+                new Java.Rvalue[] { createIntegerLiteral(getLocation(), length) },
+                0
+        );
+    }
+
+    /**
      * Method for creating an expression that accesses an element of an array.
      * @param location The location at which the array access expression is requested for generation.
      * @param array The array to access an element from.

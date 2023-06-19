@@ -2,29 +2,36 @@ package evaluation.codegen.operators;
 
 import evaluation.codegen.infrastructure.context.CodeGenContext;
 import evaluation.codegen.infrastructure.context.OptimisationContext;
+import evaluation.codegen.infrastructure.context.QueryVariableType;
 import evaluation.codegen.infrastructure.context.access_path.AccessPath;
+import evaluation.codegen.infrastructure.context.access_path.ArrayAccessPath;
 import evaluation.codegen.infrastructure.context.access_path.ArrowVectorAccessPath;
 import evaluation.codegen.infrastructure.context.access_path.ArrowVectorWithSelectionVectorAccessPath;
 import evaluation.codegen.infrastructure.context.access_path.ArrowVectorWithValidityMaskAccessPath;
 import evaluation.codegen.infrastructure.context.access_path.SIMDLoopAccessPath;
 import evaluation.codegen.infrastructure.context.access_path.SIMDVectorMaskAccessPath;
+import evaluation.codegen.infrastructure.context.access_path.ScalarVariableAccessPath;
 import org.apache.calcite.rel.logical.LogicalFilter;
 import org.apache.calcite.rex.RexCall;
 import org.apache.calcite.rex.RexInputRef;
 import org.apache.calcite.rex.RexLiteral;
 import org.apache.calcite.rex.RexNode;
-import org.apache.calcite.sql.type.BasicSqlType;
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.codehaus.janino.Java;
 
 import java.util.ArrayList;
 import java.util.List;
 
+import static evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_INT_VECTOR;
+import static evaluation.codegen.infrastructure.context.QueryVariableType.P_A_BOOLEAN;
+import static evaluation.codegen.infrastructure.context.QueryVariableType.P_A_INT;
+import static evaluation.codegen.infrastructure.context.QueryVariableType.P_INT;
+import static evaluation.codegen.infrastructure.context.QueryVariableType.VECTOR_INT_MASKED;
+import static evaluation.codegen.infrastructure.context.QueryVariableTypeMethods.primitiveMemberTypeForArrowVector;
+import static evaluation.codegen.infrastructure.context.QueryVariableTypeMethods.toJavaType;
 import static evaluation.codegen.infrastructure.janino.JaninoControlGen.createIfNotContinue;
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createAmbiguousNameRef;
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createPrimitiveArrayType;
-import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createPrimitiveType;
-import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createReferenceType;
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.getLocation;
 import static evaluation.codegen.infrastructure.janino.JaninoMethodGen.createMethodInvocation;
 import static evaluation.codegen.infrastructure.janino.JaninoOperatorGen.lt;
@@ -170,13 +177,12 @@ public class FilterOperator extends CodeGenOperator<LogicalFilter> {
 
         // Check if we are in a SIMD enabled setting with a SIMD-compatible access path
         // or if we can simply perform a scalar code-gen path.
-        // Currently, the only SIMD supported path is an lhs RexInputRef and rhs RexLiteral
+        // Currently, the only SIMD supported path is a lhs RexInputRef and rhs RexLiteral
         if (this.simdEnabled
                 && lhs instanceof RexInputRef lhsRef && rhs instanceof RexLiteral rhsLit
                 && cCtx.getCurrentOrdinalMapping().get(lhsRef.getIndex()) instanceof SIMDLoopAccessPath lhsAP) {
             // SIMD enabled path: handle acceleration according to the datatype
-            if (lhsRef.getType().getSqlTypeName() == SqlTypeName.INTEGER
-                    && rhsLit.getType().getSqlTypeName() == SqlTypeName.INTEGER) {
+            if (lhsAP.getType() == VECTOR_INT_MASKED && rhsLit.getType().getSqlTypeName() == SqlTypeName.INTEGER) { // getSqlTypeName allowed here since we are accessing a query literal
                 // Extend the SIMD validity mask using a SIMD comparison
                 // IntVector [SIMDVector] = IntVector.fromSegment(
                 //      [lhsAP.readVectorSpecies()],
@@ -189,7 +195,7 @@ public class FilterOperator extends CodeGenOperator<LogicalFilter> {
                 codegenResult.add(
                     createLocalVariable(
                             getLocation(),
-                            createReferenceType(getLocation(), "jdk.incubator.vector.IntVector"),
+                            toJavaType(getLocation(), lhsAP.getArrowVectorAccessPath().getType()),
                             SIMDVectorName,
                             createMethodInvocation(
                                     getLocation(),
@@ -201,7 +207,10 @@ public class FilterOperator extends CodeGenOperator<LogicalFilter> {
                                             mul(
                                                     getLocation(),
                                                     lhsAP.readArrowVectorOffset(),
-                                                    createAmbiguousNameRef(getLocation(), lhsAP.getArrowVectorVariableName() + ".TYPE_WIDTH")
+                                                    createAmbiguousNameRef(
+                                                            getLocation(),
+                                                            lhsAP.getArrowVectorAccessPath().getVariableName() + ".TYPE_WIDTH"
+                                                    )
                                             ),
                                             createAmbiguousNameRef(getLocation(), "java.nio.ByteOrder.LITTLE_ENDIAN"),
                                             lhsAP.readSIMDMask()
@@ -213,14 +222,11 @@ public class FilterOperator extends CodeGenOperator<LogicalFilter> {
                 // Do the comparison and mask extension
                 // VectorMask<Integer> [SIMDVector]_sel_mask = [SIMDVector].compare(VectorOperators.LT, [rhsLit], [lhsAP.readSIMDMask()])
                 String SIMDVectorSelMaskName = cCtx.defineVariable(SIMDVectorName + "_sel_mask");
+                QueryVariableType SIMDVectorSelMaskNameQueryType = lhsAP.getSIMDValidityMaskAccessPath().getType();
                 codegenResult.add(
                         createLocalVariable(
                                 getLocation(),
-                                createReferenceType(
-                                        getLocation(),
-                                        "jdk.incubator.vector.VectorMask",
-                                        "Integer"
-                                ),
+                                toJavaType(getLocation(), SIMDVectorSelMaskNameQueryType),
                                 SIMDVectorSelMaskName,
                                 createMethodInvocation(
                                         getLocation(),
@@ -228,7 +234,7 @@ public class FilterOperator extends CodeGenOperator<LogicalFilter> {
                                         "compare",
                                         new Java.Rvalue[] {
                                                 createAmbiguousNameRef(getLocation(), "jdk.incubator.vector.VectorOperators.LT"),
-                                                codeGenOperandNonVec(cCtx, oCtx, rhs, codegenResult),
+                                                codeGenOperandNonVec(cCtx, rhs, codegenResult),
                                                 lhsAP.readSIMDMask()
                                         }
                                 )
@@ -244,9 +250,10 @@ public class FilterOperator extends CodeGenOperator<LogicalFilter> {
                                         slAP.getArrowVectorLengthAccessPath(),
                                         slAP.getCurrentArrowVectorOffsetAccessPath(),
                                         slAP.getSIMDVectorLengthAccessPath(),
-                                        new SIMDVectorMaskAccessPath(SIMDVectorSelMaskName),
+                                        new SIMDVectorMaskAccessPath(SIMDVectorSelMaskName, SIMDVectorSelMaskNameQueryType),
                                         slAP.getMemorySegmentAccessPath(),
-                                        slAP.getVectorSpeciesAccessPath()
+                                        slAP.getVectorSpeciesAccessPath(),
+                                        slAP.getType()
                                 );
                             else
                                 throw new UnsupportedOperationException(
@@ -261,8 +268,8 @@ public class FilterOperator extends CodeGenOperator<LogicalFilter> {
         } else {
             // Scalar path
             // Convert the operands
-            Java.Rvalue lhsRvalue = codeGenOperandNonVec(cCtx, oCtx, lhs, codegenResult);
-            Java.Rvalue rhsRvalue = codeGenOperandNonVec(cCtx, oCtx, rhs, codegenResult);
+            Java.Rvalue lhsRvalue = codeGenOperandNonVec(cCtx, lhs, codegenResult);
+            Java.Rvalue rhsRvalue = codeGenOperandNonVec(cCtx, rhs, codegenResult);
 
             // Generate the required control flow
             // if (!(lhsRvalue < rhsRvalue))
@@ -286,14 +293,12 @@ public class FilterOperator extends CodeGenOperator<LogicalFilter> {
     /**
      * Generate code for a scalar operand in the non-vectorised code generation process.
      * @param cCtx The {@link CodeGenContext} to use during the generation.
-     * @param oCtx The {@link OptimisationContext} to use during the generation and execution.
      * @param operand The operand to generate code for.
      * @param target The code generation result to add code to if required for accessing the operand.
      * @return The {@link Java.Rvalue} corresponding to the operand.
      */
     private Java.Rvalue codeGenOperandNonVec(
             CodeGenContext cCtx,
-            OptimisationContext oCtx,
             RexNode operand,
             List<Java.Statement> target
     ) {
@@ -301,8 +306,7 @@ public class FilterOperator extends CodeGenOperator<LogicalFilter> {
         if (operand instanceof RexInputRef inputRef) {
             // RexInputRefs refer to a specific ordinal position in the result of the previous operator
             int ordinalIndex = inputRef.getIndex();
-            Java.Type operandType = sqlTypeToScalarJavaType((BasicSqlType) operand.getType());
-            return getRValueFromAccessPathNonVec(cCtx, oCtx, ordinalIndex, operandType, target);
+            return getRValueFromAccessPathNonVec(cCtx, ordinalIndex, target);
 
         } else if (operand instanceof RexLiteral literal) {
             return rexLiteralToRvalue(literal);
@@ -418,12 +422,6 @@ public class FilterOperator extends CodeGenOperator<LogicalFilter> {
         RexNode lhs = filterOperator.getOperands().get(0);
         RexNode rhs = filterOperator.getOperands().get(1);
 
-        // Currently the filter operator only supports the INTEGER SQL type, check this condition
-        if (lhs.getType().getSqlTypeName() != SqlTypeName.INTEGER
-                || rhs.getType().getSqlTypeName() != SqlTypeName.INTEGER)
-            throw new UnsupportedOperationException(
-                    "FilterOperator.consumeVecLtOperator only supports integer operands");
-
         // Check if the operands match the expected format:
         // Vector < Scalar (which means we need a RexInputRef < RexLiteral)
         if (!(lhs instanceof RexInputRef lhsRef) || !(rhs instanceof RexLiteral rhsLit))
@@ -433,15 +431,20 @@ public class FilterOperator extends CodeGenOperator<LogicalFilter> {
         // Get the access path for the lhs input reference
         AccessPath lhsAP = cCtx.getCurrentOrdinalMapping().get(lhsRef.getIndex());
 
+        // Currently the filter operator only supports the integer type, check this condition
+        if (lhsAP.getType() != ARROW_INT_VECTOR || rhs.getType().getSqlTypeName() != SqlTypeName.INTEGER)
+            throw new UnsupportedOperationException(
+                    "FilterOperator.consumeVecLtOperator only supports integer operands");
+
         // Generate the Rvalue for the rhs integer scalar
         Java.Rvalue rhsIntScalar = rexLiteralToRvalue(rhsLit);
 
         // Handle the generic part of the code generation based on whether SIMD is enabled
         // Do a scan-surrounding allocation for the selection vector/validity mask that will result from this operator
-        String selectionResultVariableName;
+        ArrayAccessPath selectionResultAP;
         if (this.simdEnabled) {
             // boolean[] ordinal_[index]_val_mask = cCtx.getAllocationManager().getBooleanVector()
-            selectionResultVariableName = cCtx.defineScanSurroundingVariables(
+            String selectionResultVariableName = cCtx.defineScanSurroundingVariables(
                     "ordinal_" + lhsRef.getIndex() + "_val_mask",
                     createPrimitiveArrayType(getLocation(), Java.Primitive.BOOLEAN),
                     createMethodInvocation(
@@ -455,9 +458,10 @@ public class FilterOperator extends CodeGenOperator<LogicalFilter> {
                     ),
                     true
             );
+            selectionResultAP = new ArrayAccessPath(selectionResultVariableName, P_A_BOOLEAN);
         } else {
             // int[] ordinal_[index]_sel_vec = cCtx.getAllocationManager().getIntVector()
-            selectionResultVariableName = cCtx.defineScanSurroundingVariables(
+            String selectionResultVariableName = cCtx.defineScanSurroundingVariables(
                     "ordinal_" + lhsRef.getIndex() + "_sel_vec",
                     createPrimitiveArrayType(getLocation(), Java.Primitive.INT),
                     createMethodInvocation(
@@ -471,13 +475,16 @@ public class FilterOperator extends CodeGenOperator<LogicalFilter> {
                     ),
                     true
             );
+            selectionResultAP = new ArrayAccessPath(selectionResultVariableName, P_A_INT);
         }
 
         // Perform the actual selection using the appropriate vector support library (based on the
         // left-hand access path type and whether SIMD is enabled) and store the length of
         // the selection result (selection vector/validity mask) in a local variable
-        String selectionResultLengthVariableName =
-                cCtx.defineVariable(selectionResultVariableName + "_length");
+        ScalarVariableAccessPath selectionResultLengthAP = new ScalarVariableAccessPath(
+                cCtx.defineVariable(selectionResultAP.getVariableName() + "_length"),
+                P_INT
+        );
 
         if (lhsAP instanceof ArrowVectorAccessPath lhsArrowVecAP && !this.simdEnabled) {
             // int ordinal_[index]_sel_vec_length = VectorisedFilterOperators.lessThan(
@@ -485,8 +492,8 @@ public class FilterOperator extends CodeGenOperator<LogicalFilter> {
             codegenResult.add(
                     createLocalVariable(
                             getLocation(),
-                            createPrimitiveType(getLocation(), Java.Primitive.INT),
-                            selectionResultLengthVariableName,
+                            toJavaType(getLocation(), selectionResultLengthAP.getType()),
+                            selectionResultLengthAP.getVariableName(),
                             createMethodInvocation(
                                     getLocation(),
                                     createAmbiguousNameRef(
@@ -497,10 +504,7 @@ public class FilterOperator extends CodeGenOperator<LogicalFilter> {
                                     new Java.Rvalue[]{
                                             lhsArrowVecAP.read(),
                                             rhsIntScalar,
-                                            createAmbiguousNameRef(
-                                                    getLocation(),
-                                                    selectionResultVariableName
-                                            )
+                                            selectionResultAP.read()
                                     }
                             )
                     )
@@ -512,8 +516,8 @@ public class FilterOperator extends CodeGenOperator<LogicalFilter> {
             codegenResult.add(
                     createLocalVariable(
                             getLocation(),
-                            createPrimitiveType(getLocation(), Java.Primitive.INT),
-                            selectionResultLengthVariableName,
+                            toJavaType(getLocation(), selectionResultLengthAP.getType()),
+                            selectionResultLengthAP.getVariableName(),
                             createMethodInvocation(
                                     getLocation(),
                                     createAmbiguousNameRef(
@@ -524,10 +528,7 @@ public class FilterOperator extends CodeGenOperator<LogicalFilter> {
                                     new Java.Rvalue[] {
                                             lhsArrowVecAP.read(),
                                             rhsIntScalar,
-                                            createAmbiguousNameRef(
-                                                    getLocation(),
-                                                    selectionResultVariableName
-                                            )
+                                            selectionResultAP.read()
                                     }
                             )
                     )
@@ -540,8 +541,8 @@ public class FilterOperator extends CodeGenOperator<LogicalFilter> {
             codegenResult.add(
                     createLocalVariable(
                             getLocation(),
-                            createPrimitiveType(getLocation(), Java.Primitive.INT),
-                            selectionResultLengthVariableName,
+                            toJavaType(getLocation(), selectionResultLengthAP.getType()),
+                            selectionResultLengthAP.getVariableName(),
                             createMethodInvocation(
                                     getLocation(),
                                     createAmbiguousNameRef(
@@ -552,10 +553,7 @@ public class FilterOperator extends CodeGenOperator<LogicalFilter> {
                                     new Java.Rvalue[] {
                                             lhsArrowVecWSAP.readArrowVector(),
                                             rhsIntScalar,
-                                            createAmbiguousNameRef(
-                                                    getLocation(),
-                                                    selectionResultVariableName
-                                            ),
+                                            selectionResultAP.read(),
                                             lhsArrowVecWSAP.readSelectionVector(),
                                             lhsArrowVecWSAP.readSelectionVectorLength()
                                     }
@@ -570,8 +568,8 @@ public class FilterOperator extends CodeGenOperator<LogicalFilter> {
             codegenResult.add(
                     createLocalVariable(
                             getLocation(),
-                            createPrimitiveType(getLocation(), Java.Primitive.INT),
-                            selectionResultLengthVariableName,
+                            toJavaType(getLocation(), selectionResultLengthAP.getType()),
+                            selectionResultLengthAP.getVariableName(),
                             createMethodInvocation(
                                     getLocation(),
                                     createAmbiguousNameRef(
@@ -582,10 +580,7 @@ public class FilterOperator extends CodeGenOperator<LogicalFilter> {
                                     new Java.Rvalue[] {
                                             lhsAvwvmAP.readArrowVector(),
                                             rhsIntScalar,
-                                            createAmbiguousNameRef(
-                                                    getLocation(),
-                                                    selectionResultVariableName
-                                            ),
+                                            selectionResultAP.read(),
                                             lhsAvwvmAP.readValidityMask(),
                                             lhsAvwvmAP.readValidityMaskLength()
                                     }
@@ -602,26 +597,30 @@ public class FilterOperator extends CodeGenOperator<LogicalFilter> {
         List<AccessPath> updatedOrdinalMapping = cCtx.getCurrentOrdinalMapping().stream().map(
                 entry -> {
                     if (entry instanceof ArrowVectorAccessPath avapEntry && !this.simdEnabled)
-                        return (AccessPath) new ArrowVectorWithSelectionVectorAccessPath(
-                                avapEntry.getVariableName(),
-                                selectionResultVariableName,
-                                selectionResultLengthVariableName);
+                        return new ArrowVectorWithSelectionVectorAccessPath(
+                                avapEntry,
+                                selectionResultAP,
+                                selectionResultLengthAP,
+                                primitiveMemberTypeForArrowVector(avapEntry.getType()));
                     else if (entry instanceof ArrowVectorAccessPath avapEntry && this.simdEnabled)
-                        return (AccessPath) new ArrowVectorWithValidityMaskAccessPath(
-                                avapEntry.getVariableName(),
-                                selectionResultVariableName,
-                                selectionResultLengthVariableName);
+                        return new ArrowVectorWithValidityMaskAccessPath(
+                                avapEntry,
+                                selectionResultAP,
+                                selectionResultLengthAP,
+                                primitiveMemberTypeForArrowVector(avapEntry.getType()));
                     else if (entry instanceof ArrowVectorWithSelectionVectorAccessPath avwsvapEntry && !this.simdEnabled)
-                        return (AccessPath) new ArrowVectorWithSelectionVectorAccessPath(
+                        return new ArrowVectorWithSelectionVectorAccessPath(
                                 avwsvapEntry.getArrowVectorVariable(),
-                                selectionResultVariableName,
-                                selectionResultLengthVariableName
+                                selectionResultAP,
+                                selectionResultLengthAP,
+                                primitiveMemberTypeForArrowVector(avwsvapEntry.getArrowVectorVariable().getType())
                         );
                     else if (entry instanceof ArrowVectorWithValidityMaskAccessPath avwvmapEntry && this.simdEnabled)
-                        return (AccessPath) new ArrowVectorWithValidityMaskAccessPath(
+                        return new ArrowVectorWithValidityMaskAccessPath(
                                 avwvmapEntry.getArrowVectorVariable(),
-                                selectionResultVariableName,
-                                selectionResultLengthVariableName
+                                selectionResultAP,
+                                selectionResultLengthAP,
+                                primitiveMemberTypeForArrowVector(avwvmapEntry.getArrowVectorVariable().getType())
                         );
                     else
                         throw new UnsupportedOperationException(

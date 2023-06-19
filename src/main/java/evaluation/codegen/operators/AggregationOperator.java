@@ -2,6 +2,7 @@ package evaluation.codegen.operators;
 
 import evaluation.codegen.infrastructure.context.CodeGenContext;
 import evaluation.codegen.infrastructure.context.OptimisationContext;
+import evaluation.codegen.infrastructure.context.QueryVariableType;
 import evaluation.codegen.infrastructure.context.access_path.AccessPath;
 import evaluation.codegen.infrastructure.context.access_path.ArrowVectorAccessPath;
 import evaluation.codegen.infrastructure.context.access_path.ArrowVectorWithSelectionVectorAccessPath;
@@ -12,22 +13,23 @@ import evaluation.codegen.infrastructure.context.access_path.SIMDLoopAccessPath;
 import evaluation.codegen.infrastructure.context.access_path.ScalarVariableAccessPath;
 import org.apache.calcite.rel.core.AggregateCall;
 import org.apache.calcite.rel.logical.LogicalAggregate;
-import org.apache.calcite.rel.type.RelDataTypeField;
 import org.apache.calcite.sql.SqlAggFunction;
 import org.apache.calcite.sql.fun.SqlCountAggFunction;
 import org.apache.calcite.sql.fun.SqlSumEmptyIsZeroAggFunction;
-import org.apache.calcite.sql.type.BasicSqlType;
-import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.calcite.util.ImmutableBitSet;
 import org.codehaus.janino.Java;
 
 import java.util.ArrayList;
 import java.util.List;
 
+import static evaluation.codegen.infrastructure.context.QueryVariableType.MAP_INT_LONG_SIMPLE;
+import static evaluation.codegen.infrastructure.context.QueryVariableType.P_INT;
+import static evaluation.codegen.infrastructure.context.QueryVariableTypeMethods.toJavaType;
+import static evaluation.codegen.infrastructure.context.QueryVariableTypeMethods.valueTypeForMap;
 import static evaluation.codegen.infrastructure.janino.JaninoClassGen.createClassInstance;
 import static evaluation.codegen.infrastructure.janino.JaninoControlGen.createWhileLoop;
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createAmbiguousNameRef;
-import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createPrimitiveType;
+import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createIntegerLiteral;
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createReferenceType;
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.getLocation;
 import static evaluation.codegen.infrastructure.janino.JaninoMethodGen.createBlock;
@@ -65,40 +67,38 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
         /**
          * Array of variable types in the current aggregation state.
          */
-        public final AggregationStateVariableType[] variableTypes;
+        public QueryVariableType[] variableTypes;
 
         /**
-         * Enum indicating the list of supported aggregation variable types.
+         * Array of statements to initialise the aggregation state.
          */
-        public enum AggregationStateVariableType {
-            // Primitive variable types
-            SCALAR_INT,
-
-            // Complex variable types
-            MAP_INT_INT,
-        }
+        public Java.ArrayInitializerOrRvalue[] variableInitialisationStatements;
 
         /**
          * Creates a new {@link AggregationStateMapping} instance for a single variable.
          * @param variableName The name of the aggregation state variable.
-         * @param variableType The type of the aggregation state variable.
          */
-        public AggregationStateMapping(String variableName, AggregationStateVariableType variableType) {
+        public AggregationStateMapping(String variableName) {
             this.variableNames = new String[] { variableName };
-            this.variableTypes = new AggregationStateVariableType[] {variableType};
+            this.variableTypes = new QueryVariableType[1];
+            this.variableInitialisationStatements = new Java.ArrayInitializerOrRvalue[1];
         }
 
         /**
          * Creates a new {@link AggregationStateMapping} instance for a multiple variables.
          * @param variableNames The names of the aggregation state variables.
-         * @param variableTypes The types of the aggregation state variables.
          */
-        public AggregationStateMapping(
-                String[] variableNames, AggregationStateVariableType[] variableTypes) {
+        public AggregationStateMapping(String[] variableNames) {
             this.variableNames = variableNames;
-            this.variableTypes = variableTypes;
+            this.variableTypes = new QueryVariableType[this.variableNames.length];
+            this.variableInitialisationStatements = new Java.ArrayInitializerOrRvalue[this.variableNames.length];
         }
     }
+
+    /**
+     * Whether this aggregation represents a group-by aggregation.
+     */
+    private final boolean groupByAggregation;
 
     /**
      * Create a {@link AggregationOperator} instance for a specific sub-query.
@@ -116,6 +116,19 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
         this.child.setParent(this);
 
         this.aggregationStateMappings = new ArrayList<>(aggregation.getAggCallList().size());
+
+        // Check pre-conditions
+        if (this.getLogicalSubplan().getGroupSets().size() != 1)
+            throw new UnsupportedOperationException(
+                    "AggregationOperator: We expect exactly one GroupSet to exist in the logical plan");
+
+        for (AggregateCall call : this.getLogicalSubplan().getAggCallList())
+            if (call.isDistinct())
+                throw new UnsupportedOperationException(
+                        "AggregationOperator does not support DISTINCT keyword");
+
+        // Store some meta-data about the aggregation
+        this.groupByAggregation = this.getLogicalSubplan().getGroupSet().cardinality() > 0;
     }
 
     @Override
@@ -130,27 +143,26 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
 
     @Override
     public List<Java.Statement> produceNonVec(CodeGenContext cCtx, OptimisationContext oCtx) {
-        List<Java.Statement> codeGenResult = new ArrayList<>();
+        List<Java.Statement> codeGenResult;
         List<AggregateCall> aggregationCalls = this.getLogicalSubplan().getAggCallList();
 
-        if (this.getLogicalSubplan().getGroupSets().size() != 1)
-            throw new UnsupportedOperationException(
-                    "AggregationOperator.produceNonVec: We expect exactly one GroupSet to exist in the logical plan");
-
-        // Check if we are dealing with a group-by aggregation
-        boolean groupByAggregation = this.getLogicalSubplan().getGroupSet().size() > 0;
-
-        // Initialise the aggregation state based on the operator
-        codeGenResult.addAll(this.initialiseAggregationState(cCtx, oCtx, groupByAggregation, aggregationCalls));
+        // Declare the aggregation state names based on the operators
+        this.declareAggregationState(cCtx, aggregationCalls);
 
         // Store the context and continue production in the child operator
+        // This will also call this operator's consumeNonVec method, which will initialise the
+        // aggregation state variable definitions
         cCtx.pushCodeGenContext();
-        codeGenResult.addAll(this.child.produceNonVec(cCtx, oCtx));
+        List<Java.Statement> childProductionResult = this.child.produceNonVec(cCtx, oCtx);
         cCtx.popCodeGenContext();
+
+        // Add the aggregation state variable definitions to the code gen result
+        codeGenResult = initialiseAggregationStates();
+        codeGenResult.addAll(childProductionResult);
 
         // Expose the result of this operator to its parent as a new "scan" (since aggregation is blocking)
         // Exposure way depends on whether we are dealing with a group-by aggregation and the aggregation function
-        if (!groupByAggregation) {
+        if (!this.groupByAggregation) {
             // In a non-group-by aggregate, the result is always a scalar, so there is no difference between
             // SIMD enabled operator and non-SIMD enabled operator here.
             // Expose the result per aggregation call by updating the ordinal mapping
@@ -161,17 +173,14 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
                 AggregateCall currentCall = aggregationCalls.get(i);
                 SqlAggFunction currentCallFunction = currentCall.getAggregation();
 
-                // Check that the distinct keyword is not used by the current call
-                if (currentCall.isDistinct())
-                    throw new UnsupportedOperationException(
-                            "AggregationOperator.produceNonVec does not support DISTINCT keyword");
-
                 // Allocate the required variables based on the aggregation type
-                if (currentCallFunction instanceof SqlCountAggFunction countFunction) {
+                if (currentCallFunction instanceof SqlCountAggFunction) {
                     // Simply set the current ordinal to refer to the count variable
                     newOrdinalMapping.add(
                             i,
-                            new ScalarVariableAccessPath(this.aggregationStateMappings.get(i).variableNames[0]));
+                            new ScalarVariableAccessPath(
+                                    this.aggregationStateMappings.get(i).variableNames[0],
+                                    this.aggregationStateMappings.get(i).variableTypes[0]));
 
                 } else {
                     throw new UnsupportedOperationException(
@@ -189,18 +198,17 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
             // Expose the result of the group-by aggregation
             // Group-by aggregation needs to distinguish between SIMD and Non-SIMD processing.
             if (!this.simdEnabled) {
-                // Regular row-based processing
-                // Create a loop iterating over the group-by key values based on the first aggregation
-                // state's first variable
+                // Regular row-based processing: create a loop iterating over the group-by key values
+                // based on the first aggregation state's first variable
                 AggregationStateMapping firstAggregationState = this.aggregationStateMappings.get(0);
-                AggregationStateMapping.AggregationStateVariableType fasfvt = firstAggregationState.variableTypes[0];
+                QueryVariableType firstAggregationStateType = firstAggregationState.variableTypes[0];
 
-                if (fasfvt == AggregationStateMapping.AggregationStateVariableType.MAP_INT_INT) {
+                if (firstAggregationStateType == MAP_INT_LONG_SIMPLE) {
                     // Simply iterate over the map, which will provide the keys
                     // Observation: a LogicalAggregate output always has the group-by column first,
                     // followed by the aggregation calls in the given order
 
-                    // Simple_Int_Int_Map_Iterator [groupKeyIterator] = [firstAggregationState.variableNames[0]].getIterator();
+                    // Simple_Int_Long_Map [groupKeyIterator] = [firstAggregationState.variableNames[0]].getIterator();
                     // while ([groupKeyIterator].hasNext()] {
                     //     int [groupKey] = [groupKeyIterator].next();
                     //     [whileLoopBody]
@@ -210,7 +218,7 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
                     codeGenResult.add(
                             createLocalVariable(
                                     getLocation(),
-                                    createReferenceType(getLocation(), "Simple_Int_Int_Map_Iterator"),
+                                    createReferenceType(getLocation(), "Simple_Int_Long_Map_Iterator"),
                                     groupKeyIteratorName,
                                     createMethodInvocation(
                                             getLocation(),
@@ -233,13 +241,13 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
                             )
                     );
 
-                    String groupKeyName = cCtx.defineVariable("groupKey");
-                    ScalarVariableAccessPath groupKeyAP = new ScalarVariableAccessPath(groupKeyName);
+                    ScalarVariableAccessPath groupKeyAP = new ScalarVariableAccessPath(
+                            cCtx.defineVariable("groupKey"), P_INT);
                     whileLoopBody.addStatement(
                             createLocalVariable(
                                     getLocation(),
-                                    createPrimitiveType(getLocation(), Java.Primitive.INT),
-                                    groupKeyName,
+                                    toJavaType(getLocation(), groupKeyAP.getType()),
+                                    groupKeyAP.getVariableName(),
                                     createMethodInvocation(
                                             getLocation(),
                                             createAmbiguousNameRef(getLocation(), groupKeyIteratorName),
@@ -262,17 +270,14 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
                         AggregateCall currentCall = aggregationCalls.get(i);
                         SqlAggFunction currentCallFunction = currentCall.getAggregation();
 
-                        // Check that the distinct keyword is not used by the current call
-                        if (currentCall.isDistinct())
-                            throw new UnsupportedOperationException(
-                                    "AggregationOperator.produceNonVec does not support DISTINCT keyword in group-by aggregation");
-
                         // Return the value for the current groupKey of the current aggregation call based on the aggregation type
-                        if (currentCallFunction instanceof SqlSumEmptyIsZeroAggFunction sumEmptyIsZeroAggFunction) {
+                        if (currentCallFunction instanceof SqlSumEmptyIsZeroAggFunction) {
                             // Simply need to return the correct hash-map value based on the groupKey
-                            String aggregationStateVariableName = this.aggregationStateMappings.get(i).variableNames[0];
-                            MapAccessPath aggregationMapAP = new MapAccessPath(aggregationStateVariableName);
-                            IndexedMapAccessPath indexedAggregationMapAP = new IndexedMapAccessPath(aggregationMapAP, groupKeyAP);
+                            String aggregationMapName = this.aggregationStateMappings.get(i).variableNames[0];
+                            QueryVariableType aggregationMapType = this.aggregationStateMappings.get(i).variableTypes[0];
+                            MapAccessPath aggregationMapAP = new MapAccessPath(aggregationMapName, aggregationMapType);
+                            IndexedMapAccessPath indexedAggregationMapAP =
+                                    new IndexedMapAccessPath(aggregationMapAP, groupKeyAP, valueTypeForMap(aggregationMapType));
                             newOrdinalMapping.add(currentOrdinalIndex++, indexedAggregationMapAP);
 
                         } else {
@@ -289,8 +294,8 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
                     whileLoopBody.addStatements(this.nonVecParentConsume(cCtx, oCtx));
 
                 } else {
-                    throw new UnsupportedOperationException(
-                            "AggregationOperator.produceNonVec does not currently support obtaining keys from aggregation state type " + fasfvt);
+                    throw new UnsupportedOperationException("AggregationOperator.produceNonVec does not currently support" +
+                            "obtaining keys from aggregation state type " + firstAggregationStateType);
                 }
 
             } else {
@@ -307,45 +312,36 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
         List<Java.Statement> codeGenResult = new ArrayList<>();
         List<AggregateCall> aggregationCalls = this.getLogicalSubplan().getAggCallList();
 
-        // Initialise the aggregation state based on the operator
-        if (this.getLogicalSubplan().getGroupSets().size() != 1)
-            throw new UnsupportedOperationException(
-                    "AggregationOperator.consumeNonVec: We expect exactly one GroupSet to exist in the logical plan");
-
         // Check if we are dealing with a group-by aggregation
-        boolean groupByAggregate = this.getLogicalSubplan().getGroupSet().size() > 0;
-
-        // Check if we are dealing with a group-by aggregation
-        if (!groupByAggregate) {
-            // Update the state per aggregation call
+        if (!this.groupByAggregation) {
+            // We have a simple, non-group-by aggregation. Update the state per aggregation call
             for (int i = 0; i < aggregationCalls.size(); i++) {
                 // Get information to classify the current aggregation call
                 AggregateCall currentCall = aggregationCalls.get(i);
                 SqlAggFunction currentAggregationFunction = currentCall.getAggregation();
 
-                // Check that the distinct keyword is not used by the current call
-                if (currentCall.isDistinct())
-                    throw new UnsupportedOperationException(
-                            "AggregationOperator.consumeNonVec does not support DISTINCT keyword");
-
                 // Update code depends on the aggregation function
                 if (currentAggregationFunction instanceof SqlCountAggFunction) { // COUNT aggregation
+                    // Set-up the correct aggregation state initialisation
+                    AggregationStateMapping aggregationStateMapping = this.aggregationStateMappings.get(i);
+                    aggregationStateMapping.variableTypes[0] = P_INT;
+                    aggregationStateMapping.variableInitialisationStatements[0] = createIntegerLiteral(getLocation(), 0);
 
                     // Check the type of the first ordinal to be able to generate the correct count update statements
                     AccessPath firstOrdinalAP = cCtx.getCurrentOrdinalMapping().get(0);
-                    if (firstOrdinalAP instanceof ScalarVariableAccessPath svap) {
-                        // For a count aggregation over scalar varaibles simply increment the relevant variable.
+                    if (firstOrdinalAP instanceof ScalarVariableAccessPath) {
+                        // For a count aggregation over scalar variables simply increment the relevant variable.
                         codeGenResult.add(
                                 postIncrementStm(
                                         getLocation(),
-                                        createAmbiguousNameRef(getLocation(), this.aggregationStateMappings.get(i).variableNames[0])
+                                        createAmbiguousNameRef(getLocation(), aggregationStateMapping.variableNames[0])
                                 ));
                     } else if (firstOrdinalAP instanceof SIMDLoopAccessPath slap) {
                         // For a count aggregation over a SIMD loop access path, add the number of true entries in the valid mask
                         codeGenResult.add(
                                 createVariableAdditionAssignmentStm(
                                         getLocation(),
-                                        createAmbiguousNameRef(getLocation(), this.aggregationStateMappings.get(i).variableNames[0]),
+                                        createAmbiguousNameRef(getLocation(), aggregationStateMapping.variableNames[0]),
                                         createMethodInvocation(
                                                 getLocation(),
                                                 slap.readSIMDMask(),
@@ -363,14 +359,13 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
             }
 
         } else {
-            // Group-by aggregation currently only support single-column groups of the integer type
+            // Group-by aggregation currently only supports single-column groups of the integer type
             // First we check if we received that
             ImmutableBitSet groupSet = this.getLogicalSubplan().getGroupSet();
             int firstGroupByColumnIndex = groupSet.nextSetBit(0); // There must be at least 1 column to group by
-            RelDataTypeField groupByColumn = this.getLogicalSubplan().getRowType().getFieldList().get(firstGroupByColumnIndex);
-            SqlTypeName groupByColumnType = groupByColumn.getType().getSqlTypeName();
+            QueryVariableType firstGroupByColumnType = cCtx.getCurrentOrdinalMapping().get(firstGroupByColumnIndex).getType();
 
-            if (groupSet.cardinality() == 1 && groupByColumnType == SqlTypeName.INTEGER) {
+            if (groupSet.cardinality() == 1 && firstGroupByColumnType == P_INT) {
                 // Then, check if we are working a SIMD or non-SIMD enabled fashion
                 if (!this.simdEnabled) { // Regular row-based processing
                     // Now update each hash-table to reflect the correct state of each aggregate
@@ -380,41 +375,40 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
                         AggregateCall currentCall = aggregationCalls.get(i);
                         SqlAggFunction currentCallFunction = currentCall.getAggregation();
 
-                        // Check that the distinct keyword is not used by the current call
-                        if (currentCall.isDistinct())
-                            throw new UnsupportedOperationException(
-                                    "AggregationOperator.consumeNonVec does not support DISTINCT keyword in group-by aggregation");
+                        // Distinguish the required behaviour based on the aggregation type
+                        if (currentCallFunction instanceof SqlSumEmptyIsZeroAggFunction) {
+                            if (currentCall.getArgList().size() != 1) {
+                                throw new UnsupportedOperationException("AggregationOperator.consumeNonVec received an unexpected" +
+                                        "number of arguments for the SqlSumEmptyIsZeroAggFunction case");
+                            }
 
-                        // Allocate the required variables based on the aggregation type
-                        if (currentCallFunction instanceof SqlSumEmptyIsZeroAggFunction sumEmptyIsZeroAggFunction) {
-                            // Simply allocate the correct hash-table type based on the result type
-                            String aggregationStateVariableName = this.aggregationStateMappings.get(i).variableNames[0];
+                            int inputOrdinalIndex = currentCall.getArgList().get(0);
+                            AccessPath inputOrdinal = cCtx.getCurrentOrdinalMapping().get(inputOrdinalIndex);
 
-                            if (currentCall.getType().getSqlTypeName() == SqlTypeName.INTEGER) {
-                                // Key is of type int, result is of type int --> we are updating an IntInt map
+                            // Need to maintain a hash-table based on the input ordinal type
+                            if (inputOrdinal.getType() == P_INT) {
+                                // Key and value are both of type int --> we want to upgrade the result to a long
+                                // Set-up the correct aggregation state initialisation
+                                AggregationStateMapping aggregationStateMapping = this.aggregationStateMappings.get(i);
+                                aggregationStateMapping.variableTypes[0] = MAP_INT_LONG_SIMPLE;
+                                Java.Type intLongHashMapType = toJavaType(getLocation(), aggregationStateMapping.variableTypes[0]);
+                                aggregationStateMapping.variableInitialisationStatements[0] =
+                                                createClassInstance(getLocation(), intLongHashMapType);
+
                                 // We simply need to invoke its "addToKeyOrPutIfNotExist" method for the group-by key and the value
-                                // indicated by the current call (which should refer to a single column ordinal)
-                                if (currentCall.getArgList().size() != 1)
-                                    throw new UnsupportedOperationException("AggregationOperator.consumeNonVec received an unexpected" +
-                                            "number of arguments for the SqlSumEmptyIsZeroAggFunction case");
-
                                 codeGenResult.add(
                                         createMethodInvocationStm(
                                                 getLocation(),
-                                                createAmbiguousNameRef(getLocation(), aggregationStateVariableName),
+                                                createAmbiguousNameRef(getLocation(), aggregationStateMapping.variableNames[0]),
                                                 "addToKeyOrPutIfNotExist",
                                                 new Java.Rvalue[] {
                                                         this.getRValueFromAccessPathNonVec(         // Group-By Key
                                                                 cCtx,
-                                                                oCtx,
                                                                 firstGroupByColumnIndex,
-                                                                createPrimitiveType(getLocation(), Java.Primitive.INT),
                                                                 codeGenResult),
                                                         this.getRValueFromAccessPathNonVec(         // Value
                                                                 cCtx,
-                                                                oCtx,
-                                                                currentCall.getArgList().get(0),
-                                                                createPrimitiveType(getLocation(), Java.Primitive.INT),
+                                                                inputOrdinalIndex,
                                                                 codeGenResult)
                                                 }
                                         )
@@ -423,7 +417,7 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
                             } else {
                                 throw new UnsupportedOperationException(
                                         "AggregationOperator.consumeNonVec only supports an integer" +
-                                                " result for the SqlSumEmptyIsZeroAggFunction");
+                                                " values for the SqlSumEmptyIsZeroAggFunction");
                             }
 
                         } else {
@@ -433,6 +427,7 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
                         }
 
                     }
+
                 } else {
                     throw new UnsupportedOperationException(
                             "AggregationOperator.consumeNonVec does not currently support SIMD processing");
@@ -451,28 +446,28 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
 
     @Override
     public List<Java.Statement> produceVec(CodeGenContext cCtx, OptimisationContext oCtx) {
-        List<Java.Statement> codeGenResult = new ArrayList<>();
+        List<Java.Statement> codeGenResult;
         List<AggregateCall> aggregationCalls = this.getLogicalSubplan().getAggCallList();
 
-        // Initialise the aggregation state based on the operator
-        if (this.getLogicalSubplan().getGroupSets().size() != 1)
-            throw new UnsupportedOperationException(
-                    "AggregationOperator.produceVec: We expect exactly one GroupSet to exist in the logical plan");
-
-        // Check if we are dealing with a group-by aggregation
-        boolean groupByAggregation = this.getLogicalSubplan().getGroupSet().size() > 0;
-
         // Initialise the aggregation state
-        codeGenResult.addAll(this.initialiseAggregationState(cCtx, oCtx, groupByAggregation, aggregationCalls));
+        this.declareAggregationState(cCtx, aggregationCalls);
 
         // Store the context and continue production in the child operator
+        // This will also call this operator's consumeVec method, which will initialise the
+        // aggregation state variable definitions
         cCtx.pushCodeGenContext();
-        codeGenResult.addAll(this.child.produceVec(cCtx, oCtx));
+        List<Java.Statement> childProductionResult = this.child.produceVec(cCtx, oCtx);
         cCtx.popCodeGenContext();
+
+        // Add the aggregation state variable definitions to the code gen result
+        codeGenResult = initialiseAggregationStates();
+        codeGenResult.addAll(childProductionResult);
 
         // Expose the result of this operator to its parent as a new "scan" (since aggregation is blocking)
         // Exposure way depends on whether we are dealing with a group-by aggregation and the aggregation function
-        if (!groupByAggregation) {
+        if (!this.groupByAggregation) {
+            // Non-group-by aggregates always result in a scalar value, so there is no need to distinguish
+            // between SIMD and Non-SIMD processing
             // Expose the result per aggregation call by updating the ordinal mapping
             List<AccessPath> newOrdinalMapping = new ArrayList<>(aggregationCalls.size());
 
@@ -481,17 +476,14 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
                 AggregateCall currentCall = aggregationCalls.get(i);
                 SqlAggFunction currentCallFunction = currentCall.getAggregation();
 
-                // Check that the distinct keyword is not used by the current call
-                if (currentCall.isDistinct())
-                    throw new UnsupportedOperationException(
-                            "AggregationOperator.produceVec does not support DISTINCT keyword");
-
-                // Allocate the required variables based on the aggregation type
-                if (currentCallFunction instanceof SqlCountAggFunction countFunction) {
+                // Expose the required variables based on the aggregation type
+                if (currentCallFunction instanceof SqlCountAggFunction) {
                     // Simply set the current ordinal to refer to the count variable
                     newOrdinalMapping.add(
                             i,
-                            new ScalarVariableAccessPath(this.aggregationStateMappings.get(i).variableNames[0]));
+                            new ScalarVariableAccessPath(
+                                    this.aggregationStateMappings.get(i).variableNames[0],
+                                    this.aggregationStateMappings.get(i).variableTypes[0]));
 
                 } else {
                     throw new UnsupportedOperationException(
@@ -502,14 +494,14 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
 
             cCtx.setCurrentOrdinalMapping(newOrdinalMapping);
 
+            // Have the parent operator consume the result
+            codeGenResult.addAll(this.vecParentConsume(cCtx, oCtx));
+
         } else {
             // Group-by aggregation
             throw new UnsupportedOperationException(
                     "AggregationOperator.produceVec does not support group-by aggregates");
         }
-
-        // Have the parent operator consume the result
-        codeGenResult.addAll(this.vecParentConsume(cCtx, oCtx));
 
         return codeGenResult;
     }
@@ -519,29 +511,21 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
         List<Java.Statement> codeGenResult = new ArrayList<>();
         List<AggregateCall> aggregationCalls = this.getLogicalSubplan().getAggCallList();
 
-        // Initialise the aggregation state based on the operator
-        if (this.getLogicalSubplan().getGroupSets().size() != 1)
-            throw new UnsupportedOperationException(
-                    "AggregationOperator.consumeVec: We expect exactly one GroupSet to exist in the logical plan");
-
         // Check if we are dealing with a group-by aggregation
-        boolean groupByAggregate = this.getLogicalSubplan().getGroupSet().size() > 0;
-
-        // Check if we are dealing with a group-by aggregation
-        if (!groupByAggregate) {
-            // Update the state per aggregation call
+        if (!this.groupByAggregation) {
+            // We have a simple, non-group-by aggregation. Update the state per aggregation call
             for (int i = 0; i < aggregationCalls.size(); i++) {
                 // Get information to classify the current aggregation call
                 AggregateCall currentCall = aggregationCalls.get(i);
                 SqlAggFunction currentAggregationFunction = currentCall.getAggregation();
 
-                // Check that the distinct keyword is not used by the current call
-                if (currentCall.isDistinct())
-                    throw new UnsupportedOperationException(
-                            "AggregationOperator.consumeVec does not support DISTINCT keyword");
-
                 // Update code depends on the aggregation function
                 if (currentAggregationFunction instanceof SqlCountAggFunction) {
+                    // Set-up the correct aggregation state initialisation
+                    AggregationStateMapping aggregationStateMapping = this.aggregationStateMappings.get(i);
+                    aggregationStateMapping.variableTypes[0] = P_INT;
+                    aggregationStateMapping.variableInitialisationStatements[0] = createIntegerLiteral(getLocation(), 0);
+
                     // For a count aggregation simply add the length of the valid part of the current
                     // vector the relevant variable.
                     AccessPath firstOrdinalAP = cCtx.getCurrentOrdinalMapping().get(0);
@@ -552,7 +536,7 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
                                         getLocation(),
                                         createAmbiguousNameRef(
                                                 getLocation(),
-                                                this.aggregationStateMappings.get(i).variableNames[0]
+                                                aggregationStateMapping.variableNames[0]
                                         ),
                                         createMethodInvocation(
                                                 getLocation(),
@@ -569,7 +553,7 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
                                         getLocation(),
                                         createAmbiguousNameRef(
                                                 getLocation(),
-                                                this.aggregationStateMappings.get(i).variableNames[0]
+                                                aggregationStateMapping.variableNames[0]
                                         ),
                                         avwsvap.readSelectionVectorLength()
                                 )
@@ -582,7 +566,7 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
                                         getLocation(),
                                         createAmbiguousNameRef(
                                                 getLocation(),
-                                                this.aggregationStateMappings.get(i).variableNames[0]
+                                                aggregationStateMapping.variableNames[0]
                                         ),
                                         createMethodInvocation(
                                                 getLocation(),
@@ -620,22 +604,11 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
     }
 
     /**
-     * Method to handle initialisation of the aggregation state for the operator, as this is shared
-     * between the vectorised and non-vectorised implementation.
+     * Method to handle declare the names of the aggregation state for the operator
      * @param cCtx The {@link CodeGenContext} to use during the generation.
-     * @param oCtx The {@link OptimisationContext} to use during the generation and execution.
-     * @param groupByAggregation Whether the aggregation uses a group-by statement.
      * @param aggregationCalls The aggregation calls for which to initialise the state.
-     * @return The statements to initialise the aggregation state.
      */
-    private List<Java.Statement> initialiseAggregationState(
-            CodeGenContext cCtx,
-            OptimisationContext oCtx,
-            boolean groupByAggregation,
-            List<AggregateCall> aggregationCalls
-    ) {
-        List<Java.Statement> codeGenResult = new ArrayList<>();
-
+    private void declareAggregationState(CodeGenContext cCtx, List<AggregateCall> aggregationCalls) {
         // Handle the initialisation of the aggregation based on whether we have a group-by
         if (!groupByAggregation) {
             // Initialise the state per aggregation call
@@ -644,83 +617,44 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
                 AggregateCall currentCall = aggregationCalls.get(i);
                 SqlAggFunction currentCallFunction = currentCall.getAggregation();
 
-                // Check that the distinct keyword is not used by the current call
-                if (currentCall.isDistinct())
-                    throw new UnsupportedOperationException(
-                            "AggregationOperator.initialiseAggregationState does not support DISTINCT keyword");
-
                 // Allocate the required variables based on the aggregation type
-                if (currentCallFunction instanceof SqlCountAggFunction countFunction) {
-                    // Simply allocate the variable required based on the data type
+                if (currentCallFunction instanceof SqlCountAggFunction) {
+                    // Declare the name [aggCall_$i$_state]
                     String aggregationStateVariableName = cCtx.defineVariable("aggCall_" + i + "_state");
-                    this.aggregationStateMappings.add(i, new AggregationStateMapping(
-                            aggregationStateVariableName,
-                            AggregationStateMapping.AggregationStateVariableType.SCALAR_INT));
-                    codeGenResult.add(
-                            this.sqlTypeToScalarJavaVariable(
-                                    (BasicSqlType) currentCall.getType(),
-                                    aggregationStateVariableName)
-                    );
+                    this.aggregationStateMappings.add(i, new AggregationStateMapping(aggregationStateVariableName));
 
                 } else {
                     throw new UnsupportedOperationException(
-                            "AggregationOperator.initialiseAggregationState does not support aggregation function: "
+                            "AggregationOperator.declareAggregationState does not support aggregation function: "
                                     + currentCallFunction.getName());
                 }
-
             }
 
         } else {
-            // Group-by aggregation currently only support single-column groups of the integer type
-            // First we check if we received that
+            // Group-by aggregation currently only support single-column groups (of integer type, checked later on)
             ImmutableBitSet groupSet = this.getLogicalSubplan().getGroupSet();
-            int firstGroupByColumnIndex = groupSet.nextSetBit(0); // There must be at least 1 column to group by
-            RelDataTypeField groupByColumnType = this.getLogicalSubplan().getRowType().getFieldList().get(firstGroupByColumnIndex);
 
-            if (groupSet.cardinality() == 1
-                    && groupByColumnType.getType().getSqlTypeName() == SqlTypeName.INTEGER) {
-
-                // Now initialise a hash-table to keep track of the state of each aggregate
-                // depending on the aggregation function and data type
+            if (groupSet.cardinality() == 1) {
+                // Now declare the state of each aggregate depending on the aggregation function
                 for (int i = 0; i < aggregationCalls.size(); i++) {
                     // Get information to classify the current aggregation call
                     AggregateCall currentCall = aggregationCalls.get(i);
                     SqlAggFunction currentCallFunction = currentCall.getAggregation();
 
-                    // Check that the distinct keyword is not used by the current call
-                    if (currentCall.isDistinct())
-                        throw new UnsupportedOperationException(
-                                "AggregationOperator.initialiseAggregationState does not support DISTINCT keyword in group-by aggregation");
-
-                    // Allocate the required variables based on the aggregation type
-                    if (currentCallFunction instanceof SqlSumEmptyIsZeroAggFunction sumEmptyIsZeroAggFunction) {
-                        // Simply allocate the correct hash-table type based on the result type
-                        String aggregationStateVariableName = cCtx.defineVariable("aggCall_" + i + "_state");
-                        this.aggregationStateMappings.add(i, new AggregationStateMapping(
-                                aggregationStateVariableName,
-                                AggregationStateMapping.AggregationStateVariableType.MAP_INT_INT));
-
-                        if (currentCall.getType().getSqlTypeName() == SqlTypeName.INTEGER) {
-                            // Key is of type int, result is of type int --> we need an IntInt map
-                            Java.Type intIntHashMapType = createReferenceType(getLocation(), "Simple_Int_Int_Map");
-                            codeGenResult.add(
-                                    createLocalVariable(
-                                            getLocation(),
-                                            intIntHashMapType,
-                                            aggregationStateVariableName,
-                                            createClassInstance(getLocation(), intIntHashMapType)
-                                    )
-                            );
-
-                        } else {
+                    if (currentCallFunction instanceof SqlSumEmptyIsZeroAggFunction) {
+                        // Check there is only a single input column
+                        if (currentCall.getArgList().size() != 1)
                             throw new UnsupportedOperationException(
-                                    "AggregationOperator.initialiseAggregationState only supports an integer" +
-                                            " result for the SqlSumEmptyIsZeroAggFunction");
-                        }
+                                    "AggregationOperator.declareAggregationState received an unexpected" +
+                                    "number of arguments for the SqlSumEmptyIsZeroAggFunction case");
+
+                        // Simply declare the name [aggCall_i_state]
+                        String aggregationStateVariableName = cCtx.defineVariable("aggCall_" + i + "_state");
+                        this.aggregationStateMappings.add(i, new AggregationStateMapping(aggregationStateVariableName));
 
                     } else {
                         throw new UnsupportedOperationException(
-                                "AggregationOperator.initialiseAggregationState does not support this group-by aggregation function: "
+                                "AggregationOperator.declareAggregationState does not support this group-by aggregation function: "
                                         + currentCallFunction.getName());
                     }
 
@@ -728,7 +662,29 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
 
             } else {
                 throw new UnsupportedOperationException(
-                        "AggregationOperator.initialiseAggregationState currently only supports single integer-column group-by's");
+                        "AggregationOperator.declareAggregationState currently only supports single column group-by's");
+            }
+        }
+    }
+
+    /**
+     * Method to initialise the aggregation state variables per aggregation operator as stored in
+     * {@code this.aggregationStateMappings}.
+     */
+    private List<Java.Statement> initialiseAggregationStates() {
+        List<Java.Statement> codeGenResult = new ArrayList<>();
+
+        // Allocate all required state variables as local variables
+        for (AggregationStateMapping currentMapping : this.aggregationStateMappings) {
+            for (int i = 0; i < currentMapping.variableNames.length; i++) {
+                codeGenResult.add(
+                        createLocalVariable(
+                                getLocation(),
+                                toJavaType(getLocation(), currentMapping.variableTypes[i]),
+                                currentMapping.variableNames[i],
+                                currentMapping.variableInitialisationStatements[i]
+                        )
+                );
             }
         }
 

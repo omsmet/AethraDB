@@ -11,19 +11,19 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrowsExactly;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-public class Simple_Int_Int_Map_Test {
+public class Simple_Int_Long_Map_Test {
 
     /**
-     * The {@link Simple_Int_Int_Map} to use for the test.
+     * The {@link Simple_Int_Long_Map} to use for the test.
      */
-    private Simple_Int_Int_Map map;
+    private Simple_Int_Long_Map map;
 
     /**
      * Sets the test up with an empty map instance.
      */
     @BeforeEach
     public void setup() {
-        this.map = new Simple_Int_Int_Map();
+        this.map = new Simple_Int_Long_Map();
     }
 
     /**
@@ -68,7 +68,8 @@ public class Simple_Int_Int_Map_Test {
     @Test
     public void ContainsPutTest() {
         int key = 42;
-        this.map.put(key, -key);
+        long value = -key;
+        this.map.put(key, value);
         assertTrue(this.map.contains(key));
     }
 
@@ -79,9 +80,9 @@ public class Simple_Int_Int_Map_Test {
     @Test
     public void CheckCollisionResolutionWorks() {
         int key1 = 42;
-        int value1 = 41;
+        long value1 = 41;
         int key2 = 89;
-        int value2 = 43;
+        long value2 = 43;
         this.map.put(key1, value1);
         this.map.put(key2, value2);
         assertEquals(value1, this.map.get(key1));
@@ -94,8 +95,8 @@ public class Simple_Int_Int_Map_Test {
     @Test
     public void CheckValueOverwrittenOnPut() {
         int key = 42;
-        int value1 = 41;
-        int value2 = 43;
+        long value1 = 41;
+        long value2 = 43;
 
         this.map.put(key, value1);
         assertEquals(value1, this.map.get(key));
@@ -111,7 +112,7 @@ public class Simple_Int_Int_Map_Test {
     @Test
     public void CheckValuePut_AddToKeyOrPutIfNotExist_NonExistentKey() {
         int key = 42;
-        int value = 41;
+        long value = 41;
 
         assertFalse(this.map.contains(key));
 
@@ -127,9 +128,9 @@ public class Simple_Int_Int_Map_Test {
     @Test
     public void CheckValueAdded_AddToKeyOrPutIfNotExist_ExistentKey() {
         int key = 42;
-        int value1 = 41;
-        int value2 = 43;
-        int sum = value1 + value2;
+        long value1 = 41;
+        long value2 = 43;
+        long sum = value1 + value2;
 
         this.map.put(key, value1);
         assertEquals(value1, this.map.get(key));
@@ -148,7 +149,7 @@ public class Simple_Int_Int_Map_Test {
         Random random = new Random(434241);
 
         // Initialise a slightly larger map
-        this.map = new Simple_Int_Int_Map(8192);
+        this.map = new Simple_Int_Long_Map(8192);
 
         // Generate unique keys
         int[] keys = random.ints(approximateNumberOfEntries, 0, Integer.MAX_VALUE)
@@ -156,14 +157,14 @@ public class Simple_Int_Int_Map_Test {
         System.out.println("Using " + keys.length + " entries");
 
         // Generate arbitrary values
-        int[] values = random.ints(keys.length).toArray();
+        long[] values = random.longs(keys.length).toArray();
 
         System.out.println("Inserting keys");
         for (int i = 0; i < keys.length; i++)
             this.map.put(keys[i], values[i]);
 
         System.out.println("Retrieving values");
-        int[] mapValues = new int[keys.length];
+        long[] mapValues = new long[keys.length];
         for (int i = 0; i < keys.length; i++) {
             mapValues[i] = this.map.get(keys[i]);
         }

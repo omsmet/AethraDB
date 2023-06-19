@@ -30,7 +30,7 @@ import java.util.concurrent.TimeUnit;
  * query code generation with SIMD-ed operators.
  */
 @State(Scope.Benchmark)
-public class NonVectorisedSimd implements ResultConsumptionTarget {
+public class NonVectorisedSimd extends ResultConsumptionTarget {
 
     /**
      * We want to test the query processing performance for different table instances, where respectively

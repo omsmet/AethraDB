@@ -1,5 +1,6 @@
 package evaluation.codegen.infrastructure.context.access_path;
 
+import evaluation.codegen.infrastructure.context.QueryVariableType;
 import jdk.incubator.vector.VectorMask;
 import org.codehaus.janino.Java;
 
@@ -58,6 +59,7 @@ public class SIMDLoopAccessPath extends AccessPath {
      * @param SIMDValidityMaskVariable The SIMD validity mask variable to use.
      * @param memorySegmentVariable The memory segment variable to use.
      * @param vectorSpeciesVariable The vector species variable to use.
+     * @param type The type of the variable accessible through {@code this}.
      */
     public SIMDLoopAccessPath(
             ArrowVectorAccessPath arrowVectorVariable,
@@ -66,8 +68,10 @@ public class SIMDLoopAccessPath extends AccessPath {
             ScalarVariableAccessPath SIMDVectorLengthVariable,
             SIMDVectorMaskAccessPath SIMDValidityMaskVariable,
             SIMDMemorySegmentAccessPath memorySegmentVariable,
-            SIMDVectorSpeciesAccessPath vectorSpeciesVariable
+            SIMDVectorSpeciesAccessPath vectorSpeciesVariable,
+            QueryVariableType type
     ) {
+        super(type);
         this.arrowVectorVariable = arrowVectorVariable;
         this.arrowVectorLengthVariable = arrowVectorLengthVariable;
         this.currentArrowVectorOffsetVariable = currentArrowVectorOffsetVariable;
@@ -92,14 +96,6 @@ public class SIMDLoopAccessPath extends AccessPath {
      */
     public ArrowVectorAccessPath getArrowVectorAccessPath() {
         return this.arrowVectorVariable;
-    }
-
-    /**
-     * Method to get the name of the Arrow vector variable wrapped by {@code this}.
-     * @return The name of the Arrow vector variable wrapped by {@code this}.
-     */
-    public String getArrowVectorVariableName() {
-        return this.arrowVectorVariable.getVariableName();
     }
 
     /**
@@ -156,6 +152,14 @@ public class SIMDLoopAccessPath extends AccessPath {
      */
     public Java.Rvalue readSIMDMask() {
         return this.SIMDValidityMaskVariable.read();
+    }
+
+    /**
+     * Method to obtain the {@link AccessPath} to the SIMD validity mask variable.
+     * @return The requested {@link AccessPath}.
+     */
+    public SIMDVectorMaskAccessPath getSIMDValidityMaskAccessPath() {
+        return this.SIMDValidityMaskVariable;
     }
 
     /**

@@ -3,6 +3,7 @@ package evaluation.codegen.operators;
 import calcite.operators.LogicalArrowTableScan;
 import evaluation.codegen.infrastructure.context.CodeGenContext;
 import evaluation.codegen.infrastructure.context.OptimisationContext;
+import evaluation.codegen.infrastructure.context.QueryVariableType;
 import evaluation.codegen.infrastructure.context.access_path.AccessPath;
 import evaluation.codegen.infrastructure.context.access_path.ArrowVectorAccessPath;
 import evaluation.codegen.infrastructure.context.access_path.IndexedArrowVectorElementAccessPath;
@@ -16,8 +17,6 @@ import evaluation.codegen.infrastructure.data.CachingArrowTableReader;
 import evaluation.codegen.infrastructure.janino.JaninoOperatorGen;
 import org.apache.calcite.prepare.RelOptTableImpl;
 import org.apache.calcite.rel.type.RelDataTypeField;
-import org.apache.calcite.sql.type.BasicSqlType;
-import org.apache.calcite.sql.type.SqlTypeName;
 import org.codehaus.janino.Java;
 import util.arrow.ArrowTable;
 
@@ -26,6 +25,15 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import static evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_INT_VECTOR;
+import static evaluation.codegen.infrastructure.context.QueryVariableType.P_INT;
+import static evaluation.codegen.infrastructure.context.QueryVariableType.VECTOR_INT_MASKED;
+import static evaluation.codegen.infrastructure.context.QueryVariableType.VECTOR_MASK_INT;
+import static evaluation.codegen.infrastructure.context.QueryVariableType.VECTOR_SPECIES_INT;
+import static evaluation.codegen.infrastructure.context.QueryVariableTypeMethods.memorySegmentTypeForArrowVector;
+import static evaluation.codegen.infrastructure.context.QueryVariableTypeMethods.primitiveMemberTypeForArrowVector;
+import static evaluation.codegen.infrastructure.context.QueryVariableTypeMethods.sqlTypeToArrowVectorType;
+import static evaluation.codegen.infrastructure.context.QueryVariableTypeMethods.toJavaType;
 import static evaluation.codegen.infrastructure.janino.JaninoControlGen.createForLoop;
 import static evaluation.codegen.infrastructure.janino.JaninoControlGen.createWhileLoop;
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createAmbiguousNameRef;
@@ -87,7 +95,7 @@ public class ArrowTableScanOperator extends CodeGenOperator<LogicalArrowTableSca
         if (!this.simdEnabled) {
             // for (int aviv = 0; aviv < firstColumnVector.getValueCount; aviv++) { [forLoopBody] }
             String avivName = cCtx.defineVariable("aviv");
-            ScalarVariableAccessPath avivAccessPath = new ScalarVariableAccessPath(avivName);
+            ScalarVariableAccessPath avivAccessPath = new ScalarVariableAccessPath(avivName, P_INT);
             whileLoopBody.addStatement(
                     createForLoop(
                             getLocation(),
@@ -111,25 +119,32 @@ public class ArrowTableScanOperator extends CodeGenOperator<LogicalArrowTableSca
             // arrow vector variable in the current mapping with one that performs an indexed read using
             // the aviv index variable
             List<AccessPath> updatedOrdinalMapping =
-                    cCtx.getCurrentOrdinalMapping().stream().map(entry ->
-                            // Valid to cast to entry ArrowVectorAccessPath as this is delivered by genericProduce(..)
-                            (AccessPath) new IndexedArrowVectorElementAccessPath((ArrowVectorAccessPath) entry, avivAccessPath)
-                    ).toList();
+                    cCtx.getCurrentOrdinalMapping().stream().map(entry -> {
+                        // Valid to cast to entry ArrowVectorAccessPath as this is delivered by genericProduce(..)
+                        ArrowVectorAccessPath avap = (ArrowVectorAccessPath) entry;
+                        return (AccessPath) new IndexedArrowVectorElementAccessPath(
+                                avap,
+                                avivAccessPath,
+                                primitiveMemberTypeForArrowVector(avap.getType())
+                        );
+                    }).toList();
             cCtx.setCurrentOrdinalMapping(updatedOrdinalMapping);
         } else {
             // int commonSIMDVectorLength = ...; (allocated as scan surrounding variable for reuse)
             int commonSIMDVectorLength =
-                    OptimisationContext.computeCommonSIMDVectorLength(this.getLogicalSubplan().getRowType().getFieldList());
+                    OptimisationContext.computeCommonSIMDVectorLength(cCtx.getCurrentOrdinalMapping());
             String commonSIMDVectorLengthName = cCtx.defineScanSurroundingVariables(
                     "commonSIMDVectorLength",
                     createPrimitiveType(getLocation(), Java.Primitive.INT),
                     createIntegerLiteral(getLocation(), commonSIMDVectorLength),
                     false);
-            ScalarVariableAccessPath commonSIMDVectorLengthAP = new ScalarVariableAccessPath(commonSIMDVectorLengthName);
+            ScalarVariableAccessPath commonSIMDVectorLengthAP =
+                    new ScalarVariableAccessPath(commonSIMDVectorLengthName, P_INT);
 
             // int arrowVectorLength = firstColumnVector.getValueCount();
             String arrowVectorLengthName = cCtx.defineVariable("arrowVectorLength");
-            ScalarVariableAccessPath arrowVectorLengthAP = new ScalarVariableAccessPath(arrowVectorLengthName);
+            ScalarVariableAccessPath arrowVectorLengthAP =
+                    new ScalarVariableAccessPath(arrowVectorLengthName, P_INT);
             whileLoopBody.addStatement(
                     createLocalVariable(
                             getLocation(),
@@ -147,13 +162,16 @@ public class ArrowTableScanOperator extends CodeGenOperator<LogicalArrowTableSca
             // Wrap compatible arrow vectors in a memory segment (based on the row type)
             // and store them so they can be added to the access path
             List<AccessPath> currentOrdinalMapping = cCtx.getCurrentOrdinalMapping();
-            List<RelDataTypeField> columnTypes = this.getLogicalSubplan().getRowType().getFieldList();
             List<SIMDMemorySegmentAccessPath> memorySegmentAccessPaths = new ArrayList<>(currentOrdinalMapping.size());
             for (int i = 0; i < currentOrdinalMapping.size(); i++) {
-                if (columnTypes.get(i).getType().getSqlTypeName() == SqlTypeName.INTEGER) {
+                // Valid to cast to ArrowVectorAccessPath as this is delivered by genericProduce(..)
+                ArrowVectorAccessPath currentOrdinal = (ArrowVectorAccessPath) currentOrdinalMapping.get(i);
+
+                // Process based on ordinal type
+                if (currentOrdinal.getType() == ARROW_INT_VECTOR) {
                     // MemorySegment col_[i]_ms = MemorySegment.ofAddress(
-                    //                    [currentOrdinalMapping.get(i)].getDataBufferAddress(),
-                    //                    [arrowVectorLength] * [currentOrdinalMapping.get(i)].TYPE_WIDTH);
+                    //                    [currentOrdinal].getDataBufferAddress(),
+                    //                    [arrowVectorLength] * [currentOrdinal].TYPE_WIDTH);
                     String memorySegmentName = cCtx.defineVariable("col_" + i + "_ms");
                     whileLoopBody.addStatement(
                             createLocalVariable(
@@ -167,8 +185,7 @@ public class ArrowTableScanOperator extends CodeGenOperator<LogicalArrowTableSca
                                             new Java.Rvalue[] {
                                                     createMethodInvocation(
                                                             getLocation(),
-                                                            // Valid to cast to ArrowVectorAccessPath as this is delivered by genericProduce(..)
-                                                            ((ArrowVectorAccessPath) cCtx.getCurrentOrdinalMapping().get(i)).read(),
+                                                            currentOrdinal.read(),
                                                             "getDataBufferAddress"
                                                     ),
                                                     mul(
@@ -176,14 +193,20 @@ public class ArrowTableScanOperator extends CodeGenOperator<LogicalArrowTableSca
                                                             arrowVectorLengthAP.read(),
                                                             createAmbiguousNameRef(
                                                                     getLocation(),
-                                                                    ((ArrowVectorAccessPath) cCtx.getCurrentOrdinalMapping().get(i)).getVariableName() + ".TYPE_WIDTH"
+                                                                    currentOrdinal.getVariableName() + ".TYPE_WIDTH"
                                                             )
                                                     )
                                             }
                                     )
                             )
                     );
-                    memorySegmentAccessPaths.add(i, new SIMDMemorySegmentAccessPath(memorySegmentName));
+                    memorySegmentAccessPaths.add(
+                            i,
+                            new SIMDMemorySegmentAccessPath(
+                                    memorySegmentName,
+                                    memorySegmentTypeForArrowVector(currentOrdinal.getType())
+                            )
+                    );
 
                 } else {
                     throw new UnsupportedOperationException("ArrowScanOperator.produceNonVec: Cannot wrap this arrow vector in a memory segment");
@@ -192,7 +215,8 @@ public class ArrowTableScanOperator extends CodeGenOperator<LogicalArrowTableSca
 
             // for (int currentVectorOffset = 0; currentVectorOffset < arrowVectorLength; currentVectorOffset += commonSIMDVectorLength) { [forLoopBody] }
             String currentVectorOffsetName = cCtx.defineVariable("currentVectorOffset");
-            ScalarVariableAccessPath currentVectorOffsetAccessPath = new ScalarVariableAccessPath(currentVectorOffsetName);
+            ScalarVariableAccessPath currentVectorOffsetAccessPath =
+                    new ScalarVariableAccessPath(currentVectorOffsetName, P_INT);
             whileLoopBody.addStatement(
                     createForLoop(                      // for (
                             getLocation(),
@@ -223,11 +247,7 @@ public class ArrowTableScanOperator extends CodeGenOperator<LogicalArrowTableSca
             // VectorSpecies<Integer> [intVectorSpeciesVarName] = oCtx.getIntVectorSpecies(commonSIMDVectorLength);
             String intVectorSpeciesVarName = cCtx.defineScanSurroundingVariables(
                 "IntVectorSpecies",
-                    createReferenceType(
-                            getLocation(),
-                            "jdk.incubator.vector.VectorSpecies",
-                            "Integer"
-                    ),
+                    toJavaType(getLocation(), VECTOR_SPECIES_INT),
                     createMethodInvocation(
                             getLocation(),
                             createAmbiguousNameRef(getLocation(), "oCtx"),
@@ -239,23 +259,19 @@ public class ArrowTableScanOperator extends CodeGenOperator<LogicalArrowTableSca
                     false
             );
             // Note this vector species has been defined
-            Map<SqlTypeName, SIMDVectorSpeciesAccessPath> definedVectorSpecies = new HashMap<>();
-            definedVectorSpecies.put(SqlTypeName.INTEGER, new SIMDVectorSpeciesAccessPath(intVectorSpeciesVarName));
+            Map<QueryVariableType, SIMDVectorSpeciesAccessPath> definedVectorSpecies = new HashMap<>();
+            definedVectorSpecies.put(P_INT, new SIMDVectorSpeciesAccessPath(intVectorSpeciesVarName, VECTOR_SPECIES_INT));
 
             // VectorMask<Integer> inRangeSIMDMask = [intVectorSpeciesVarName].indexInRange(
             //      [currentVectorOffsetAccessPath.read()],
             //      [arrowVectorLengthAP.read()]
             // );
             String inRangeSIMDMaskName = cCtx.defineVariable("inRangeSIMDMask");
-            SIMDVectorMaskAccessPath inRangeSIMDMaskAP = new SIMDVectorMaskAccessPath(inRangeSIMDMaskName);
+            SIMDVectorMaskAccessPath inRangeSIMDMaskAP = new SIMDVectorMaskAccessPath(inRangeSIMDMaskName, VECTOR_MASK_INT);
             forLoopBody.addStatement(
                     createLocalVariable(
                             getLocation(),
-                            createReferenceType(
-                                    getLocation(),
-                                    "jdk.incubator.vector.VectorMask",
-                                    "Integer"
-                            ),
+                            toJavaType(getLocation(), inRangeSIMDMaskAP.getType()),
                             inRangeSIMDMaskName,
                             createMethodInvocation(
                                     getLocation(),
@@ -274,21 +290,20 @@ public class ArrowTableScanOperator extends CodeGenOperator<LogicalArrowTableSca
             // compatible wrapping
             List<AccessPath> updatedOrdinalMapping = new ArrayList<>();
             for (int i = 0; i < currentOrdinalMapping.size(); i++) {
+                // Valid to cast to ArrowVectorAccessPath as this is delivered by genericProduce(..)
+                ArrowVectorAccessPath currentOrdinal = (ArrowVectorAccessPath) currentOrdinalMapping.get(i);
+
                 // Compute the vector species required for this Arrow vector row values based on its type
                 SIMDVectorSpeciesAccessPath svsap;
-                SqlTypeName currentVectorType =
-                        this.getLogicalSubplan().getRowType().getFieldList().get(i).getType().getSqlTypeName();
 
-                if (currentVectorType == SqlTypeName.INTEGER) {
-                    if (!definedVectorSpecies.containsKey(currentVectorType)) {
+                if (currentOrdinal.getType() == ARROW_INT_VECTOR) {
+                    QueryVariableType vectorElementType = primitiveMemberTypeForArrowVector(currentOrdinal.getType()); // P_INT
+
+                    if (!definedVectorSpecies.containsKey(vectorElementType)) {
                         // Need to define the vector species first
                         String vectorSpeciesVarName = cCtx.defineScanSurroundingVariables(
                                 "IntVectorSpecies",
-                                createReferenceType(
-                                        getLocation(),
-                                        "jdk.incubator.vector.VectorSpecies",
-                                        "Integer"
-                                ),
+                                toJavaType(getLocation(), VECTOR_SPECIES_INT),
                                 createMethodInvocation(
                                         getLocation(),
                                         createAmbiguousNameRef(getLocation(), "oCtx"),
@@ -301,12 +316,12 @@ public class ArrowTableScanOperator extends CodeGenOperator<LogicalArrowTableSca
                         );
 
                         definedVectorSpecies.put(
-                                currentVectorType,
-                                new SIMDVectorSpeciesAccessPath(vectorSpeciesVarName)
+                                vectorElementType,
+                                new SIMDVectorSpeciesAccessPath(vectorSpeciesVarName, VECTOR_SPECIES_INT)
                         );
                     }
 
-                    svsap = definedVectorSpecies.get(currentVectorType);
+                    svsap = definedVectorSpecies.get(vectorElementType);
                 } else {
                     throw new UnsupportedOperationException(
                             "ArrowTableScanOperator.produceNonVec does not support this data type for SIMD wrapping");
@@ -315,13 +330,14 @@ public class ArrowTableScanOperator extends CodeGenOperator<LogicalArrowTableSca
                 // Create the updated access path
                 updatedOrdinalMapping.add(i, new SIMDLoopAccessPath(
                         // Valid to cast to entry ArrowVectorAccessPath as this is delivered by genericProduce(..)
-                        (ArrowVectorAccessPath) currentOrdinalMapping.get(i),
+                        currentOrdinal,
                         arrowVectorLengthAP,
                         currentVectorOffsetAccessPath,
                         commonSIMDVectorLengthAP,
                         inRangeSIMDMaskAP,
                         memorySegmentAccessPaths.get(i),
-                        svsap
+                        svsap,
+                        VECTOR_INT_MASKED
                 ));
             }
 
@@ -361,22 +377,6 @@ public class ArrowTableScanOperator extends CodeGenOperator<LogicalArrowTableSca
     @Override
     public List<Java.Statement> consumeVec(CodeGenContext cCtx, OptimisationContext oCtx) {
         throw new UnsupportedOperationException("An ArrowTableScanOperator cannot consume data");
-    }
-
-    /**
-     * Method for converting the column type in the logical plan to a specific Arrow vector type name.
-     * @param logicalType The list of logical types per column of a record in this scan operator.
-     * @param columnIndex The index for which the Arrow vector type is requested.
-     * @return The type identifier of the Arrow vector type for the requested column index.
-     */
-    private String getArrowVectorTypeForColumn(List<RelDataTypeField> logicalType, int columnIndex) {
-        BasicSqlType colType = (BasicSqlType) logicalType.get(columnIndex).getType();
-        SqlTypeName colTypeName = colType.getSqlTypeName();
-        return switch (colTypeName) {
-            case INTEGER -> "org.apache.arrow.vector.IntVector";
-            default -> throw new UnsupportedOperationException(
-                    "This Arrow column type is currently not supported for the ArrowTableScanOperator");
-        };
     }
 
     /**
@@ -460,15 +460,19 @@ public class ArrowTableScanOperator extends CodeGenOperator<LogicalArrowTableSca
         for (int outputColumnIndex = 0; outputColumnIndex < numberOutputColumns; outputColumnIndex++) {
             // Obtain data about the column to project
             int originalColumnIndex = this.getLogicalSubplan().projects.get(outputColumnIndex);
-            String vectorType = getArrowVectorTypeForColumn(rowType, originalColumnIndex);
+            QueryVariableType vectorType =
+                    sqlTypeToArrowVectorType(rowType.get(originalColumnIndex).getType().getSqlTypeName()); // Accessing SQL type appropriate here: loading data from file
 
             // Define and expose an access path to a variable representing vectors of the projected column
             String preferredOutputColumnVariableName = arrowReaderVariableName + "_vc_" + outputColumnIndex;
             String outputColumnVariableName = cCtx.defineVariable(preferredOutputColumnVariableName);
-            projectedColumnAccessPaths.add(outputColumnIndex, new ArrowVectorAccessPath(outputColumnVariableName));
+            projectedColumnAccessPaths.add(
+                    outputColumnIndex,
+                    new ArrowVectorAccessPath(outputColumnVariableName, vectorType)
+            );
 
             // Do the projection by generating the variable for this column's vector
-            Java.Type projectedColumnType = createReferenceType(getLocation(), vectorType);
+            Java.Type projectedColumnType = toJavaType(getLocation(), vectorType);
             whileLoopBody.addStatement(
                     createLocalVariable(
                             getLocation(),
