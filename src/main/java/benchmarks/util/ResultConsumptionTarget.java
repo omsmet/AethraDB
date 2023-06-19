@@ -18,6 +18,14 @@ public abstract class ResultConsumptionTarget {
     }
 
     /**
+     * Method that consumes a integer array result value from a query.
+     * @param value The value to be consumed.
+     */
+    public void consumeResultItem(int[] value) {
+
+    }
+
+    /**
      * Method that consumes a long integer array result value from a query.
      * @param value The value to be consumed.
      */

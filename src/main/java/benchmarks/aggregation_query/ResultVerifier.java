@@ -15,11 +15,6 @@ import java.util.regex.Pattern;
 public class ResultVerifier {
 
     /**
-     * Boolean indicating whether the results to be checked result from vectorised processing.
-     */
-    private final boolean vectorisedParadigm;
-
-    /**
      * Contains the "groupBy" keys in the result.
      */
     private final int[] col1Keys;
@@ -42,13 +37,8 @@ public class ResultVerifier {
     /**
      * Creates a {@link ResultVerifier} instance for a specific dataset and query paradigm.
      * @param dataset The path to the dataset on which the query is/was performed.
-     * @param vectorisedParadigm Whether the vectorised query paradigm is used (as this influences
-     *                           the shape of the result array).
      */
-    public ResultVerifier(String dataset, boolean vectorisedParadigm) throws Exception {
-        // Store the used paradigm
-        this.vectorisedParadigm = vectorisedParadigm;
-
+    public ResultVerifier(String dataset) throws Exception {
         // Extract the expected result size to construct the int[] packaging operator
         Pattern keysPattern = Pattern.compile("keys\\_\\d+");
         Matcher keysMatcher = keysPattern.matcher(dataset);
@@ -85,13 +75,18 @@ public class ResultVerifier {
 
     /**
      * Method to check if the result computed in a query is indeed correct.
-     * @param resultToVerify The result to check the correctness of.
+     * @param keyResultToVerify The keys of the result to verify.
+     * @param col2SumResultToVerify The column 2 sums of the result to verify.
+     * @param col3SumResultToVerify The column 3 sums of the result to verify.
+     * @param col4SumResultToVerify The column 4 sums of the result to verify.
      * @return {@code true} iff the result matches the expected result.
      */
-    public boolean resultCorrect(long[] resultToVerify) {
-        if (this.vectorisedParadigm)
-            throw new UnsupportedOperationException("The ResultVerifier currently does not support vectorised paradigm results");
-
+    public boolean resultCorrect(
+            int[] keyResultToVerify,
+            long[] col2SumResultToVerify,
+            long[] col3SumResultToVerify,
+            long[] col4SumResultToVerify)
+    {
         // Check for each of the group keys if its result is correctly present in the result
         // Initially each element of the array is false, and will be marked true if it has been
         // found in the result
@@ -100,7 +95,7 @@ public class ResultVerifier {
         // Check each of the results
         for (int i = 0; i < this.col1Keys.length; i++) {
             // First locate the index in the expected result of the current key in the result
-            int resultKeyToCheck = (int) resultToVerify[4 * i];
+            int resultKeyToCheck = keyResultToVerify[i];
             int expectedResultKeyIndex = -1;
             for (int j = 0; j < this.col1Keys.length; j++) {
                 if (this.col1Keys[j] == resultKeyToCheck) {
@@ -110,9 +105,9 @@ public class ResultVerifier {
             }
 
             // Check that the sum columns match
-            long sum2ResultValue = resultToVerify[4 * i + 1];
-            long sum3ResultValue = resultToVerify[4 * i + 2];
-            long sum4ResultValue = resultToVerify[4 * i + 3];
+            long sum2ResultValue = col2SumResultToVerify[i];
+            long sum3ResultValue = col3SumResultToVerify[i];
+            long sum4ResultValue = col4SumResultToVerify[i];
             groupCorrectInResult[expectedResultKeyIndex] =
                        this.col2Sum[expectedResultKeyIndex] == sum2ResultValue
                     && this.col3Sum[expectedResultKeyIndex] == sum3ResultValue

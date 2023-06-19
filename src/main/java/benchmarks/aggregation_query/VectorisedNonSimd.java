@@ -28,11 +28,11 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * This microbenchmark evaluates the query processing performance of AethraDB using its non-vectorised
+ * This microbenchmark evaluates the query processing performance of AethraDB using its vectorised
  * query code generation without SIMD-ed operators.
  */
 @State(Scope.Benchmark)
-public class NonVectorisedNonSimd extends ResultConsumptionTarget {
+public class VectorisedNonSimd extends ResultConsumptionTarget {
 
     /**
      * We want to test the query processing performance for different table instances, where different
@@ -179,7 +179,7 @@ public class NonVectorisedNonSimd extends ResultConsumptionTarget {
 
         // Construct the packaging and result consumption operators and generate the code
         CodeGenOperator<RelNode> queryResultConsumptionOperator = new ResultConsumptionOperator(plannedQuery, packageOperator);
-        QueryCodeGenerator queryCodeGenerator = new QueryCodeGenerator(queryResultConsumptionOperator, false);
+        QueryCodeGenerator queryCodeGenerator = new QueryCodeGenerator(queryResultConsumptionOperator, true);
         this.generatedQuery = queryCodeGenerator.generateQuery(true);
         this.generatedQueryCCtx = this.generatedQuery.getCCtcx();
         this.generatedQueryCCtx.setResultConsumptionTarget(this);

@@ -54,7 +54,7 @@ public class VectorisedAggregationOperators extends VectorisedOperators {
             Simple_Int_Long_Map.Simple_Int_Long_Map_Iterator keyIterator)
     {
         int currentIndex = 0;
-        while (keyIterator.hasNext()) {
+        while (keyIterator.hasNext() && currentIndex < VECTOR_LENGTH) {
             keyVector[currentIndex++] = keyIterator.next();
         }
         return currentIndex;
