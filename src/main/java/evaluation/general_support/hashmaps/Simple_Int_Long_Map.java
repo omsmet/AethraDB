@@ -74,34 +74,27 @@ public class Simple_Int_Long_Map {
     }
 
     /**
-     * Method for computing the hash of an integer key.
-     * The hash-function uses a fixed universal hash function (CLRS page 267).
-     * Used values for the computation are based on the maximum integer value (maximum number of
-     * elements that can be in the entries array)
-     *  - p = 4 294 967 459 > Integer.MAX_VALUE
-     *  - a = 3 044 339 450 (random number between 1 and p - 1)
-     *  - b = 4 157 137 050 (random number between 0 and p - 1)
-     *
-     * @param key The key for which to compute the hash value.
+     * Method for computing the hash of an integer key from its pre-hash.
+     * @param preHash The pre-hash value for which to compute the hash value.
      * @param hashLength The length that the hash can use (so that it indexes the entries array)
-     * @return The value ((a * key + b) mod p) mod hashLength
+     * @return The value {@code preHash mod hashLength}.
      */
-    private int hash(int key, int hashLength) {
-        long ihv = (3_044_339_450L * key + 4_157_137_050L) % 4_294_967_459L;
-        return (int) (ihv % hashLength);
+    private int hash(long preHash, int hashLength) {
+        return (int) (preHash % hashLength);
     }
 
     /**
      * Method to associate a given value to a key. Replaces the old value of a key if the map
      * already contained a value for key.
      * @param key The key to which to associate a value.
+     * @param preHash The pre-hash value of the key.
      * @param value The value to associate to the key.
      */
-    public void put(int key, long value) {
+    public void put(int key, long preHash, long value) {
         checkKeyNonNegative(key);
 
         // Check if the map already contains the key
-        int index = find(key);
+        int index = find(key, preHash);
         if (index != -1) { // Need to update an existing index
             values[index] = value;
         }
@@ -121,18 +114,19 @@ public class Simple_Int_Long_Map {
         // Need to store the hash-table entry for the key to nextIndex
         // We rehash on collision only if the hash-table is approximately 3/4 full.
         boolean rehashOnCollision = this.numberOfRecords > (3 * this.hashTable.length) / 4;
-        putHashEntry(key, newIndex, rehashOnCollision);
+        putHashEntry(key, preHash, newIndex, rehashOnCollision);
     }
 
     /**
      * Method to put a certain key into the {@code hashTable} and have it point to a given index
      * in the {@code keys} and {@code values} arrays (or chain it via the {@code next} array.
      * @param key The key to insert into the {@code hashTable}.
+     * @param preHash The pre-hash value of the key to insert into the {@code hashTable}.
      * @param index The index of the {@code keys} and {@code values} arrays to associate in the {@code hashTable}.
      * @param rehashOnCollision Whether to rebuild the hash-table into a larger table on a collision.
      */
-    private void putHashEntry(int key, int index, boolean rehashOnCollision) {
-        int hashTableIndex = hash(key, this.hashTable.length);
+    private void putHashEntry(int key, long preHash, int index, boolean rehashOnCollision) {
+        int hashTableIndex = hash(preHash, this.hashTable.length);
         int initialIndex = hashTable[hashTableIndex];
 
         if (initialIndex == -1) { // Hash-table entry is still free, so simply store
@@ -158,14 +152,15 @@ public class Simple_Int_Long_Map {
      * Method to increment the value associated to a given key by a given value if the key is already
      * in the map, or to associate the given value to the key otherwise.
      * @param key The key to perform the operation for.
+     * @param preHash The pre-hash value of the key to perform the operation for.
      * @param value The value to add/associate to the key.
      */
-    public void addToKeyOrPutIfNotExist(int key, long value) {
+    public void addToKeyOrPutIfNotExist(int key, long preHash, long value) {
         checkKeyNonNegative(key);
 
-        int index = find(key);
+        int index = find(key, preHash);
         if (index == -1)
-            put(key, value);
+            put(key, preHash, value);
         else
             values[index] += value;
     }
@@ -176,9 +171,20 @@ public class Simple_Int_Long_Map {
      * @return The value associated to the key (if the map contains the key).
      * @throws NoSuchElementException if the map does not contain the provided key.
      */
-    public long get(int key) throws NoSuchElementException {
+    private long get(int key) throws NoSuchElementException {
+        return this.get(key, Int_Hash_Function.preHash(key));
+    }
+
+    /**
+     * Method to obtain the value associated to a given key.
+     * @param key The key to find the value for.
+     * @param preHash The pre-hash value of the key to find the value for.
+     * @return The value associated to the key (if the map contains the key).
+     * @throws NoSuchElementException if the map does not contain the provided key.
+     */
+    public long get(int key, long preHash) throws NoSuchElementException {
         checkKeyNonNegative(key);
-        int index = find(key);
+        int index = find(key, preHash);
 
         if (index != -1)
             return values[index];
@@ -192,18 +198,29 @@ public class Simple_Int_Long_Map {
      * @return {@code true} iff the map contains the given key.
      */
     public boolean contains(int key) {
+        return contains(key, Int_Hash_Function.preHash(key));
+    }
+
+    /**
+     * Method to check whether the map contains a given key.
+     * @param key The key to check.
+     * @param preHash The pre-hash value belonging to the key to check.
+     * @return {@code true} iff the map contains the given key.
+     */
+    public boolean contains(int key, long preHash) {
         checkKeyNonNegative(key);
-        return find(key) != -1;
+        return find(key, preHash) != -1;
     }
 
     /**
      * Finds the index into the {@code keys} and {@code values} arrays for a given key if the key
      * exists in the map, or returns -1 otherwise.
      * @param key A non-negative key to find the index for.
+     * @param preHash The pre-hash value of the key to find the index for.
      * @return The index into {@code keys} and {@code values} if the key exists in the map, -1 otherwise.
      */
-    private int find(int key) {
-        int hashTableIndex = hash(key, hashTable.length);
+    private int find(int key, long preHash) {
+        int hashTableIndex = hash(preHash, hashTable.length);
         int initialIndex = hashTable[hashTableIndex];
 
         if (initialIndex == -1)  // No hash-table entry implies the key is certainly not in the map.
@@ -264,8 +281,10 @@ public class Simple_Int_Long_Map {
         Arrays.fill(this.next, -1); // Mark unused entries
 
         // And insert all key-value associations again
-        for (int i = 0; i < this.numberOfRecords; i++)
-            putHashEntry(this.keys[i], i, false);
+        for (int i = 0; i < this.numberOfRecords; i++) {
+            long preHashValue = Int_Hash_Function.preHash(this.keys[i]);
+            putHashEntry(this.keys[i], preHashValue, i, false);
+        }
     }
 
     /**

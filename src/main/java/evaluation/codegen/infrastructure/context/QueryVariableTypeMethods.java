@@ -9,6 +9,11 @@ import static evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_
 import static evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_INT_VECTOR;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_LONG_VECTOR;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.MEMORY_SEGMENT_INT;
+import static evaluation.codegen.infrastructure.context.QueryVariableType.P_A_DOUBLE;
+import static evaluation.codegen.infrastructure.context.QueryVariableType.P_A_FLOAT;
+import static evaluation.codegen.infrastructure.context.QueryVariableType.P_A_INT;
+import static evaluation.codegen.infrastructure.context.QueryVariableType.P_A_LONG;
+import static evaluation.codegen.infrastructure.context.QueryVariableType.P_BOOLEAN;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.P_DOUBLE;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.P_FLOAT;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.P_INT;
@@ -21,6 +26,40 @@ import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createRe
  * Class containing helper methods to operate on {@link QueryVariableType} values.
  */
 public final class QueryVariableTypeMethods {
+
+    /**
+     * Method to get the primitive scalar type for a given type.
+     */
+    public static QueryVariableType primitiveType(QueryVariableType type) {
+        return switch (type) {
+            case P_BOOLEAN -> P_BOOLEAN;
+            case P_DOUBLE -> P_DOUBLE;
+            case P_FLOAT -> P_FLOAT;
+            case P_INT -> P_INT;
+            case P_LONG -> P_LONG;
+
+            case P_A_BOOLEAN -> P_BOOLEAN;
+            case P_A_DOUBLE -> P_DOUBLE;
+            case P_A_FLOAT -> P_FLOAT;
+            case P_A_INT -> P_INT;
+            case P_A_LONG -> P_LONG;
+
+            case ARROW_DOUBLE_VECTOR -> P_DOUBLE;
+            case ARROW_FLOAT_VECTOR -> P_FLOAT;
+            case ARROW_INT_VECTOR -> P_INT;
+            case ARROW_LONG_VECTOR -> P_LONG;
+
+            case ARRAY_DOUBLE_VECTOR -> P_DOUBLE;
+            case ARRAY_FLOAT_VECTOR -> P_FLOAT;
+            case ARRAY_INT_VECTOR -> P_INT;
+            case ARRAY_LONG_VECTOR -> P_LONG;
+
+            case VECTOR_INT_MASKED -> P_INT;
+
+            default -> throw new IllegalArgumentException(
+                    "primitiveType cannot determine the primitive scalar type for " + type);
+        };
+    }
 
     /**
      * Method to get the primitive member type for a primitive array type.

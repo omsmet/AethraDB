@@ -19,24 +19,32 @@ public class IndexedMapAccessPath extends AccessPath {
     private final MapAccessPath hashmapVariable;
 
     /**
-     * The index variable indicating which element of the map is currently being accessed.
+     * The index variable indicating the key of the element of the map is currently being accessed.
      */
-    private final ScalarVariableAccessPath indexVariable;
+    private final ScalarVariableAccessPath keyVariable;
+
+    /**
+     * The index variable indicating the pre-hash of the key of the element of the map is currently being accessed.
+     */
+    private final ScalarVariableAccessPath preHashKeyVariable;
 
     /**
      * Create an {@link IndexedMapAccessPath} instance.
      * @param hashmapVariable The hashmap variable to access.
-     * @param indexVariable The index variable to use.
+     * @param keyVariable The key variable to use.
+     * @param preHashKeyVariable The pre-hash variable to use for the key.
      * @param type The type of the variable accessible through {@code this}.
      */
     public IndexedMapAccessPath(
             MapAccessPath hashmapVariable,
-            ScalarVariableAccessPath indexVariable,
+            ScalarVariableAccessPath keyVariable,
+            ScalarVariableAccessPath preHashKeyVariable,
             QueryVariableType type
     ) {
         super(type);
         this.hashmapVariable = hashmapVariable;
-        this.indexVariable = indexVariable;
+        this.keyVariable = keyVariable;
+        this.preHashKeyVariable = preHashKeyVariable;
     }
 
     /**
@@ -49,7 +57,8 @@ public class IndexedMapAccessPath extends AccessPath {
                 this.hashmapVariable.read(),
                 "get",
                 new Java.Rvalue[] {
-                        this.indexVariable.read()
+                        this.keyVariable.read(),
+                        this.preHashKeyVariable.read()
                 }
         );
     }
