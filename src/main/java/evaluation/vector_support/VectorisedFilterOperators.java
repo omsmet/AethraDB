@@ -2,17 +2,22 @@ package evaluation.vector_support;
 
 import jdk.incubator.vector.VectorMask;
 import jdk.incubator.vector.VectorOperators;
+import jdk.incubator.vector.VectorSpecies;
 import org.apache.arrow.vector.IntVector;
 
 import java.lang.foreign.MemorySegment;
 import java.nio.ByteOrder;
 
-import static evaluation.codegen.infrastructure.context.OptimisationContext.MAX_LEN_INT_VECTOR_SPECIES;
-
 /**
  * Class containing vectorised primitives for filter operations.
  */
 public class VectorisedFilterOperators extends VectorisedOperators {
+
+    /**
+     * The {@link VectorSpecies} to use for the SIMD-ed primitives in this class.
+     */
+    private static final VectorSpecies<Integer> INT_SPECIES_PREFERRED =
+            jdk.incubator.vector.IntVector.SPECIES_PREFERRED;
 
     /**
      * Prevent instantiating this class.
@@ -92,9 +97,9 @@ public class VectorisedFilterOperators extends VectorisedOperators {
 
         // Perform vectorised processing
         int currentIndex = 0;
-        for (; currentIndex < MAX_LEN_INT_VECTOR_SPECIES.loopBound(vectorLength); currentIndex += MAX_LEN_INT_VECTOR_SPECIES.length()) {
+        for (; currentIndex < INT_SPECIES_PREFERRED.loopBound(vectorLength); currentIndex += INT_SPECIES_PREFERRED.length()) {
             var simdVector = jdk.incubator.vector.IntVector.fromMemorySegment(
-                    MAX_LEN_INT_VECTOR_SPECIES,
+                    INT_SPECIES_PREFERRED,
                     vectorSegment,
                     (long) currentIndex * IntVector.TYPE_WIDTH,
                     ByteOrder.LITTLE_ENDIAN);
@@ -131,20 +136,19 @@ public class VectorisedFilterOperators extends VectorisedOperators {
         // Initialise the memory segment
         int vectorLength = vector.getValueCount();
         long bufferSize = (long) vectorLength * IntVector.TYPE_WIDTH;
-        MemorySegment vectorSegment =
-                MemorySegment.ofAddress(vector.getDataBufferAddress(), bufferSize);
+        MemorySegment vectorSegment = MemorySegment.ofAddress(vector.getDataBufferAddress(), bufferSize);
 
         // Perform vectorised processing
         int currentIndex = 0;
-        for (; currentIndex < MAX_LEN_INT_VECTOR_SPECIES.loopBound(vectorLength); currentIndex += MAX_LEN_INT_VECTOR_SPECIES.length()) {
+        for (; currentIndex < INT_SPECIES_PREFERRED.loopBound(vectorLength); currentIndex += INT_SPECIES_PREFERRED.length()) {
             // Initialise the SIMD vector and mask indicating the entries that are valid
             var simdVector = jdk.incubator.vector.IntVector.fromMemorySegment(
-                    MAX_LEN_INT_VECTOR_SPECIES,
+                    INT_SPECIES_PREFERRED,
                     vectorSegment,
                     (long) currentIndex * IntVector.TYPE_WIDTH,
                     ByteOrder.LITTLE_ENDIAN);
             VectorMask<Integer> validityMaskVector = VectorMask.fromArray(
-                    MAX_LEN_INT_VECTOR_SPECIES,
+                    INT_SPECIES_PREFERRED,
                     validIndicesMask,
                     currentIndex
             );

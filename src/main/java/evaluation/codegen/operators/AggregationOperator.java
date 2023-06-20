@@ -885,7 +885,7 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
                 // Hashing of the key-column depends on whether we are in SIMD mode or not
                 if (!this.simdEnabled) {
                     if (keyColumnAccessPathType == ARROW_INT_VECTOR) {
-                        // VectorisedAggregationOperators.constructPreHashKeyVector(this.
+                        // VectorisedAggregationOperators.constructPreHashKeyVector([this.groupKeyPreHashVector], [keyColumn]);
                         codeGenResult.add(
                                 createMethodInvocationStm(
                                         getLocation(),
@@ -903,7 +903,24 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
                     }
 
                 } else { // this.simdEnabled
-                    throw new UnsupportedOperationException("TODO: IMPLEMENT"); // TODO: IMPLEMENT
+                    if (keyColumnAccessPathType == ARROW_INT_VECTOR) {
+                        // VectorisedAggregationOperators.constructPreHashKeyVectorSIMD([this.groupKeyPreHashVector], [keyColumn]);
+                        codeGenResult.add(
+                                createMethodInvocationStm(
+                                        getLocation(),
+                                        createAmbiguousNameRef(getLocation(), "VectorisedAggregationOperators"),
+                                        "constructPreHashKeyVectorSIMD",
+                                        new Java.Rvalue[]{
+                                                this.groupKeyPreHashVector.read(),
+                                                ((ArrowVectorAccessPath) keyColumnAccessPath).read()
+                                        }
+                                ));
+
+                    } else {
+                        throw new UnsupportedOperationException(
+                                "AggregationOperator.consumeVec does not support his key column access path type for pre-hashing: " + keyColumnAccessPathType);
+                    }
+
                 }
 
             } else {

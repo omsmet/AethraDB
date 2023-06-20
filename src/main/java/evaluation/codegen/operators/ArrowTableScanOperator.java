@@ -131,8 +131,7 @@ public class ArrowTableScanOperator extends CodeGenOperator<LogicalArrowTableSca
             cCtx.setCurrentOrdinalMapping(updatedOrdinalMapping);
         } else {
             // int commonSIMDVectorLength = ...; (allocated as scan surrounding variable for reuse)
-            int commonSIMDVectorLength =
-                    OptimisationContext.computeCommonSIMDVectorLength(cCtx.getCurrentOrdinalMapping());
+            int commonSIMDVectorLength = OptimisationContext.getVectorSpeciesLong().length();
             String commonSIMDVectorLengthName = cCtx.defineScanSurroundingVariables(
                     "commonSIMDVectorLength",
                     createPrimitiveType(getLocation(), Java.Primitive.INT),
@@ -244,17 +243,14 @@ public class ArrowTableScanOperator extends CodeGenOperator<LogicalArrowTableSca
             // Todo: fix properly
 
             // Define integer vector species outside the scan
-            // VectorSpecies<Integer> [intVectorSpeciesVarName] = oCtx.getIntVectorSpecies(commonSIMDVectorLength);
+            // VectorSpecies<Integer> [intVectorSpeciesVarName] = oCtx.getVectorSpeciesInt();
             String intVectorSpeciesVarName = cCtx.defineScanSurroundingVariables(
                 "IntVectorSpecies",
                     toJavaType(getLocation(), VECTOR_SPECIES_INT),
                     createMethodInvocation(
                             getLocation(),
                             createAmbiguousNameRef(getLocation(), "oCtx"),
-                            "getIntVectorSpecies",
-                            new Java.Rvalue[] {
-                                    commonSIMDVectorLengthAP.read()
-                            }
+                            "getVectorSpeciesInt"
                     ),
                     false
             );

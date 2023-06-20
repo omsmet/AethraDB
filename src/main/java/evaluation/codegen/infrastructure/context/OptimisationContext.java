@@ -1,7 +1,5 @@
 package evaluation.codegen.infrastructure.context;
 
-import evaluation.codegen.infrastructure.context.access_path.AccessPath;
-import jdk.incubator.vector.ByteVector;
 import jdk.incubator.vector.DoubleVector;
 import jdk.incubator.vector.FloatVector;
 import jdk.incubator.vector.IntVector;
@@ -11,38 +9,12 @@ import jdk.incubator.vector.VectorSpecies;
 
 import java.lang.foreign.MemorySegment;
 import java.nio.ByteOrder;
-import java.util.List;
 
 /**
  * Class for storing information that can be used for performing optimisations at code generation time
  * as well as at runtime.
  */
 public class OptimisationContext {
-
-    /**
-     * The SIMD {@link VectorSpecies} to use for byte vectors.
-     */
-    public static final VectorSpecies<Byte> MAX_LEN_BYTE_VECTOR_SPECIES = ByteVector.SPECIES_PREFERRED;
-
-    /**
-     * The SIMD {@link VectorSpecies} to use for double vectors.
-     */
-    public static final VectorSpecies<Double> MAX_LEN_DOUBLE_VECTOR_SPECIES = DoubleVector.SPECIES_PREFERRED;
-
-    /**
-     * The SIMD {@link VectorSpecies} to use for float vectors.
-     */
-    public static final VectorSpecies<Float> MAX_LEN_FLOAT_VECTOR_SPECIES = FloatVector.SPECIES_PREFERRED;
-
-    /**
-     * The SIMD {@link VectorSpecies} to use for integer vectors.
-     */
-    public static final VectorSpecies<Integer> MAX_LEN_INT_VECTOR_SPECIES = IntVector.SPECIES_PREFERRED;
-
-    /**
-     * The SIMD {@link VectorSpecies} to use for long-integer vectors.
-     */
-    public static final VectorSpecies<Long> MAX_LEN_LONG_VECTOR_SPECIES = LongVector.SPECIES_PREFERRED;
 
     /**
      * Construct a new {@link OptimisationContext}.
@@ -52,48 +24,102 @@ public class OptimisationContext {
     }
 
     /**
-     * Method to compute the vector length which is appropriate for all element types of a row.
-     * @param columnList The list of columns for which a common SIMD vector length should be computed.
-     * @return The common vector length computed.
+     * The SIMD {@link VectorSpecies} to use for double vectors.
      */
-    public static int computeCommonSIMDVectorLength(List<AccessPath> columnList) {
-        // Compute the maximum length that any vector could ever have
-        int commonLength = MAX_LEN_BYTE_VECTOR_SPECIES.length();
+    private static VectorSpecies<Double> MAX_LEN_DOUBLE_VECTOR_SPECIES;
 
-        // Check if we need to use a lower vector length due to any field
-        for (AccessPath column : columnList) {
-            commonLength = Math.min(
-                    commonLength,
-                    switch (column.getType()) {
-                        case ARROW_DOUBLE_VECTOR -> MAX_LEN_DOUBLE_VECTOR_SPECIES.length();
-                        case ARROW_FLOAT_VECTOR -> MAX_LEN_FLOAT_VECTOR_SPECIES.length();
-                        case ARROW_INT_VECTOR -> MAX_LEN_INT_VECTOR_SPECIES.length();
-                        case ARROW_LONG_VECTOR -> MAX_LEN_LONG_VECTOR_SPECIES.length();
-                        default -> throw new UnsupportedOperationException("" +
-                                "Cannot include the current type in the common SIMD vector length computation");
-                    }
-            );
-        }
+    /**
+     * The SIMD {@link VectorSpecies} to use for float vectors.
+     */
+    private static VectorSpecies<Float> MAX_LEN_FLOAT_VECTOR_SPECIES;
 
-        return commonLength;
+    /**
+     * The SIMD {@link VectorSpecies} to use for integer vectors.
+     */
+    private static VectorSpecies<Integer> MAX_LEN_INT_VECTOR_SPECIES;
+
+    /**
+     * The SIMD {@link VectorSpecies} to use for long-integer vectors.
+     */
+    private static VectorSpecies<Long> MAX_LEN_LONG_VECTOR_SPECIES;
+
+    /**
+     * Method to initialise the vector species in this class. All species are initialised such that
+     * all vectors (even of different types) will contain an equal amount of elements. Therefor
+     * the vector lengths are determined by the {@link LongVector}.
+     */
+    private static void initialiseVectorSpecies() {
+        MAX_LEN_LONG_VECTOR_SPECIES = LongVector.SPECIES_PREFERRED;
+        int vectorElementLength = MAX_LEN_LONG_VECTOR_SPECIES.length();
+
+        if (vectorElementLength == IntVector.SPECIES_64.length())
+            MAX_LEN_INT_VECTOR_SPECIES = IntVector.SPECIES_64;
+        else if (vectorElementLength == IntVector.SPECIES_128.length())
+            MAX_LEN_INT_VECTOR_SPECIES = IntVector.SPECIES_128;
+        else if (vectorElementLength == IntVector.SPECIES_256.length())
+            MAX_LEN_INT_VECTOR_SPECIES = IntVector.SPECIES_256;
+        else if (vectorElementLength == IntVector.SPECIES_512.length())
+            MAX_LEN_INT_VECTOR_SPECIES = IntVector.SPECIES_512;
+        else
+            throw new IllegalArgumentException("Cannot determine Integer VectorSpecies for provided length");
+
+        if (vectorElementLength == FloatVector.SPECIES_64.length())
+            MAX_LEN_FLOAT_VECTOR_SPECIES = FloatVector.SPECIES_64;
+        else if (vectorElementLength == FloatVector.SPECIES_128.length())
+            MAX_LEN_FLOAT_VECTOR_SPECIES = FloatVector.SPECIES_128;
+        else if (vectorElementLength == FloatVector.SPECIES_256.length())
+            MAX_LEN_FLOAT_VECTOR_SPECIES = FloatVector.SPECIES_256;
+        else if (vectorElementLength == FloatVector.SPECIES_512.length())
+            MAX_LEN_FLOAT_VECTOR_SPECIES = FloatVector.SPECIES_512;
+        else
+            throw new IllegalArgumentException("Cannot determine Float VectorSpecies for provided length");
+
+        if (vectorElementLength == DoubleVector.SPECIES_64.length())
+            MAX_LEN_DOUBLE_VECTOR_SPECIES = DoubleVector.SPECIES_64;
+        else if (vectorElementLength == DoubleVector.SPECIES_128.length())
+            MAX_LEN_DOUBLE_VECTOR_SPECIES = DoubleVector.SPECIES_128;
+        else if (vectorElementLength == DoubleVector.SPECIES_256.length())
+            MAX_LEN_DOUBLE_VECTOR_SPECIES = DoubleVector.SPECIES_256;
+        else if (vectorElementLength == DoubleVector.SPECIES_512.length())
+            MAX_LEN_DOUBLE_VECTOR_SPECIES = DoubleVector.SPECIES_512;
+        else
+            throw new IllegalArgumentException("Cannot determine Double VectorSpecies for provided length");
     }
 
     /**
-     * Obtain the correct {@link VectorSpecies<Integer>} for a given vector length.
-     * @param length The length the vector should have.
-     * @return The {@link VectorSpecies<Integer>} belonging to the given length.
+     * Method to obtain the vector species for doubles.
      */
-    public static VectorSpecies<Integer> getIntVectorSpecies(int length) {
-        if (length == IntVector.SPECIES_64.length())
-            return IntVector.SPECIES_64;
-        else if (length == IntVector.SPECIES_128.length())
-            return IntVector.SPECIES_128;
-        else if (length == IntVector.SPECIES_256.length())
-            return IntVector.SPECIES_256;
-        else if (length == IntVector.SPECIES_512.length())
-            return IntVector.SPECIES_512;
-        else
-            throw new IllegalArgumentException("Cannot return Integer VectorSpecies for provided length");
+    public static VectorSpecies<Double> getVectorSpeciesDouble() {
+        if (MAX_LEN_DOUBLE_VECTOR_SPECIES == null)
+            initialiseVectorSpecies();
+        return MAX_LEN_DOUBLE_VECTOR_SPECIES;
+    }
+
+    /**
+     * Method to obtain the vector species for floats.
+     */
+    public static VectorSpecies<Float> getVectorSpeciesFloat() {
+        if (MAX_LEN_FLOAT_VECTOR_SPECIES == null)
+            initialiseVectorSpecies();
+        return MAX_LEN_FLOAT_VECTOR_SPECIES;
+    }
+
+    /**
+     * Method to obtain the vector species for integers.
+     */
+    public static VectorSpecies<Integer> getVectorSpeciesInt() {
+        if (MAX_LEN_INT_VECTOR_SPECIES == null)
+            initialiseVectorSpecies();
+        return MAX_LEN_INT_VECTOR_SPECIES;
+    }
+
+    /**
+     * Method to obtain the vector species for long integers.
+     */
+    public static VectorSpecies<Long> getVectorSpeciesLong() {
+        if (MAX_LEN_LONG_VECTOR_SPECIES == null)
+            initialiseVectorSpecies();
+        return MAX_LEN_LONG_VECTOR_SPECIES;
     }
 
     /**

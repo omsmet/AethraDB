@@ -11,10 +11,6 @@ import static evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_
 import static evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_INT_VECTOR_W_VALIDITY_MASK;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_LONG_VECTOR;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.MEMORY_SEGMENT_INT;
-import static evaluation.codegen.infrastructure.context.QueryVariableType.P_A_DOUBLE;
-import static evaluation.codegen.infrastructure.context.QueryVariableType.P_A_FLOAT;
-import static evaluation.codegen.infrastructure.context.QueryVariableType.P_A_INT;
-import static evaluation.codegen.infrastructure.context.QueryVariableType.P_A_LONG;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.P_BOOLEAN;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.P_DOUBLE;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.P_FLOAT;
