@@ -197,7 +197,7 @@ public class Simple_Int_Long_Map {
      * @param key The key to check.
      * @return {@code true} iff the map contains the given key.
      */
-    public boolean contains(int key) {
+    private boolean contains(int key) {
         return contains(key, Int_Hash_Function.preHash(key));
     }
 

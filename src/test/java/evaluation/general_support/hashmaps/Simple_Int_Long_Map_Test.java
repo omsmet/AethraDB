@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.Random;
 
+import static evaluation.general_support.hashmaps.Int_Hash_Function.preHash;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -36,22 +37,22 @@ public class Simple_Int_Long_Map_Test {
         // Test get method
         assertThrowsExactly(
                 IllegalArgumentException.class,
-                () -> this.map.get(negativeKey));
+                () -> this.map.get(negativeKey, preHash(negativeKey)));
 
         // Test put method
         assertThrowsExactly(
                 IllegalArgumentException.class,
-                () -> this.map.put(negativeKey, 42));
+                () -> this.map.put(negativeKey, preHash(negativeKey), 42));
 
         // Test addToKeyOrPutIfNotExist method
         assertThrowsExactly(
                 IllegalArgumentException.class,
-                () -> this.map.addToKeyOrPutIfNotExist(negativeKey, 42));
+                () -> this.map.addToKeyOrPutIfNotExist(negativeKey, preHash(negativeKey), 42));
 
         // Test contains method
         assertThrowsExactly(
                 IllegalArgumentException.class,
-                () -> this.map.contains(negativeKey));
+                () -> this.map.contains(negativeKey, preHash(negativeKey)));
     }
 
     /**
@@ -59,7 +60,8 @@ public class Simple_Int_Long_Map_Test {
      */
     @Test
     public void TestEmtpyMapDoesNotContain() {
-        assertFalse(this.map.contains(42));
+        int key = 42;
+        assertFalse(this.map.contains(key, preHash(key)));
     }
 
     /**
@@ -69,8 +71,8 @@ public class Simple_Int_Long_Map_Test {
     public void ContainsPutTest() {
         int key = 42;
         long value = -key;
-        this.map.put(key, value);
-        assertTrue(this.map.contains(key));
+        this.map.put(key, preHash(key), value);
+        assertTrue(this.map.contains(key, preHash(key)));
     }
 
     /**
@@ -83,10 +85,10 @@ public class Simple_Int_Long_Map_Test {
         long value1 = 41;
         int key2 = 89;
         long value2 = 43;
-        this.map.put(key1, value1);
-        this.map.put(key2, value2);
-        assertEquals(value1, this.map.get(key1));
-        assertEquals(value2, this.map.get(key2));
+        this.map.put(key1, preHash(key1), value1);
+        this.map.put(key2, preHash(key2), value2);
+        assertEquals(value1, this.map.get(key1, preHash(key1)));
+        assertEquals(value2, this.map.get(key2, preHash(key2)));
     }
 
     /**
@@ -98,11 +100,11 @@ public class Simple_Int_Long_Map_Test {
         long value1 = 41;
         long value2 = 43;
 
-        this.map.put(key, value1);
-        assertEquals(value1, this.map.get(key));
+        this.map.put(key, preHash(key), value1);
+        assertEquals(value1, this.map.get(key, preHash(key)));
 
-        this.map.put(key, value2);
-        assertEquals(value2, this.map.get(key));
+        this.map.put(key, preHash(key), value2);
+        assertEquals(value2, this.map.get(key, preHash(key)));
     }
 
     /**
@@ -114,11 +116,11 @@ public class Simple_Int_Long_Map_Test {
         int key = 42;
         long value = 41;
 
-        assertFalse(this.map.contains(key));
+        assertFalse(this.map.contains(key, preHash(key)));
 
-        this.map.addToKeyOrPutIfNotExist(key, value);
+        this.map.addToKeyOrPutIfNotExist(key, preHash(key), value);
 
-        assertEquals(value, this.map.get(key));
+        assertEquals(value, this.map.get(key, preHash(key)));
     }
 
     /**
@@ -132,11 +134,11 @@ public class Simple_Int_Long_Map_Test {
         long value2 = 43;
         long sum = value1 + value2;
 
-        this.map.put(key, value1);
-        assertEquals(value1, this.map.get(key));
+        this.map.put(key, preHash(key), value1);
+        assertEquals(value1, this.map.get(key, preHash(key)));
 
-        this.map.addToKeyOrPutIfNotExist(key, value2);
-        assertEquals(sum, this.map.get(key));
+        this.map.addToKeyOrPutIfNotExist(key, preHash(key), value2);
+        assertEquals(sum, this.map.get(key, preHash(key)));
     }
 
     /**
@@ -161,12 +163,12 @@ public class Simple_Int_Long_Map_Test {
 
         System.out.println("Inserting keys");
         for (int i = 0; i < keys.length; i++)
-            this.map.put(keys[i], values[i]);
+            this.map.put(keys[i], preHash(keys[i]), values[i]);
 
         System.out.println("Retrieving values");
         long[] mapValues = new long[keys.length];
         for (int i = 0; i < keys.length; i++) {
-            mapValues[i] = this.map.get(keys[i]);
+            mapValues[i] = this.map.get(keys[i],  preHash(keys[i]));
         }
 
         System.out.println("Comparing arrays");
