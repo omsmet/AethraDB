@@ -27,6 +27,10 @@ public enum QueryVariableType {
     ARROW_INT_VECTOR,
     ARROW_LONG_VECTOR,
 
+    // Arrow vector with selection/validity mask types
+    ARROW_INT_VECTOR_W_SELECTION_VECTOR,
+    ARROW_INT_VECTOR_W_VALIDITY_MASK,
+
     // Array vector types,
     ARRAY_DOUBLE_VECTOR,
     ARRAY_FLOAT_VECTOR,

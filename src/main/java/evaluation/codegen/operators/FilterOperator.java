@@ -23,10 +23,14 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_INT_VECTOR;
+import static evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_INT_VECTOR_W_SELECTION_VECTOR;
+import static evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_INT_VECTOR_W_VALIDITY_MASK;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.P_A_BOOLEAN;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.P_A_INT;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.P_INT;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.VECTOR_INT_MASKED;
+import static evaluation.codegen.infrastructure.context.QueryVariableTypeMethods.arrowVectorWithSelectionVectorType;
+import static evaluation.codegen.infrastructure.context.QueryVariableTypeMethods.arrowVectorWithValidityMaskType;
 import static evaluation.codegen.infrastructure.context.QueryVariableTypeMethods.primitiveMemberTypeForArrowVector;
 import static evaluation.codegen.infrastructure.context.QueryVariableTypeMethods.toJavaType;
 import static evaluation.codegen.infrastructure.janino.JaninoControlGen.createIfNotContinue;
@@ -195,7 +199,7 @@ public class FilterOperator extends CodeGenOperator<LogicalFilter> {
                 codegenResult.add(
                     createLocalVariable(
                             getLocation(),
-                            toJavaType(getLocation(), lhsAP.getArrowVectorAccessPath().getType()),
+                            toJavaType(getLocation(), lhsAP.getType()),
                             SIMDVectorName,
                             createMethodInvocation(
                                     getLocation(),
@@ -432,9 +436,16 @@ public class FilterOperator extends CodeGenOperator<LogicalFilter> {
         AccessPath lhsAP = cCtx.getCurrentOrdinalMapping().get(lhsRef.getIndex());
 
         // Currently the filter operator only supports the integer type, check this condition
-        if (lhsAP.getType() != ARROW_INT_VECTOR || rhs.getType().getSqlTypeName() != SqlTypeName.INTEGER)
+        if (
+                (  lhsAP.getType() != ARROW_INT_VECTOR
+                && lhsAP.getType() != ARROW_INT_VECTOR_W_SELECTION_VECTOR
+                && lhsAP.getType() != ARROW_INT_VECTOR_W_VALIDITY_MASK
+                )
+                || rhs.getType().getSqlTypeName() != SqlTypeName.INTEGER) {
             throw new UnsupportedOperationException(
-                    "FilterOperator.consumeVecLtOperator only supports integer operands");
+                    "FilterOperator.consumeVecLtOperator does not supports this operand combination: "
+                            + lhsAP.getType() + " - " + rhs.getType().toString());
+        }
 
         // Generate the Rvalue for the rhs integer scalar
         Java.Rvalue rhsIntScalar = rexLiteralToRvalue(rhsLit);
@@ -532,7 +543,7 @@ public class FilterOperator extends CodeGenOperator<LogicalFilter> {
             );
 
         } else if (lhsAP instanceof ArrowVectorWithSelectionVectorAccessPath lhsArrowVecWSAP && !this.simdEnabled) {
-            // int rdinal_[index]_sel_vec_length = VectorisedFilterOperators.lessThan(
+            // int ordinal_[index]_sel_vec_length = VectorisedFilterOperators.lessThan(
             //      lhsArrowVecWSAP.readArrowVector(), rhsIntScalar, ordinal_[index]_sel_vec,
             //      lhsArrowVecWSAP.readSelectionVector(), lhsArrowVecWSAP.readSelectionVectorLength());
             codegenResult.add(
@@ -592,27 +603,25 @@ public class FilterOperator extends CodeGenOperator<LogicalFilter> {
                                 avapEntry,
                                 selectionResultAP,
                                 selectionResultLengthAP,
-                                primitiveMemberTypeForArrowVector(avapEntry.getType()));
+                                arrowVectorWithSelectionVectorType(avapEntry.getType()));
                     else if (entry instanceof ArrowVectorAccessPath avapEntry && this.simdEnabled)
                         return new ArrowVectorWithValidityMaskAccessPath(
                                 avapEntry,
                                 selectionResultAP,
                                 selectionResultLengthAP,
-                                primitiveMemberTypeForArrowVector(avapEntry.getType()));
+                                arrowVectorWithValidityMaskType(avapEntry.getType()));
                     else if (entry instanceof ArrowVectorWithSelectionVectorAccessPath avwsvapEntry && !this.simdEnabled)
                         return new ArrowVectorWithSelectionVectorAccessPath(
                                 avwsvapEntry.getArrowVectorVariable(),
                                 selectionResultAP,
                                 selectionResultLengthAP,
-                                primitiveMemberTypeForArrowVector(avwsvapEntry.getArrowVectorVariable().getType())
-                        );
+                                arrowVectorWithSelectionVectorType(avwsvapEntry.getArrowVectorVariable().getType()));
                     else if (entry instanceof ArrowVectorWithValidityMaskAccessPath avwvmapEntry && this.simdEnabled)
                         return new ArrowVectorWithValidityMaskAccessPath(
                                 avwvmapEntry.getArrowVectorVariable(),
                                 selectionResultAP,
                                 selectionResultLengthAP,
-                                primitiveMemberTypeForArrowVector(avwvmapEntry.getArrowVectorVariable().getType())
-                        );
+                                arrowVectorWithValidityMaskType(avwvmapEntry.getArrowVectorVariable().getType()));
                     else
                         throw new UnsupportedOperationException(
                                 "We expected all ordinals to be of specific vector types");

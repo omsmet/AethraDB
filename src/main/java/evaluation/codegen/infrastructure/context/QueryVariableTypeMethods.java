@@ -7,6 +7,8 @@ import org.codehaus.janino.Java;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_DOUBLE_VECTOR;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_FLOAT_VECTOR;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_INT_VECTOR;
+import static evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_INT_VECTOR_W_SELECTION_VECTOR;
+import static evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_INT_VECTOR_W_VALIDITY_MASK;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_LONG_VECTOR;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.MEMORY_SEGMENT_INT;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.P_A_DOUBLE;
@@ -115,6 +117,28 @@ public final class QueryVariableTypeMethods {
     }
 
     /**
+     * Method to get the {@link QueryVariableType} with a selection vector for an arrow vector type.
+     */
+    public static QueryVariableType arrowVectorWithSelectionVectorType(QueryVariableType arrowType) {
+        return switch (arrowType) {
+            case ARROW_INT_VECTOR, ARROW_INT_VECTOR_W_SELECTION_VECTOR -> ARROW_INT_VECTOR_W_SELECTION_VECTOR;
+            default ->
+                    throw new IllegalArgumentException("arrowVectorWithSelectionVectorType cannot handle this type" + arrowType);
+        };
+    }
+
+    /**
+     * Method to get the {@link QueryVariableType} with a validity mask for an arrow vector type.
+     */
+    public static QueryVariableType arrowVectorWithValidityMaskType(QueryVariableType arrowType) {
+        return switch (arrowType) {
+            case ARROW_INT_VECTOR, ARROW_INT_VECTOR_W_VALIDITY_MASK -> ARROW_INT_VECTOR_W_VALIDITY_MASK;
+            default ->
+                    throw new IllegalArgumentException("arrowVectorWithValidityMaskType cannot handle this type" + arrowType);
+        };
+    }
+
+    /**
      * Method to get the key type for a given map type.
      */
     public static QueryVariableType keyTypeForMap(QueryVariableType mapType) {
@@ -164,6 +188,8 @@ public final class QueryVariableTypeMethods {
             case VECTOR_SPECIES_INT -> createReferenceType(location, "jdk.incubator.vector.VectorSpecies", "Integer");
 
             case VECTOR_MASK_INT -> createReferenceType(location, "jdk.incubator.vector.VectorMask", "Integer");
+
+            case VECTOR_INT_MASKED -> createReferenceType(location, "jdk.incubator.vector.IntVector");
 
             case MAP_INT_LONG_SIMPLE -> createReferenceType(location, "evaluation.general_support.hashmaps.Simple_Int_Long_Map");
 
