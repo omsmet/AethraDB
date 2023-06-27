@@ -49,6 +49,17 @@ public class JaninoOperatorGen {
     }
 
     /**
+     * Generate a modulo operator.
+     * @param location The location at which the operator is requested for generation.
+     * @param lhs The left-hand side of the modulo.
+     * @param rhs The right-hand side of the modulo.
+     * @return The generated modulo operator.
+     */
+    public static Java.BinaryOperation mod(Location location, Java.Rvalue lhs, Java.Rvalue rhs) {
+        return new Java.BinaryOperation(location, lhs, "%", rhs);
+    }
+
+    /**
      * Generate a post-increment operator statement.
      * @param location The location at which the operator is requested for generation.
      * @param var The variable to increment.

@@ -11,6 +11,7 @@ public class Simple_Int_Long_Map {
 
     /**
      * The initial capacity with which maps of this type are created.
+     * Needs to be power of two, since we need the hash-table length to be a power of 2.
      */
     private static final int INITIAL_CAPACITY = 4;
 
@@ -31,6 +32,7 @@ public class Simple_Int_Long_Map {
 
     /**
      * The table mapping a hash value to an index in the {@code keys} and {@code values} arrays.
+     * The length of this table needs to be a power of 2 for efficient hashing.
      */
     private int[] hashTable;
 
@@ -56,9 +58,12 @@ public class Simple_Int_Long_Map {
 
     /**
      * Creates an empty {@link Simple_Int_Long_Map} instance.
-     * @param capacity The capacity to create the map with.
+     * @param capacity The capacity to create the map with. (Needs to be a power of 2)
      */
     public Simple_Int_Long_Map(int capacity) {
+        if (capacity % 2 != 0)
+            throw new IllegalArgumentException("Simple_Int_Long_Map requires its capacity to be a power of 2");
+
         this.numberOfRecords = 0;
 
         this.keys = new int[capacity];
@@ -66,7 +71,7 @@ public class Simple_Int_Long_Map {
 
         this.values = new long[capacity];
 
-        this.hashTable = new int[capacity + capacity >> 1]; // Initialise at slightly larger size to prevent collisions
+        this.hashTable = new int[capacity]; // Hash-table since needs to be a power of two for efficient hashing
         Arrays.fill(this.hashTable, -1); // Mark unused entries
 
         this.next = new int[capacity];
@@ -76,11 +81,11 @@ public class Simple_Int_Long_Map {
     /**
      * Method for computing the hash of an integer key from its pre-hash.
      * @param preHash The pre-hash value for which to compute the hash value.
-     * @param hashLength The length that the hash can use (so that it indexes the entries array)
      * @return The value {@code preHash mod hashLength}.
      */
-    private int hash(long preHash, int hashLength) {
-        return (int) (preHash % hashLength);
+    private int hash(long preHash) {
+        // Hash-table length is a power of two --> Allows optimisation of modulo operator into binary and
+        return (int) (preHash & (this.hashTable.length - 1));
     }
 
     /**
@@ -126,7 +131,7 @@ public class Simple_Int_Long_Map {
      * @param rehashOnCollision Whether to rebuild the hash-table into a larger table on a collision.
      */
     private void putHashEntry(int key, long preHash, int index, boolean rehashOnCollision) {
-        int hashTableIndex = hash(preHash, this.hashTable.length);
+        int hashTableIndex = hash(preHash);
         int initialIndex = hashTable[hashTableIndex];
 
         if (initialIndex == -1) { // Hash-table entry is still free, so simply store
@@ -220,7 +225,7 @@ public class Simple_Int_Long_Map {
      * @return The index into {@code keys} and {@code values} if the key exists in the map, -1 otherwise.
      */
     private int find(int key, long preHash) {
-        int hashTableIndex = hash(preHash, hashTable.length);
+        int hashTableIndex = hash(preHash);
         int initialIndex = hashTable[hashTableIndex];
 
         if (initialIndex == -1)  // No hash-table entry implies the key is certainly not in the map.
@@ -268,11 +273,12 @@ public class Simple_Int_Long_Map {
      */
     private void rehash() {
         // Compute the new hash-table size as the smallest power of 2 which is greater than this.numberOfRecords
+        // This satisfies the requirement that the hash-table size is a power of two
         int size = this.hashTable.length;
         while (size <= this.numberOfRecords)
             size <<= 1;
 
-        // Add some additional size to prevent collisions
+        // Add some additional size to prevent collisions (multiply by two to keep the hash-table size a power of two)
         size <<= 1;
 
         // Create the new hashTable and reset the next array

@@ -44,6 +44,8 @@ public enum QueryVariableType {
 
     VECTOR_INT_MASKED,
 
+    VECTOR_LONG,
+
     // Memory segment types
     MEMORY_SEGMENT_INT,
 

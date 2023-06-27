@@ -18,6 +18,7 @@ import org.openjdk.jmh.annotations.Param;
 import org.openjdk.jmh.annotations.Scope;
 import org.openjdk.jmh.annotations.Setup;
 import org.openjdk.jmh.annotations.State;
+import org.openjdk.jmh.annotations.TearDown;
 import util.arrow.ArrowDatabase;
 
 import java.io.IOException;
@@ -41,6 +42,7 @@ public class VectorisedSimd_No_Verification {
     @Param({
             "/nvtmp/AethraTestData/aggregation_query_int/arrow_size_31457280_keys_1",
             "/nvtmp/AethraTestData/aggregation_query_int/arrow_size_31457280_keys_2",
+            "/nvtmp/AethraTestData/aggregation_query_int/arrow_size_31457280_keys_4",
             "/nvtmp/AethraTestData/aggregation_query_int/arrow_size_31457280_keys_8",
             "/nvtmp/AethraTestData/aggregation_query_int/arrow_size_31457280_keys_16",
             "/nvtmp/AethraTestData/aggregation_query_int/arrow_size_31457280_keys_32",
@@ -117,7 +119,7 @@ public class VectorisedSimd_No_Verification {
         CodeGenOperator<RelNode> blackHoleQueryConsumingOperator = new BlackHoleGeneratorOperator(plannedQuery, queryRootOperator);
         QueryCodeGenerator queryCodeGenerator = new QueryCodeGenerator(blackHoleQueryConsumingOperator, true);
         this.generatedQuery = queryCodeGenerator.generateQuery(true);
-        this.generatedQueryCCtx = this.generatedQuery.getCCtcx();
+        this.generatedQueryCCtx = this.generatedQuery.getCCtx();
     }
 
     /**
@@ -131,6 +133,15 @@ public class VectorisedSimd_No_Verification {
     }
 
     /**
+     * This method cleans up after the previous benchmark.
+     */
+    @TearDown(Level.Invocation)
+    public void teardown() {
+        // Have the allocation manager perform the required maintenance
+        generatedQueryCCtx.getAllocationManager().performMaintenance();
+    }
+
+    /**
      * This method performs the actual execution of the query for benchmarking.
      */
     @Benchmark
@@ -141,9 +152,10 @@ public class VectorisedSimd_No_Verification {
             "--add-opens=java.base/java.nio=ALL-UNNAMED",
             "-Darrow.enable_unsafe_memory_access=true",
             "-Darrow.enable_null_check_for_get=false",
-            "--enable-preview"
+            "--enable-preview",
+            "--enable-native-access=ALL-UNNAMED"
     })
-    public void executeFilterQuery() throws IOException {
+    public void executeQuery() throws IOException {
         this.generatedQuery.execute();
     }
 

@@ -102,7 +102,8 @@ public class AethraDB {
         // Execute the generated query
         System.out.println("[Query result]");
         generatedQuery.execute();
-        generatedQuery.getCCtcx().close();
+        generatedQuery.getCCtx().close();
+        // We do not perform maintenance on the allocation manager in the cCtx of the query as we only execute a single query
     }
 
     /**

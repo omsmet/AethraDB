@@ -12,6 +12,7 @@ import evaluation.codegen.infrastructure.context.access_path.ArrowVectorWithVali
 import evaluation.codegen.infrastructure.context.access_path.IndexedMapAccessPath;
 import evaluation.codegen.infrastructure.context.access_path.MapAccessPath;
 import evaluation.codegen.infrastructure.context.access_path.SIMDLoopAccessPath;
+import evaluation.codegen.infrastructure.context.access_path.SIMDVectorVariableAccessPath;
 import evaluation.codegen.infrastructure.context.access_path.ScalarVariableAccessPath;
 import org.apache.calcite.rel.core.AggregateCall;
 import org.apache.calcite.rel.logical.LogicalAggregate;
@@ -31,18 +32,28 @@ import static evaluation.codegen.infrastructure.context.QueryVariableType.P_A_IN
 import static evaluation.codegen.infrastructure.context.QueryVariableType.P_A_LONG;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.P_INT;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.P_LONG;
+import static evaluation.codegen.infrastructure.context.QueryVariableType.VECTOR_LONG;
 import static evaluation.codegen.infrastructure.context.QueryVariableTypeMethods.primitiveType;
 import static evaluation.codegen.infrastructure.context.QueryVariableTypeMethods.toJavaType;
 import static evaluation.codegen.infrastructure.context.QueryVariableTypeMethods.valueTypeForMap;
-import static evaluation.codegen.infrastructure.janino.JaninoClassGen.createClassInstance;
+import static evaluation.codegen.infrastructure.janino.JaninoControlGen.createForLoop;
+import static evaluation.codegen.infrastructure.janino.JaninoControlGen.createIfNotContinue;
 import static evaluation.codegen.infrastructure.janino.JaninoControlGen.createWhileLoop;
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createAmbiguousNameRef;
+import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createArrayElementAccessExpr;
+import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createCast;
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createIntegerLiteral;
+import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createPrimitiveArrayType;
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createReferenceType;
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.getLocation;
 import static evaluation.codegen.infrastructure.janino.JaninoMethodGen.createBlock;
 import static evaluation.codegen.infrastructure.janino.JaninoMethodGen.createMethodInvocation;
 import static evaluation.codegen.infrastructure.janino.JaninoMethodGen.createMethodInvocationStm;
+import static evaluation.codegen.infrastructure.janino.JaninoOperatorGen.lt;
+import static evaluation.codegen.infrastructure.janino.JaninoOperatorGen.mod;
+import static evaluation.codegen.infrastructure.janino.JaninoOperatorGen.mul;
+import static evaluation.codegen.infrastructure.janino.JaninoOperatorGen.plus;
+import static evaluation.codegen.infrastructure.janino.JaninoOperatorGen.postIncrement;
 import static evaluation.codegen.infrastructure.janino.JaninoOperatorGen.postIncrementStm;
 import static evaluation.codegen.infrastructure.janino.JaninoVariableGen.createLocalVariable;
 import static evaluation.codegen.infrastructure.janino.JaninoVariableGen.createPrimitiveLocalVar;
@@ -85,19 +96,29 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
         public final Java.ArrayInitializerOrRvalue[] variableInitialisationStatements;
 
         /**
+         * Array indicating whether the variable in the aggregation state needs to be released via
+         * the allocation manager at the end of the query.
+         */
+        public final boolean[] variableNeedsRelease;
+
+        /**
          * Creates a new {@link AggregationStateMapping} instance for a single variable.
          * @param variableName The name of the aggregation state variable.
          * @param variableType The type of the aggregation state variable.
          * @param initialiser The statement to initialise the aggregation state variable.
+         * @param needsRelease Whether the aggregation state variable needs to be released via the
+         *                     allocation manager at the end of the query.
          */
         public AggregationStateMapping(
                 String variableName,
                 QueryVariableType variableType,
-                Java.ArrayInitializerOrRvalue initialiser)
+                Java.ArrayInitializerOrRvalue initialiser,
+                boolean needsRelease)
         {
             this.variableNames = new String[] { variableName };
             this.variableTypes = new QueryVariableType[] { variableType };
             this.variableInitialisationStatements = new Java.ArrayInitializerOrRvalue[] { initialiser };
+            this.variableNeedsRelease = new boolean[] { needsRelease };
         }
 
         /**
@@ -105,15 +126,19 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
          * @param variableNames The names of the aggregation state variables.
          * @param variableTypes The types of the aggregation state variables.
          * @param initialisers The statements to initialise each aggregation state variable.
+         * @param needsRelease Whether each of the aggregation state variables needs to be released
+         *                     via the allocation manager at the end of the query.
          */
         public AggregationStateMapping(
                 String[] variableNames,
                 QueryVariableType[] variableTypes,
-                Java.ArrayInitializerOrRvalue[] initialisers)
+                Java.ArrayInitializerOrRvalue[] initialisers,
+                boolean[] needsRelease)
         {
             this.variableNames = variableNames;
-            this.variableTypes = new QueryVariableType[this.variableNames.length];
-            this.variableInitialisationStatements = new Java.ArrayInitializerOrRvalue[this.variableNames.length];
+            this.variableTypes = variableTypes;
+            this.variableInitialisationStatements = initialisers;
+            this.variableNeedsRelease = needsRelease;
         }
     }
 
@@ -330,77 +355,76 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
             );
 
             // Generate the value exposure within the whileLoopBody and update the ordinal mapping
-            // based on whether SIMD is enabled
+            // Currently, this operator only supports exposing the result in a non-SIMD fashion.
+            // TODO: consider SIMD-compatible result exposure when required.
+
             // Property: group-by aggregates first expose the group key and then the aggregate results
             List<AccessPath> newOrdinalMapping = new ArrayList<>(this.aggregationFunctions.length + 1);
             int currentOrdinalIndex = 0;
 
-            if (!this.simdEnabled) {
-                // Simply expose each record as a set of scalar variables
+            // Simply expose each record as a set of scalar variables
+            // First expose the group-by key values
+            // int [groupKey] = [groupKeyIterator].next();
+            ScalarVariableAccessPath groupKeyAP = new ScalarVariableAccessPath(
+                    cCtx.defineVariable("groupKey"), P_INT);
+            whileLoopBody.addStatement(
+                    createLocalVariable(
+                            getLocation(),
+                            toJavaType(getLocation(), groupKeyAP.getType()),
+                            groupKeyAP.getVariableName(),
+                            createMethodInvocation(
+                                    getLocation(),
+                                    createAmbiguousNameRef(getLocation(), groupKeyIteratorName),
+                                    "next"
+                            )
+                    )
+            );
+            newOrdinalMapping.add(currentOrdinalIndex++, groupKeyAP);
 
-                // First expose the group-by key values
-                // int [groupKey] = [groupKeyIterator].next();
-                ScalarVariableAccessPath groupKeyAP = new ScalarVariableAccessPath(
-                        cCtx.defineVariable("groupKey"), P_INT);
-                whileLoopBody.addStatement(
-                        createLocalVariable(
-                                getLocation(),
-                                toJavaType(getLocation(), groupKeyAP.getType()),
-                                groupKeyAP.getVariableName(),
-                                createMethodInvocation(
-                                        getLocation(),
-                                        createAmbiguousNameRef(getLocation(), groupKeyIteratorName),
-                                        "next"
-                                )
-                        )
-                );
-                newOrdinalMapping.add(currentOrdinalIndex++, groupKeyAP);
+            // Do the pre-hash computation
+            // long [groupKey]PreHash = Int_Hash_Function.preHash([groupKey]);
+            ScalarVariableAccessPath groupKeyPreHashAP = new ScalarVariableAccessPath(
+                    cCtx.defineVariable(groupKeyAP.getVariableName() + "PreHash"),
+                    P_LONG
+            );
+            whileLoopBody.addStatement(
+                    createLocalVariable(
+                            getLocation(),
+                            toJavaType(getLocation(), groupKeyPreHashAP.getType()),
+                            groupKeyPreHashAP.getVariableName(),
+                            createMethodInvocation(
+                                    getLocation(),
+                                    createAmbiguousNameRef(getLocation(), "Int_Hash_Function"),
+                                    "preHash",
+                                    new Java.Rvalue[] { groupKeyAP.read() }
+                            )
+                    ));
 
-                // Do the pre-hash computation
-                // long [groupKey]PreHash = Int_Hash_Function.preHash([groupKey]);
-                ScalarVariableAccessPath groupKeyPreHashAP = new ScalarVariableAccessPath(
-                        cCtx.defineVariable(groupKeyAP.getVariableName() + "PreHash"),
-                        P_LONG
-                );
-                whileLoopBody.addStatement(
-                        createLocalVariable(
-                                getLocation(),
-                                toJavaType(getLocation(), groupKeyPreHashAP.getType()),
-                                groupKeyPreHashAP.getVariableName(),
-                                createMethodInvocation(
-                                        getLocation(),
-                                        createAmbiguousNameRef(getLocation(), "Int_Hash_Function"),
-                                        "preHash",
-                                        new Java.Rvalue[] { groupKeyAP.read() }
-                                )
-                        ));
+            // Then expose the aggregate results per aggregation function
+            for (int i = 0; i < this.aggregationFunctions.length; i++) {
+                AggregationFunction currentFunction = this.aggregationFunctions[i];
 
-                // Then expose the aggregate results per aggregation function
-                for (int i = 0; i < this.aggregationFunctions.length; i++) {
-                    AggregationFunction currentFunction = this.aggregationFunctions[i];
+                if (currentFunction == AggregationFunction.G_SUM) {
+                    // Simply need to invoke the get method of the correct hash-map using the groupKey
+                    String aggregationMapName = this.aggregationStateMappings.get(i).variableNames[0];
+                    QueryVariableType aggregationMapType = this.aggregationStateMappings.get(i).variableTypes[0];
+                    MapAccessPath aggregationMapAP = new MapAccessPath(aggregationMapName, aggregationMapType);
+                    IndexedMapAccessPath indexedAggregationMapAP =
+                            new IndexedMapAccessPath(aggregationMapAP, groupKeyAP, groupKeyPreHashAP, valueTypeForMap(aggregationMapType));
+                    newOrdinalMapping.add(currentOrdinalIndex++, indexedAggregationMapAP);
 
-                    if (currentFunction == AggregationFunction.G_SUM) {
-                        // Simply need to invoke the get method of the correct hash-map using the groupKey
-                        String aggregationMapName = this.aggregationStateMappings.get(i).variableNames[0];
-                        QueryVariableType aggregationMapType = this.aggregationStateMappings.get(i).variableTypes[0];
-                        MapAccessPath aggregationMapAP = new MapAccessPath(aggregationMapName, aggregationMapType);
-                        IndexedMapAccessPath indexedAggregationMapAP =
-                                new IndexedMapAccessPath(aggregationMapAP, groupKeyAP, groupKeyPreHashAP, valueTypeForMap(aggregationMapType));
-                        newOrdinalMapping.add(currentOrdinalIndex++, indexedAggregationMapAP);
-
-                    }
-
-                    // No other possibilities due to constructor
                 }
 
-                // Have the parent operator consume the result
-                cCtx.setCurrentOrdinalMapping(newOrdinalMapping);
-                whileLoopBody.addStatements(this.nonVecParentConsume(cCtx, oCtx));
-
-            } else { // this.simdEnabled
-                throw new UnsupportedOperationException("TODO: IMPLEMENT"); // TODO: implement
+                // No other possibilities due to constructor
             }
+
+            // Have the parent operator consume the result
+            cCtx.setCurrentOrdinalMapping(newOrdinalMapping);
+            whileLoopBody.addStatements(this.nonVecParentConsume(cCtx, oCtx));
         }
+
+        // Release the aggregation state variables as needed
+        codeGenResult.addAll(this.releaseAggregationStates());
 
         return codeGenResult;
     }
@@ -459,6 +483,8 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
             // Idea: first perform the hashing of the key-column, then perform the hash map maintenance
             AccessPath keyColumnAccessPath;
             AccessPath keyColumnPreHashAccessPath;
+            Java.Rvalue[] aggregationValues = new Java.Rvalue[this.aggregationFunctions.length];
+            Java.Block hashMapMaintenanceTarget;
 
             if (this.groupByKeyColumnPrimitiveScalarType == P_INT) {
 
@@ -484,8 +510,257 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
                                     )
                             ));
 
+                    // Also obtain the values to insert into the hash-map later on
+                    for (int i = 0; i < this.aggregationFunctions.length; i++) {
+                        AggregationFunction currentFunction = this.aggregationFunctions[i];
+
+                        if (currentFunction == AggregationFunction.G_SUM) {
+                            aggregationValues[i] = this.getRValueFromAccessPathNonVec(cCtx, this.aggregationFunctionInputOrdinals[i][0], codeGenResult);
+                        }
+
+                        // No other possibilities due to the constructor
+
+                    }
+
+                    // Set the correct hashMapMaintenanceTarget
+                    hashMapMaintenanceTarget = createBlock(getLocation());
+                    codeGenResult.add(hashMapMaintenanceTarget);
+
                 } else { // this.simdEnabled
-                    throw new UnsupportedOperationException("TODO: IMPLEMENT"); // TODO: IMPLEMENT
+
+                    // Handling depends on the ordinal type that we receive
+                    keyColumnAccessPath = cCtx.getCurrentOrdinalMapping().get(this.groupByKeyColumnIndex);
+                    if (keyColumnAccessPath instanceof SIMDLoopAccessPath kcap_slap) {
+                        // Initialise the integer SIMD key vector
+                        // IntVector [SIMD_Key_Vector_Int] = IntVector.fromSegment(
+                        //      [kcap_slap.readVectorSpecies()],
+                        //      [kcap_slap.readMemorySegment()],
+                        //      [kcap_slap.readArrowVectorOffset()] * [kcap_slap.readArrowVector().TYPE_WIDTH],
+                        //      java.nio.ByteOrder.LITTLE_ENDIAN,
+                        //      [kcap_slap.readSIMDMask()]
+                        // );
+                        String SIMDIntKeyVectorName = cCtx.defineVariable("SIMD_Key_Vector_Int");
+                        codeGenResult.add(
+                                createLocalVariable(
+                                        getLocation(),
+                                        toJavaType(getLocation(), kcap_slap.getType()),
+                                        SIMDIntKeyVectorName,
+                                        createMethodInvocation(
+                                                getLocation(),
+                                                createAmbiguousNameRef(getLocation(), "oCtx"),
+                                                "createIntVector",
+                                                new Java.Rvalue[] {
+                                                        kcap_slap.readVectorSpecies(),
+                                                        kcap_slap.readMemorySegment(),
+                                                        mul(
+                                                                getLocation(),
+                                                                kcap_slap.readArrowVectorOffset(),
+                                                                createAmbiguousNameRef(
+                                                                        getLocation(),
+                                                                        kcap_slap.getArrowVectorAccessPath().getVariableName() + ".TYPE_WIDTH"
+                                                                )
+                                                        ),
+                                                        createAmbiguousNameRef(getLocation(), "java.nio.ByteOrder.LITTLE_ENDIAN"),
+                                                        kcap_slap.readSIMDMask()
+                                                }
+                                        )
+                                )
+                        );
+
+                        // Cast the SIMD int key vector to a SIMD long key vector
+                        String SIMDLongKeyVectorName = cCtx.defineVariable("SIMD_Key_Vector_Long");
+                        // TODO: consider replacing getVectorSpeciesLong() with an allocated variable.
+                        // LongVector [SIMD_Key_Vector_Long] = (LongVector) [SIMD_Key_Vector_Int].castShape([oCtx.getVectorSpeciesLong()], 0);
+                        codeGenResult.add(
+                                createLocalVariable(
+                                        getLocation(),
+                                        createReferenceType(getLocation(), "jdk.incubator.vector.LongVector"),
+                                        SIMDLongKeyVectorName,
+                                        createCast(
+                                                getLocation(),
+                                                createReferenceType(getLocation(), "jdk.incubator.vector.LongVector"),
+                                                createMethodInvocation(
+                                                        getLocation(),
+                                                        createAmbiguousNameRef(getLocation(), SIMDIntKeyVectorName),
+                                                        "castShape",
+                                                        new Java.Rvalue[] {
+                                                                createMethodInvocation(
+                                                                        getLocation(),
+                                                                        createAmbiguousNameRef(getLocation(), "oCtx"),
+                                                                        "getVectorSpeciesLong"
+                                                                ),
+                                                                createIntegerLiteral(getLocation(), 0)
+                                                        }
+                                                )
+                                        )
+                                )
+                        );
+
+                        // Compute the a * key part of the pre-hashing
+                        // LongVector [SIMD_a_mul_key_vector] = [SIMD_Key_Vector_Long].mul(Int_Hash_Function.hashConstantA);
+                        String SIMDAMulKeyVectorName = cCtx.defineVariable("SIMD_a_mul_key_vector");
+                        codeGenResult.add(
+                                createLocalVariable(
+                                        getLocation(),
+                                        createReferenceType(getLocation(), "jdk.incubator.vector.LongVector"),
+                                        SIMDAMulKeyVectorName,
+                                        createMethodInvocation(
+                                                getLocation(),
+                                                createAmbiguousNameRef(getLocation(), SIMDLongKeyVectorName),
+                                                "mul",
+                                                new Java.Rvalue[] {
+                                                        createAmbiguousNameRef(getLocation(), "Int_Hash_Function.hashConstantA")
+                                                }
+                                        )
+                                )
+                        );
+
+                        // Compute the a * key + b part of the pre-hashing
+                        // LongVector [SIMD_a_mul_key_plus_b_vector] = [SIMD_a_mul_key_vector].add(Int_Hash_Function.hashConstantB);
+                        String SIMDAMulKeyPlusBVectorName = cCtx.defineVariable("SIMD_a_mul_key_plus_b_vector");
+                        codeGenResult.add(
+                                createLocalVariable(
+                                        getLocation(),
+                                        createReferenceType(getLocation(), "jdk.incubator.vector.LongVector"),
+                                        SIMDAMulKeyPlusBVectorName,
+                                        createMethodInvocation(
+                                                getLocation(),
+                                                createAmbiguousNameRef(getLocation(), SIMDAMulKeyVectorName),
+                                                "add",
+                                                new Java.Rvalue[] {
+                                                        createAmbiguousNameRef(getLocation(), "Int_Hash_Function.hashConstantB")
+                                                }
+                                        )
+                                )
+                        );
+
+                        // Still need to take the final computed value mod p which is done below during flattening
+                        keyColumnPreHashAccessPath = new SIMDVectorVariableAccessPath(SIMDAMulKeyPlusBVectorName, VECTOR_LONG);
+
+                        // Flatten the SIMD processing using a for-loop
+                        // Get the pre-hash values as an array
+                        // long[] pre_hash_values = [keyColumnPreHashAccessPath].toLongArray();
+                        String preHashValuesName = cCtx.defineVariable("pre_hash_values");
+                        codeGenResult.add(
+                                createLocalVariable(
+                                        getLocation(),
+                                        createPrimitiveArrayType(getLocation(), Java.Primitive.LONG),
+                                        preHashValuesName,
+                                        createMethodInvocation(
+                                                getLocation(),
+                                                ((SIMDVectorVariableAccessPath) keyColumnPreHashAccessPath).read(),
+                                                "toLongArray"
+                                        )
+                                )
+                        );
+
+                        // for (int [simd_vector_i] = 0; [simd_vector_i] < [kcap_slap.readSIMDVectorLengthVariable()]; [simd_vector_i]++) { [simdForLoopBody] }
+                        String simdVectorIName = cCtx.defineVariable("simd_vector_i");
+                        ScalarVariableAccessPath simdVectorIAp = new ScalarVariableAccessPath(simdVectorIName, P_INT);
+                        Java.Block simdForLoopBody = createBlock(getLocation());
+                        codeGenResult.add(
+                                createForLoop(
+                                        getLocation(),
+                                        createPrimitiveLocalVar(
+                                                getLocation(),
+                                                Java.Primitive.INT,
+                                                simdVectorIAp.getVariableName(),
+                                                "0"
+                                        ),
+                                        lt(getLocation(), simdVectorIAp.read(), kcap_slap.readSIMDVectorLengthVariable()),
+                                        postIncrement(getLocation(), simdVectorIAp.write()),
+                                        simdForLoopBody
+                                )
+                        );
+
+                        // Check if the current vector element is valid
+                        // if (! [kcap_slap.readSIMDMask()].laneIsSet([simd_vector_i])) continue;
+                        simdForLoopBody.addStatement(
+                                createIfNotContinue(
+                                        getLocation(),
+                                        createMethodInvocation(
+                                                getLocation(),
+                                                kcap_slap.readSIMDMask(),
+                                                "laneIsSet",
+                                                new Java.Rvalue[] { simdVectorIAp.read() }
+                                        )
+                                )
+                        );
+
+                        // Create a variable for the key value
+                        // int flattened_key = [kcap_slap.readArrowVector()].get([kcap_slap.readArrowVectorOffset()] + [simd_vector_i]);
+                        keyColumnAccessPath = new ScalarVariableAccessPath(cCtx.defineVariable("flattened_key"), P_INT);
+                        simdForLoopBody.addStatement(
+                                createLocalVariable(
+                                        getLocation(),
+                                        toJavaType(getLocation(), keyColumnAccessPath.getType()),
+                                        ((ScalarVariableAccessPath) keyColumnAccessPath).getVariableName(),
+                                        createMethodInvocation(
+                                                getLocation(),
+                                                kcap_slap.readArrowVector(),
+                                                "get",
+                                                new Java.Rvalue[] {
+                                                        plus(getLocation(), kcap_slap.readArrowVectorOffset(), simdVectorIAp.read())
+                                                }
+                                        )
+                                )
+                        );
+
+                        // Create a variable for the pre-hash value
+                        // long pre_hash_value = pre_hash_values[simd_vector_i] % Int_Hash_Function.hashConstantP;
+                        keyColumnPreHashAccessPath = new ScalarVariableAccessPath(cCtx.defineVariable("pre_hash_value"), P_LONG);
+                        simdForLoopBody.addStatement(
+                                createLocalVariable(
+                                        getLocation(),
+                                        toJavaType(getLocation(), keyColumnPreHashAccessPath.getType()),
+                                        ((ScalarVariableAccessPath) keyColumnPreHashAccessPath).getVariableName(),
+                                        mod(
+                                                getLocation(),
+                                                createArrayElementAccessExpr(
+                                                        getLocation(),
+                                                        createAmbiguousNameRef(getLocation(), preHashValuesName),
+                                                        simdVectorIAp.read()
+                                                ),
+                                                createAmbiguousNameRef(getLocation(), "Int_Hash_Function.hashConstantP")
+                                        )
+                                )
+                        );
+
+                        // Also obtain the values to insert into the hash-map later on
+                        for (int i = 0; i < this.aggregationFunctions.length; i++) {
+                            AggregationFunction currentFunction = this.aggregationFunctions[i];
+
+                            if (currentFunction == AggregationFunction.G_SUM) {
+
+                                AccessPath valueAP = cCtx.getCurrentOrdinalMapping().get(this.aggregationFunctionInputOrdinals[i][0]);
+                                if (valueAP instanceof SIMDLoopAccessPath valueAP_slap) {
+                                    // aggregationValues[i] = [valueAP_slap.readArrowVector()].get([valueAP_slap.readArrowVectorOffset()] + [simd_vector_i]);
+                                    aggregationValues[i] = createMethodInvocation(
+                                            getLocation(),
+                                            valueAP_slap.readArrowVector(),
+                                            "get",
+                                            new Java.Rvalue[] {
+                                                    plus(getLocation(), valueAP_slap.readArrowVectorOffset(), simdVectorIAp.read())
+                                            }
+                                    );
+
+                                } else {
+                                    throw new UnsupportedOperationException(
+                                            "AggregationOperator.consumeNonVec does not support this valueAP for SIMD flattening");
+                                }
+                            }
+
+                            // No other possibilities due to the constructor
+
+                        }
+
+                        // And set the correct hashMapMaintenanceTarget
+                        hashMapMaintenanceTarget = simdForLoopBody;
+
+                    } else {
+                        throw new UnsupportedOperationException(
+                                "AggregationOperator.consumeNonVec does not support this access path for SIMD pre-hashing");
+                    }
                 }
 
             } else {
@@ -498,25 +773,20 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
                 AggregationFunction currentFunction = this.aggregationFunctions[i];
 
                 if (currentFunction == AggregationFunction.G_SUM) {
-                    // Handle the update based on whether SIMD is enabled or note
-                    if (!this.simdEnabled) {
-                        // We simply need to invoke the hashmap's "addToKeyOrPutIfNotExist" method for the group-by key and the value
-                        codeGenResult.add(
-                                createMethodInvocationStm(
-                                        getLocation(),
-                                        createAmbiguousNameRef(getLocation(), this.aggregationStateMappings.get(i).variableNames[0]),
-                                        "addToKeyOrPutIfNotExist",
-                                        new Java.Rvalue[]{
-                                                ((ScalarVariableAccessPath) keyColumnAccessPath).read(),        // Group-By Key
-                                                ((ScalarVariableAccessPath) keyColumnPreHashAccessPath).read(), // Group-By Key pre-hash
-                                                this.getRValueFromAccessPathNonVec(cCtx, this.aggregationFunctionInputOrdinals[i][0], codeGenResult) // Value
-                                        }
-                                )
-                        );
-
-                    } else { // this.simdEnabled
-                        throw new UnsupportedOperationException("TODO: IMPLEMENT"); // TODO: IMPLEMENT
-                    }
+                    // In the case of SIMD, the access path will have been flattened, so there is no need to distinguish here anymore
+                    // We simply need to invoke the hashmap's "addToKeyOrPutIfNotExist" method for the group-by key and the value
+                    hashMapMaintenanceTarget.addStatement(
+                            createMethodInvocationStm(
+                                    getLocation(),
+                                    createAmbiguousNameRef(getLocation(), this.aggregationStateMappings.get(i).variableNames[0]),
+                                    "addToKeyOrPutIfNotExist",
+                                    new Java.Rvalue[] {
+                                            ((ScalarVariableAccessPath) keyColumnAccessPath).read(),        // Group-By Key
+                                            ((ScalarVariableAccessPath) keyColumnPreHashAccessPath).read(), // Group-By Key pre-hash
+                                            aggregationValues[i]                                            // Value
+                                    }
+                            )
+                    );
 
                 }
 
@@ -801,6 +1071,7 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
             }
         }
 
+        // Release the groupKeyPreHashVector if needed
         if (this.groupKeyPreHashVector != null) {
             // cCtx.getAllocationManager.release([this.groupKeyPreHashVectorread()]);
             codeGenResult.add(
@@ -811,6 +1082,9 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
                             new Java.Rvalue[]{this.groupKeyPreHashVector.read()}
                     ));
         }
+
+        // Release the aggregation state variables as needed
+        codeGenResult.addAll(this.releaseAggregationStates());
 
         return codeGenResult;
     }
@@ -991,7 +1265,8 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
                     this.aggregationStateMappings.add(i, new AggregationStateMapping(
                             cCtx.defineVariable("agg_" + i + "_count"),
                             P_INT,
-                            createIntegerLiteral(getLocation(), 0)
+                            createIntegerLiteral(getLocation(), 0),
+                            false // primitive variables need no release
                     ));
                 }
                 case G_SUM -> {
@@ -999,10 +1274,21 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
                             primitiveType(om.get(this.aggregationFunctionInputOrdinals[i][0]).getType());
                     if (groupByKeyColumnPrimitiveScalarType == P_INT && valueType == P_INT) {
                         // Key is of type int, and we upgrade the value type to long --> use Int_Long map
+                        // We need to obtain the map from the allocation manager
                         this.aggregationStateMappings.add(i, new AggregationStateMapping(
                                 cCtx.defineVariable("agg_" + i + "_sum_map"),
                                 MAP_INT_LONG_SIMPLE,
-                                createClassInstance(getLocation(), toJavaType(getLocation(), MAP_INT_LONG_SIMPLE))
+                                // cCtx.getAllocationManager().getSimpleIntLongMap();
+                                createMethodInvocation(
+                                        getLocation(),
+                                        createMethodInvocation(
+                                                getLocation(),
+                                                createAmbiguousNameRef(getLocation(), "cCtx"),
+                                                "getAllocationManager"
+                                        ),
+                                        "getSimpleIntLongMap"
+                                ),
+                                true // mark this variable for release using the allocation manager, as we obtained it from there
                         ));
 
                     } else {
@@ -1034,6 +1320,39 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
                                 currentMapping.variableInitialisationStatements[i]
                         )
                 );
+            }
+        }
+
+        return codeGenResult;
+    }
+
+    /**
+     * Method to release the aggregation state variables at the end of the query as configured in
+     * {@code this.aggregationStateMappings}.
+     */
+    private List<Java.Statement> releaseAggregationStates() {
+        List<Java.Statement> codeGenResult = new ArrayList<>();
+
+        // Release all required state variables via the allocation manager if configured to do so
+        for (AggregationStateMapping currentMapping : this.aggregationStateMappings) {
+            for (int i = 0; i < currentMapping.variableNames.length; i++) {
+                if (currentMapping.variableNeedsRelease[i]) {
+                    codeGenResult.add(
+                            // cCtx.getAllocationManager().release(currentMapping.variableNames[i]);
+                            createMethodInvocationStm(
+                                    getLocation(),
+                                    createMethodInvocation(
+                                            getLocation(),
+                                            createAmbiguousNameRef(getLocation(), "cCtx"),
+                                            "getAllocationManager"
+                                    ),
+                                    "release",
+                                    new Java.Rvalue[] {
+                                            createAmbiguousNameRef(getLocation(), currentMapping.variableNames[i])
+                                    }
+                            )
+                    );
+                }
             }
         }
 

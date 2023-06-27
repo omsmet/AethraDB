@@ -1,5 +1,6 @@
 package evaluation.codegen.infrastructure.data;
 
+import evaluation.general_support.hashmaps.Simple_Int_Long_Map;
 import evaluation.vector_support.VectorisedOperators;
 
 /**
@@ -12,6 +13,11 @@ public class DirectAllocationManager extends AllocationManager {
      */
     public DirectAllocationManager() {
         super();
+    }
+
+    @Override
+    public void performMaintenance() {
+        // Do nothing since we do not keep track of instances which have been allocated
     }
 
     @Override
@@ -44,6 +50,17 @@ public class DirectAllocationManager extends AllocationManager {
     @Override
     public void release(boolean[] vector) {
         // Do nothing since we do not keep track of vectors which are in circulation.
+    }
+
+    @Override
+    public Simple_Int_Long_Map getSimpleIntLongMap() {
+        // Simply return a new map
+        return new Simple_Int_Long_Map();
+    }
+
+    @Override
+    public void release(Simple_Int_Long_Map map) {
+        // Do nothing since we do not keep track of Simple_Int_Long_Maps which are in circulation.
     }
 
 }

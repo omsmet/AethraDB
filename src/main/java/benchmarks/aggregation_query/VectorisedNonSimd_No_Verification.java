@@ -18,6 +18,7 @@ import org.openjdk.jmh.annotations.Param;
 import org.openjdk.jmh.annotations.Scope;
 import org.openjdk.jmh.annotations.Setup;
 import org.openjdk.jmh.annotations.State;
+import org.openjdk.jmh.annotations.TearDown;
 import util.arrow.ArrowDatabase;
 
 import java.io.IOException;
@@ -41,6 +42,7 @@ public class VectorisedNonSimd_No_Verification {
     @Param({
             "/nvtmp/AethraTestData/aggregation_query_int/arrow_size_31457280_keys_1",
             "/nvtmp/AethraTestData/aggregation_query_int/arrow_size_31457280_keys_2",
+            "/nvtmp/AethraTestData/aggregation_query_int/arrow_size_31457280_keys_4",
             "/nvtmp/AethraTestData/aggregation_query_int/arrow_size_31457280_keys_8",
             "/nvtmp/AethraTestData/aggregation_query_int/arrow_size_31457280_keys_16",
             "/nvtmp/AethraTestData/aggregation_query_int/arrow_size_31457280_keys_32",
@@ -117,7 +119,7 @@ public class VectorisedNonSimd_No_Verification {
         CodeGenOperator<RelNode> blackHoleQueryConsumingOperator = new BlackHoleGeneratorOperator(plannedQuery, queryRootOperator);
         QueryCodeGenerator queryCodeGenerator = new QueryCodeGenerator(blackHoleQueryConsumingOperator, true);
         this.generatedQuery = queryCodeGenerator.generateQuery(true);
-        this.generatedQueryCCtx = this.generatedQuery.getCCtcx();
+        this.generatedQueryCCtx = this.generatedQuery.getCCtx();
     }
 
     /**
@@ -128,6 +130,15 @@ public class VectorisedNonSimd_No_Verification {
         // Refresh the arrow reader of the query for the next iteration
         for (ArrowTableReader atr : this.generatedQueryCCtx.getArrowReaders())
             atr.reset();
+    }
+
+    /**
+     * This method cleans up after the previous benchmark.
+     */
+    @TearDown(Level.Invocation)
+    public void teardown() {
+        // Have the allocation manager perform the required maintenance
+        generatedQueryCCtx.getAllocationManager().performMaintenance();
     }
 
     /**
@@ -143,7 +154,7 @@ public class VectorisedNonSimd_No_Verification {
             "-Darrow.enable_null_check_for_get=false",
             "--enable-preview"
     })
-    public void executeFilterQuery() throws IOException {
+    public void executeQuery() throws IOException {
         this.generatedQuery.execute();
     }
 

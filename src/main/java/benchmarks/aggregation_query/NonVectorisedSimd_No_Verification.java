@@ -33,7 +33,7 @@ import java.util.concurrent.TimeUnit;
  * each result array.
  */
 @State(Scope.Benchmark)
-public class NonVectorisedNonSimd_No_Verification {
+public class NonVectorisedSimd_No_Verification {
 
     /**
      * We want to test the query processing performance for different table instances, where different
@@ -113,7 +113,7 @@ public class NonVectorisedNonSimd_No_Verification {
 
         // Generate code operator tree for the query
         QueryTranslator queryTranslator = new QueryTranslator();
-        CodeGenOperator<?> queryRootOperator = queryTranslator.translate(plannedQuery, false);
+        CodeGenOperator<?> queryRootOperator = queryTranslator.translate(plannedQuery, true);
 
         // Construct the blackhole operator and generate the code
         CodeGenOperator<RelNode> blackHoleQueryConsumingOperator = new BlackHoleGeneratorOperator(plannedQuery, queryRootOperator);

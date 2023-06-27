@@ -102,7 +102,7 @@ public class NonVectorisedSimd extends ResultConsumptionTarget {
         CodeGenOperator<RelNode> queryResultConsumptionOperator = new ResultConsumptionOperator(plannedQuery, queryRootOperator);
         QueryCodeGenerator queryCodeGenerator = new QueryCodeGenerator(queryResultConsumptionOperator, false);
         this.generatedQuery = queryCodeGenerator.generateQuery(true);
-        this.generatedQueryCCtx = this.generatedQuery.getCCtcx();
+        this.generatedQueryCCtx = this.generatedQuery.getCCtx();
         this.generatedQueryCCtx.setResultConsumptionTarget(this);
 
         // Initialise the result
@@ -120,13 +120,16 @@ public class NonVectorisedSimd extends ResultConsumptionTarget {
     }
 
     /**
-     * This method verifies successful completion of the previous benchmark
+     * This method verifies successful completion of the previous benchmark and cleans up after it.
      */
     @TearDown(Level.Invocation)
     public void teardown() {
         if (result != 603769)
             throw new RuntimeException("The computed result is incorrect");
         result = -1; // reset the result after verifying it
+
+        // Have the allocation manager perform the required maintenance
+        generatedQueryCCtx.getAllocationManager().performMaintenance();
     }
 
     /**

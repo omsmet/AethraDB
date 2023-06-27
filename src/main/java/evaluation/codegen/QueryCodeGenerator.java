@@ -100,6 +100,8 @@ public class QueryCodeGenerator extends SimpleCompiler {
                 "evaluation.vector_support.VectorisedFilterOperators",
                 "evaluation.vector_support.VectorisedOperators",
                 "evaluation.vector_support.VectorisedPrintOperators",
+
+                "java.lang.foreign.MemorySegment",
         };
 
         // Initialise the compiler, so it will allow us to generate a class which extends

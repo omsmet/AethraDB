@@ -1,6 +1,7 @@
 package benchmarks.aggregation_query;
 
-import benchmarks.util.BlackHoleGeneratorOperator;
+import benchmarks.util.ResultConsumptionOperator;
+import benchmarks.util.ResultConsumptionTarget;
 import evaluation.codegen.GeneratedQuery;
 import evaluation.codegen.QueryCodeGenerator;
 import evaluation.codegen.infrastructure.context.CodeGenContext;
@@ -23,17 +24,15 @@ import util.arrow.ArrowDatabase;
 
 import java.io.IOException;
 import java.util.concurrent.TimeUnit;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * This microbenchmark evaluates the query processing performance of AethraDB using its non-vectorised
- * query code generation without SIMD-ed operators. This benchmark does not consume results (and hence
- * cannot verify them) to isolate the query and thus remove the result copying time from the running-time.
- *
- * However, to ensure that the query result is actually computed, we generate a blackhole consuming
- * each result array.
+ * query code generation without SIMD-ed operators.
  */
 @State(Scope.Benchmark)
-public class NonVectorisedNonSimd_No_Verification {
+public class NonVectorisedSimd extends ResultConsumptionTarget {
 
     /**
      * We want to test the query processing performance for different table instances, where different
@@ -101,6 +100,63 @@ public class NonVectorisedNonSimd_No_Verification {
     private CodeGenContext generatedQueryCCtx;
 
     /**
+     * State: the partial result of the query (null if the query has not been executed yet).
+     */
+    private int[] keyResult;
+
+    /**
+     * State: the partial result of the query (null if the query has not been executed yet).
+     */
+    private long[] col2SumResult;
+
+    /**
+     * State: the partial result of the query (null if the query has not been executed yet).
+     */
+    private long[] col3SumResult;
+
+    /**
+     * State: the partial result of the query (null if the query has not been executed yet).
+     */
+    private long[] col4SumResult;
+
+    /**
+     * State: counter which keeps track of the amount of times that {@code consumeResultItem} has
+     * been called during this query so that the value is written to the correct result array.
+     */
+    private int consumeResultItemCounter;
+
+    /**
+     * State: the {@link ResultVerifier} that will be used to check the result of the query.
+     */
+    private ResultVerifier resultVerifier;
+
+    /**
+     * Method to consume the (partial) query result and store it in the appropriate result array.
+     * @param value The value to be consumed.
+     */
+    @Override
+    public void consumeResultItem(int[] value) {
+        if (consumeResultItemCounter == 0)
+            this.keyResult = value;
+        consumeResultItemCounter++;
+    }
+
+    /**
+     * Method to consume the (partial) query result and store it in the appropriate result array.
+     * @param value The value to be consumed.
+     */
+    @Override
+    public void consumeResultItem(long[] value) {
+        if (consumeResultItemCounter == 1)
+            this.col2SumResult = value;
+        else if (consumeResultItemCounter == 2)
+            this.col3SumResult = value;
+        else if (consumeResultItemCounter == 3)
+            this.col4SumResult = value;
+        consumeResultItemCounter++;
+    }
+
+    /**
      * This method sets up the state at the start of each benchmark fork.
      */
     @Setup(Level.Trial)
@@ -115,11 +171,29 @@ public class NonVectorisedNonSimd_No_Verification {
         QueryTranslator queryTranslator = new QueryTranslator();
         CodeGenOperator<?> queryRootOperator = queryTranslator.translate(plannedQuery, false);
 
-        // Construct the blackhole operator and generate the code
-        CodeGenOperator<RelNode> blackHoleQueryConsumingOperator = new BlackHoleGeneratorOperator(plannedQuery, queryRootOperator);
-        QueryCodeGenerator queryCodeGenerator = new QueryCodeGenerator(blackHoleQueryConsumingOperator, false);
+        // Extract the expected result size to construct the int[] packaging operator
+        Pattern keysPattern = Pattern.compile("keys\\_\\d+");
+        Matcher keysMatcher = keysPattern.matcher(this.tableFilePath);
+        keysMatcher.find();
+        int numberKeys = Integer.parseInt(keysMatcher.group(0).split("_")[1]);
+        CodeGenOperator<?> packageOperator = new ResultPackageOperator(plannedQuery, queryRootOperator, numberKeys * 4);
+
+        // Construct the packaging and result consumption operators and generate the code
+        CodeGenOperator<RelNode> queryResultConsumptionOperator = new ResultConsumptionOperator(plannedQuery, packageOperator);
+        QueryCodeGenerator queryCodeGenerator = new QueryCodeGenerator(queryResultConsumptionOperator, true);
         this.generatedQuery = queryCodeGenerator.generateQuery(true);
         this.generatedQueryCCtx = this.generatedQuery.getCCtx();
+        this.generatedQueryCCtx.setResultConsumptionTarget(this);
+
+        // Initialise the result
+        this.keyResult = null;
+        this.col2SumResult = null;
+        this.col3SumResult = null;
+        this.col4SumResult = null;
+        this.consumeResultItemCounter = 0;
+
+        // And the result verifier
+        this.resultVerifier = new ResultVerifier(this.tableFilePath);
     }
 
     /**
@@ -133,10 +207,21 @@ public class NonVectorisedNonSimd_No_Verification {
     }
 
     /**
-     * This method cleans up after the previous benchmark.
+     * This method verifies successful completion of the previous benchmark and cleans up after it.
      */
     @TearDown(Level.Invocation)
     public void teardown() {
+        // Verify the result
+        if (!this.resultVerifier.resultCorrect(this.keyResult, this.col2SumResult, this.col3SumResult, this.col4SumResult))
+            throw new RuntimeException("The computed result is incorrect");
+
+        // Reset the result after verifying it
+        this.keyResult = null;
+        this.col2SumResult = null;
+        this.col3SumResult = null;
+        this.col4SumResult = null;
+        this.consumeResultItemCounter = 0;
+
         // Have the allocation manager perform the required maintenance
         generatedQueryCCtx.getAllocationManager().performMaintenance();
     }

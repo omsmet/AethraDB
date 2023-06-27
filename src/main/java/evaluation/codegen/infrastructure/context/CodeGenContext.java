@@ -4,7 +4,7 @@ import benchmarks.util.ResultConsumptionTarget;
 import evaluation.codegen.infrastructure.context.access_path.AccessPath;
 import evaluation.codegen.infrastructure.data.AllocationManager;
 import evaluation.codegen.infrastructure.data.ArrowTableReader;
-import evaluation.codegen.infrastructure.data.DirectAllocationManager;
+import evaluation.codegen.infrastructure.data.BufferPoolAllocationManager;
 import org.apache.arrow.memory.RootAllocator;
 import org.apache.calcite.util.Pair;
 import org.codehaus.janino.Java;
@@ -100,9 +100,9 @@ public class CodeGenContext implements AutoCloseable {
         this.ordinalMapping = new Stack<>();
         this.currentOrdinalMapping = new ArrayList<>();
 
-        this.arrowRootAllocator = null;
-        this.arrowTableReaders = null;
-        this.allocationManager = null;
+        this.arrowRootAllocator = new RootAllocator();
+        this.arrowTableReaders = new ArrayList<>();
+        this.allocationManager = new BufferPoolAllocationManager(8);
         this.resultConsumptionTarget = null;
     }
 
@@ -235,8 +235,6 @@ public class CodeGenContext implements AutoCloseable {
      * @return The {@link RootAllocator} belonging to this query.
      */
     public RootAllocator getArrowRootAllocator() {
-        if (this.arrowRootAllocator == null)
-            this.arrowRootAllocator = new RootAllocator();
         return this.arrowRootAllocator;
     }
 
@@ -246,9 +244,6 @@ public class CodeGenContext implements AutoCloseable {
      * @return The index of the added {@link ArrowTableReader} in the context.
      */
     public int addArrowReader(ArrowTableReader arrowReader) {
-        if (this.arrowTableReaders == null)
-            this.arrowTableReaders = new ArrayList<>();
-
         this.arrowTableReaders.add(arrowReader);
         return this.arrowTableReaders.size() - 1;
     }
@@ -275,8 +270,6 @@ public class CodeGenContext implements AutoCloseable {
      * @return The {@link AllocationManager} of this {@link CodeGenContext}.
      */
     public AllocationManager getAllocationManager() {
-        if (this.allocationManager == null)
-            this.allocationManager = new DirectAllocationManager();
         return this.allocationManager;
     }
 

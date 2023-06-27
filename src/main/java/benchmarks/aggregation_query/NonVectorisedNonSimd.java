@@ -41,6 +41,7 @@ public class NonVectorisedNonSimd extends ResultConsumptionTarget {
     @Param({
             "/nvtmp/AethraTestData/aggregation_query_int/arrow_size_31457280_keys_1",
             "/nvtmp/AethraTestData/aggregation_query_int/arrow_size_31457280_keys_2",
+            "/nvtmp/AethraTestData/aggregation_query_int/arrow_size_31457280_keys_4",
             "/nvtmp/AethraTestData/aggregation_query_int/arrow_size_31457280_keys_8",
             "/nvtmp/AethraTestData/aggregation_query_int/arrow_size_31457280_keys_16",
             "/nvtmp/AethraTestData/aggregation_query_int/arrow_size_31457280_keys_32",
@@ -181,7 +182,7 @@ public class NonVectorisedNonSimd extends ResultConsumptionTarget {
         CodeGenOperator<RelNode> queryResultConsumptionOperator = new ResultConsumptionOperator(plannedQuery, packageOperator);
         QueryCodeGenerator queryCodeGenerator = new QueryCodeGenerator(queryResultConsumptionOperator, false);
         this.generatedQuery = queryCodeGenerator.generateQuery(true);
-        this.generatedQueryCCtx = this.generatedQuery.getCCtcx();
+        this.generatedQueryCCtx = this.generatedQuery.getCCtx();
         this.generatedQueryCCtx.setResultConsumptionTarget(this);
 
         // Initialise the result
@@ -206,7 +207,7 @@ public class NonVectorisedNonSimd extends ResultConsumptionTarget {
     }
 
     /**
-     * This method verifies successful completion of the previous benchmark
+     * This method verifies successful completion of the previous benchmark and cleans up after it.
      */
     @TearDown(Level.Invocation)
     public void teardown() {
@@ -220,6 +221,9 @@ public class NonVectorisedNonSimd extends ResultConsumptionTarget {
         this.col3SumResult = null;
         this.col4SumResult = null;
         this.consumeResultItemCounter = 0;
+
+        // Have the allocation manager perform the required maintenance
+        generatedQueryCCtx.getAllocationManager().performMaintenance();
     }
 
     /**
@@ -235,7 +239,7 @@ public class NonVectorisedNonSimd extends ResultConsumptionTarget {
             "-Darrow.enable_null_check_for_get=false",
             "--enable-preview"
     })
-    public void executeFilterQuery() throws IOException {
+    public void executeQuery() throws IOException {
         this.generatedQuery.execute();
     }
 

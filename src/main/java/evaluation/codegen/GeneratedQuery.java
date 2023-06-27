@@ -42,7 +42,7 @@ public abstract class GeneratedQuery {
      * Obtain the {@link CodeGenContext} belonging to this query.
      * @return the {@link CodeGenContext} belonging to this query.
      */
-    public CodeGenContext getCCtcx() {
+    public CodeGenContext getCCtx() {
         return this.cCtx;
     }
 

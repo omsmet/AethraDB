@@ -187,7 +187,7 @@ public final class QueryVariableTypeMethods {
 
             case VECTOR_INT_MASKED -> createReferenceType(location, "jdk.incubator.vector.IntVector");
 
-            case MAP_INT_LONG_SIMPLE -> createReferenceType(location, "evaluation.general_support.hashmaps.Simple_Int_Long_Map");
+            case MAP_INT_LONG_SIMPLE -> createReferenceType(location, "Simple_Int_Long_Map");
 
             default -> throw new UnsupportedOperationException(
                     "toJavaType does not currently support this type " + type);

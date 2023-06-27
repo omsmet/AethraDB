@@ -175,7 +175,7 @@ public class ArrowTableScanOperator extends CodeGenOperator<LogicalArrowTableSca
                     whileLoopBody.addStatement(
                             createLocalVariable(
                                     getLocation(),
-                                    createReferenceType(getLocation(), "java.lang.foreign.MemorySegment"),
+                                    createReferenceType(getLocation(), "MemorySegment"),
                                     memorySegmentName,
                                     createMethodInvocation(
                                             getLocation(),

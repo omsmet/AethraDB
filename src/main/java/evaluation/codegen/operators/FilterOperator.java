@@ -508,7 +508,7 @@ public class FilterOperator extends CodeGenOperator<LogicalFilter> {
                                     getLocation(),
                                     createAmbiguousNameRef(getLocation(), "VectorisedFilterOperators"),
                                     "lessThan",
-                                    new Java.Rvalue[]{
+                                    new Java.Rvalue[] {
                                             lhsArrowVecAP.read(),
                                             rhsIntScalar,
                                             selectionResultAP.read()
