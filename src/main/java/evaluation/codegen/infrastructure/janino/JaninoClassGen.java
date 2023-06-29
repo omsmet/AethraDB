@@ -6,6 +6,8 @@ import org.codehaus.janino.Java;
 
 import javax.annotation.Nullable;
 
+import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.getLocation;
+
 /**
  * Class containing helper methods for generating class-related code with Janino.
  */
@@ -28,8 +30,7 @@ public class JaninoClassGen {
      * @param extendsType An optional super-class of the class being generated.
      * @return a {@link Java.PackageMemberClassDeclaration} representing the generated class.
      */
-    public static Java.PackageMemberClassDeclaration
-    addPackageMemberClassDeclaration(
+    public static Java.PackageMemberClassDeclaration addPackageMemberClassDeclaration(
             Location location,
             Access accessModifier,
             Java.CompilationUnit targetUnit,
@@ -57,6 +58,66 @@ public class JaninoClassGen {
 
         targetUnit.addPackageMemberTypeDeclaration(tlcd);
         return tlcd;
+    }
+
+    /**
+     * Method for creating a local class declaration.
+     * @param location The location from which the class declaration is requested for generation.
+     * @param modifiers The modifiers for the new class(e.g. public, protected, etc.)
+     * @param className The name of the class being generated.
+     * @return A {@link Java.LocalClassDeclaration} corresponding to the provided parameters.
+     */
+    public static Java.LocalClassDeclaration createLocalClassDeclaration(
+            Location location,
+            Java.Modifier[] modifiers,
+            String className
+    ) {
+        return new Java.LocalClassDeclaration(
+                location,
+                null,
+                modifiers,
+                className,
+                null,
+                null,
+                new Java.Type[0]
+        );
+    }
+
+    /**
+     * Method for creating a local class declaration statement from a local class declaration.
+     * @param localClassDeclaration The {@link org.codehaus.janino.Java.LocalClassDeclaration} for
+     *                              which the statement should be created.
+     * @return A {@link org.codehaus.janino.Java.LocalClassDeclarationStatement} corresponding to
+     * {@code localClassDeclaration}.
+     */
+    public static Java.LocalClassDeclarationStatement createLocalClassDeclarationStm(
+            Java.LocalClassDeclaration localClassDeclaration
+    ) {
+        return new Java.LocalClassDeclarationStatement(localClassDeclaration);
+    }
+
+    /**
+     * Method to create a "public final" field on a class.
+     * @param location The location from which the field is requested for generation.
+     * @param fieldType The type that the field will store.
+     * @param fieldDeclarator The declaration of the field itself.
+     * @return A {@link org.codehaus.janino.Java.FieldDeclaration} matching the provided parameters.
+     */
+    public static Java.FieldDeclaration createPublicFinalFieldDeclaration(
+            Location location,
+            Java.Type fieldType,
+            Java.VariableDeclarator fieldDeclarator
+    ) {
+        return new Java.FieldDeclaration(
+                location,
+                null,
+                new Java.Modifier[] {
+                        new Java.AccessModifier(Access.PUBLIC.toString(), getLocation()),
+                        new Java.AccessModifier("final", getLocation())
+                },
+                fieldType,
+                new Java.VariableDeclarator[] { fieldDeclarator }
+        );
     }
 
     /**

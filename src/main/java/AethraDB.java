@@ -1,8 +1,8 @@
 import evaluation.codegen.GeneratedQuery;
 import evaluation.codegen.QueryCodeGenerator;
+import evaluation.codegen.QueryTranslator;
 import evaluation.codegen.operators.CodeGenOperator;
 import evaluation.codegen.operators.QueryResultPrinterOperator;
-import evaluation.codegen.translation.QueryTranslator;
 import org.apache.calcite.plan.RelOptUtil;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.sql.SqlNode;

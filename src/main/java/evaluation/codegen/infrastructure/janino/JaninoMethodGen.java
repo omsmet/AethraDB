@@ -166,7 +166,7 @@ public class JaninoMethodGen {
      */
     public static void createConstructor(
             Location location,
-            Java.PackageMemberClassDeclaration targetClazz,
+            Java.AbstractClassDeclaration targetClazz,
             Access accessModifier,
             Java.FunctionDeclarator.FormalParameters formalParameters,
             @Nullable Java.ConstructorInvocation constructorInvocation,

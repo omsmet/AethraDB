@@ -17,6 +17,21 @@ public class JaninoVariableGen {
     }
 
     /**
+     * Method to create a simple, uninitialised variable with a given name.
+     * @param location The location at which the variable declaration is requested for generation.
+     * @param name The name that the variable should get.
+     * @return A {@link Java.VariableDeclarator} instance matching the provided parameters.
+     */
+    public static Java.VariableDeclarator createSimpleVariableDeclaration(Location location, String name) {
+        return new Java.VariableDeclarator(
+                location,
+                name,
+                0,
+                null
+        );
+    }
+
+    /**
      * Method for creating a local variable with a primitive java type.
      * @param location The location from which the generation of the variable is requested.
      * @param primitiveType The type that the variable should receive.

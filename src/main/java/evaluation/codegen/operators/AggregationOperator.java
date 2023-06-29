@@ -9,6 +9,7 @@ import evaluation.codegen.infrastructure.context.access_path.ArrayVectorAccessPa
 import evaluation.codegen.infrastructure.context.access_path.ArrowVectorAccessPath;
 import evaluation.codegen.infrastructure.context.access_path.ArrowVectorWithSelectionVectorAccessPath;
 import evaluation.codegen.infrastructure.context.access_path.ArrowVectorWithValidityMaskAccessPath;
+import evaluation.codegen.infrastructure.context.access_path.IndexedArrowVectorElementAccessPath;
 import evaluation.codegen.infrastructure.context.access_path.IndexedMapAccessPath;
 import evaluation.codegen.infrastructure.context.access_path.MapAccessPath;
 import evaluation.codegen.infrastructure.context.access_path.SIMDLoopAccessPath;
@@ -258,12 +259,14 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
 
     @Override
     public boolean canProduceNonVectorised() {
-        return this.child.canProduceNonVectorised();
+        // Since this is a blocking operator, we can always expose the result in the non-vectorised paradigm.
+        return true;
     }
 
     @Override
     public boolean canProduceVectorised() {
-        return this.child.canProduceVectorised();
+        // Since this is a blocking operator, we can always expose the result in the vectorised paradigm.
+        return true;
     }
 
     @Override
@@ -448,6 +451,15 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
                         AccessPath firstOrdinalAP = cCtx.getCurrentOrdinalMapping().get(0);
                         if (!this.simdEnabled && firstOrdinalAP instanceof ScalarVariableAccessPath) {
                             // For a count aggregation over scalar variables simply increment the relevant variable.
+                            codeGenResult.add(
+                                    postIncrementStm(
+                                            getLocation(),
+                                            createAmbiguousNameRef(getLocation(), this.aggregationStateMappings.get(i).variableNames[0])
+                                    ));
+
+                        } else if (!this.simdEnabled && firstOrdinalAP instanceof IndexedArrowVectorElementAccessPath iaveap) {
+                            // For an indexed arrow vector element access path ("for loop over arrow vector elements")
+                            // simply increment the relevant count variable
                             codeGenResult.add(
                                     postIncrementStm(
                                             getLocation(),

@@ -303,6 +303,41 @@ public class QueryCodeGenerator extends SimpleCompiler {
             }
             System.out.print("}".indent(indentationLevel));
 
+        } else if (code instanceof Java.LocalClassDeclarationStatement lcdStatement) {
+            Java.LocalClassDeclaration lcd = lcdStatement.lcd;
+            String classDeclarationLine = "";
+            for (Java.Modifier modifier : lcd.getModifiers())
+                classDeclarationLine += modifier.toString() + " ";
+            classDeclarationLine += "class " + lcd.getName() + " {";
+            System.out.print(classDeclarationLine.indent(indentationLevel));
+
+            printCode(lcd.fieldDeclarationsAndInitializers, indentationLevel + 4);
+            System.out.println();
+
+            for (Java.ConstructorDeclarator constructorDeclarator : lcd.constructors) {
+                String constructorDeclarationLine = constructorDeclarator.getModifiers()[0].toString();
+                constructorDeclarationLine += " " + constructorDeclarator.getDeclaringType().toString() + "(";
+
+                Java.FunctionDeclarator.FormalParameter[] parameters = constructorDeclarator.formalParameters.parameters;
+                for (int i = 0; i < parameters.length; i++) {
+                    constructorDeclarationLine += parameters[i].toString();
+
+                    if (i != parameters.length - 1)
+                        constructorDeclarationLine += ", ";
+                }
+
+                constructorDeclarationLine += ") {";
+                System.out.print(constructorDeclarationLine.indent(indentationLevel + 4));
+
+                printCode(constructorDeclarator.statements, indentationLevel + 8);
+                System.out.println("}".indent(indentationLevel + 4));
+            }
+
+            System.out.println("}".indent(indentationLevel));
+
+        } else if (code instanceof Java.FieldDeclaration fieldDeclaration) {
+            System.out.print((fieldDeclaration.toString() + ";").indent(indentationLevel));
+
         } else {
             System.out.print(code.toString().indent(indentationLevel));
         }

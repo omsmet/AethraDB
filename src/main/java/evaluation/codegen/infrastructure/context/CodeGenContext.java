@@ -66,17 +66,17 @@ public class CodeGenContext implements AutoCloseable {
     /**
      * The {@link RootAllocator} instance used for a query that accesses Arrow files.
      */
-    private RootAllocator arrowRootAllocator;
+    private final RootAllocator arrowRootAllocator;
 
     /**
      * A collection of {@link ArrowTableReader} instances used by the query.
      */
-    private List<ArrowTableReader> arrowTableReaders;
+    private final List<ArrowTableReader> arrowTableReaders;
 
     /**
      * The {@link AllocationManager} used by this query.
      */
-    private AllocationManager allocationManager;
+    private final AllocationManager allocationManager;
 
     /**
      * A {@link ResultConsumptionTarget} for transferring the query result outside the generated query code.
