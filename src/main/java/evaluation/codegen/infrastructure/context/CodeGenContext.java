@@ -214,13 +214,6 @@ public class CodeGenContext implements AutoCloseable {
         List<Java.Statement> allocationStatements = this.scanSurroundingVariableDeclarations;
         List<String> deallocationVariables = this.scanSurroundingVariablesToDeallocate;
 
-        // Clean the context of parent "scopes"
-        for (String nameToClean : this.scanSurroundingVariableNames) {
-            for (Set<String> definedNamesAtStage : this.definedVariables) {
-                definedNamesAtStage.remove(nameToClean);
-            }
-        }
-
         // Reset the scan surrounding variables variables
         this.scanSurroundingVariableNames = new ArrayList<>();
         this.scanSurroundingVariableDeclarations = new ArrayList<>();

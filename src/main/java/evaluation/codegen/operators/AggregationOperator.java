@@ -13,8 +13,8 @@ import evaluation.codegen.infrastructure.context.access_path.IndexedArrowVectorE
 import evaluation.codegen.infrastructure.context.access_path.IndexedMapAccessPath;
 import evaluation.codegen.infrastructure.context.access_path.MapAccessPath;
 import evaluation.codegen.infrastructure.context.access_path.SIMDLoopAccessPath;
-import evaluation.codegen.infrastructure.context.access_path.SIMDVectorVariableAccessPath;
 import evaluation.codegen.infrastructure.context.access_path.ScalarVariableAccessPath;
+import evaluation.general_support.hashmaps.Int_Hash_Function;
 import org.apache.calcite.rel.core.AggregateCall;
 import org.apache.calcite.rel.logical.LogicalAggregate;
 import org.apache.calcite.sql.SqlAggFunction;
@@ -33,28 +33,18 @@ import static evaluation.codegen.infrastructure.context.QueryVariableType.P_A_IN
 import static evaluation.codegen.infrastructure.context.QueryVariableType.P_A_LONG;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.P_INT;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.P_LONG;
-import static evaluation.codegen.infrastructure.context.QueryVariableType.VECTOR_LONG;
 import static evaluation.codegen.infrastructure.context.QueryVariableTypeMethods.primitiveType;
 import static evaluation.codegen.infrastructure.context.QueryVariableTypeMethods.toJavaType;
 import static evaluation.codegen.infrastructure.context.QueryVariableTypeMethods.valueTypeForMap;
-import static evaluation.codegen.infrastructure.janino.JaninoControlGen.createForLoop;
-import static evaluation.codegen.infrastructure.janino.JaninoControlGen.createIfNotContinue;
 import static evaluation.codegen.infrastructure.janino.JaninoControlGen.createWhileLoop;
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createAmbiguousNameRef;
-import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createArrayElementAccessExpr;
-import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createCast;
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createIntegerLiteral;
-import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createPrimitiveArrayType;
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createReferenceType;
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.getLocation;
 import static evaluation.codegen.infrastructure.janino.JaninoMethodGen.createBlock;
 import static evaluation.codegen.infrastructure.janino.JaninoMethodGen.createMethodInvocation;
 import static evaluation.codegen.infrastructure.janino.JaninoMethodGen.createMethodInvocationStm;
-import static evaluation.codegen.infrastructure.janino.JaninoOperatorGen.lt;
-import static evaluation.codegen.infrastructure.janino.JaninoOperatorGen.mod;
-import static evaluation.codegen.infrastructure.janino.JaninoOperatorGen.mul;
 import static evaluation.codegen.infrastructure.janino.JaninoOperatorGen.plus;
-import static evaluation.codegen.infrastructure.janino.JaninoOperatorGen.postIncrement;
 import static evaluation.codegen.infrastructure.janino.JaninoOperatorGen.postIncrementStm;
 import static evaluation.codegen.infrastructure.janino.JaninoVariableGen.createLocalVariable;
 import static evaluation.codegen.infrastructure.janino.JaninoVariableGen.createPrimitiveLocalVar;
@@ -441,6 +431,7 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
 
         // Handle the aggregation state update depending on whether we have a group-by aggregation
         if (!groupByAggregation) { // Regular scalar processing
+            boolean useSIMD = this.useSIMDNonVec(cCtx);
 
             for (int i = 0; i < this.aggregationFunctions.length; i++) {
                 AggregationFunction currentFunction = this.aggregationFunctions[i];
@@ -449,7 +440,7 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
                     case NG_COUNT -> {
                         // Check the type of the first ordinal to be able to generate the correct count update statements
                         AccessPath firstOrdinalAP = cCtx.getCurrentOrdinalMapping().get(0);
-                        if (!this.simdEnabled && firstOrdinalAP instanceof ScalarVariableAccessPath) {
+                        if (!useSIMD && firstOrdinalAP instanceof ScalarVariableAccessPath) {
                             // For a count aggregation over scalar variables simply increment the relevant variable.
                             codeGenResult.add(
                                     postIncrementStm(
@@ -457,7 +448,7 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
                                             createAmbiguousNameRef(getLocation(), this.aggregationStateMappings.get(i).variableNames[0])
                                     ));
 
-                        } else if (!this.simdEnabled && firstOrdinalAP instanceof IndexedArrowVectorElementAccessPath iaveap) {
+                        } else if (!useSIMD && firstOrdinalAP instanceof IndexedArrowVectorElementAccessPath iaveap) {
                             // For an indexed arrow vector element access path ("for loop over arrow vector elements")
                             // simply increment the relevant count variable
                             codeGenResult.add(
@@ -466,7 +457,7 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
                                             createAmbiguousNameRef(getLocation(), this.aggregationStateMappings.get(i).variableNames[0])
                                     ));
 
-                        } else if (this.simdEnabled && firstOrdinalAP instanceof SIMDLoopAccessPath slap) {
+                        } else if (useSIMD && firstOrdinalAP instanceof SIMDLoopAccessPath slap) {
                             // For a count aggregation over a SIMD loop access path, add the number of true entries in the valid mask
                             codeGenResult.add(
                                     createVariableAdditionAssignmentStm(
@@ -483,7 +474,7 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
                         } else {
                             throw new UnsupportedOperationException(
                                     "AggregationOperator.consumeNonVec does not support this AccessPath for the COUNT aggregation while "
-                                            + (this.simdEnabled ? "" : "not ") + "using SIMD: "  + firstOrdinalAP);
+                                            + (useSIMD ? "" : "not ") + "using SIMD: "  + firstOrdinalAP);
                         }
                     }
 
@@ -494,14 +485,14 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
         } else { // Group-by processing
             // Idea: first perform the hashing of the key-column, then perform the hash map maintenance
             AccessPath keyColumnAccessPath;
-            AccessPath keyColumnPreHashAccessPath;
+            ScalarVariableAccessPath keyColumnPreHashAccessPath;
             Java.Rvalue[] aggregationValues = new Java.Rvalue[this.aggregationFunctions.length];
             Java.Block hashMapMaintenanceTarget;
 
             if (this.groupByKeyColumnPrimitiveScalarType == P_INT) {
 
                 // Hashing of key-column depends on whether we are in SIMD mode or not
-                if (!this.simdEnabled) {
+                if (!this.useSIMDNonVec(cCtx)) {
                     // Ensure we have a "local" access path for the key column value
                     Java.Rvalue keyColumnRValue = getRValueFromAccessPathNonVec(cCtx, this.groupByKeyColumnIndex, codeGenResult);
                     keyColumnAccessPath = cCtx.getCurrentOrdinalMapping().get(this.groupByKeyColumnIndex);
@@ -513,7 +504,7 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
                             createLocalVariable(
                                     getLocation(),
                                     toJavaType(getLocation(), keyColumnPreHashAccessPath.getType()),
-                                    ((ScalarVariableAccessPath) keyColumnPreHashAccessPath).getVariableName(),
+                                    keyColumnPreHashAccessPath.getVariableName(),
                                     createMethodInvocation(
                                             getLocation(),
                                             createAmbiguousNameRef(getLocation(), "Int_Hash_Function"),
@@ -538,241 +529,48 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
                     hashMapMaintenanceTarget = createBlock(getLocation());
                     codeGenResult.add(hashMapMaintenanceTarget);
 
-                } else { // this.simdEnabled
+                } else { // this.useSIMDNonVec(cCtx)
 
-                    // Handling depends on the ordinal type that we receive
-                    keyColumnAccessPath = cCtx.getCurrentOrdinalMapping().get(this.groupByKeyColumnIndex);
-                    if (keyColumnAccessPath instanceof SIMDLoopAccessPath kcap_slap) {
-                        // Initialise the integer SIMD key vector
-                        // IntVector [SIMD_Key_Vector_Int] = IntVector.fromSegment(
-                        //      [kcap_slap.readVectorSpecies()],
-                        //      [kcap_slap.readMemorySegment()],
-                        //      [kcap_slap.readArrowVectorOffset()] * [kcap_slap.readArrowVector().TYPE_WIDTH],
-                        //      java.nio.ByteOrder.LITTLE_ENDIAN,
-                        //      [kcap_slap.readSIMDMask()]
-                        // );
-                        String SIMDIntKeyVectorName = cCtx.defineVariable("SIMD_Key_Vector_Int");
-                        codeGenResult.add(
-                                createLocalVariable(
-                                        getLocation(),
-                                        toJavaType(getLocation(), kcap_slap.getType()),
-                                        SIMDIntKeyVectorName,
-                                        createMethodInvocation(
-                                                getLocation(),
-                                                createAmbiguousNameRef(getLocation(), "oCtx"),
-                                                "createIntVector",
-                                                new Java.Rvalue[] {
-                                                        kcap_slap.readVectorSpecies(),
-                                                        kcap_slap.readMemorySegment(),
-                                                        mul(
-                                                                getLocation(),
-                                                                kcap_slap.readArrowVectorOffset(),
-                                                                createAmbiguousNameRef(
-                                                                        getLocation(),
-                                                                        kcap_slap.getArrowVectorAccessPath().getVariableName() + ".TYPE_WIDTH"
-                                                                )
-                                                        ),
-                                                        createAmbiguousNameRef(getLocation(), "java.nio.ByteOrder.LITTLE_ENDIAN"),
-                                                        kcap_slap.readSIMDMask()
-                                                }
-                                        )
-                                )
-                        );
+                    // Perform the SIMD-ed pre-hashing and flattening
+                    var preHashAndFlattenResult = Int_Hash_Function.preHashAndFlattenSIMD(
+                            cCtx,
+                            cCtx.getCurrentOrdinalMapping().get(this.groupByKeyColumnIndex)
+                    );
+                    keyColumnAccessPath = preHashAndFlattenResult.keyColumnAccessPath;
+                    keyColumnPreHashAccessPath = preHashAndFlattenResult.keyColumnPreHashAccessPath;
+                    codeGenResult.addAll(preHashAndFlattenResult.generatedCode);
 
-                        // Cast the SIMD int key vector to a SIMD long key vector
-                        String SIMDLongKeyVectorName = cCtx.defineVariable("SIMD_Key_Vector_Long");
-                        // TODO: consider replacing getVectorSpeciesLong() with an allocated variable.
-                        // LongVector [SIMD_Key_Vector_Long] = (LongVector) [SIMD_Key_Vector_Int].castShape([oCtx.getVectorSpeciesLong()], 0);
-                        codeGenResult.add(
-                                createLocalVariable(
+                    // Obtain the values to insert into the hash-map later on
+                    for (int i = 0; i < this.aggregationFunctions.length; i++) {
+                        AggregationFunction currentFunction = this.aggregationFunctions[i];
+
+                        if (currentFunction == AggregationFunction.G_SUM) {
+
+                            AccessPath valueAP = cCtx.getCurrentOrdinalMapping().get(this.aggregationFunctionInputOrdinals[i][0]);
+                            if (valueAP instanceof SIMDLoopAccessPath valueAP_slap) {
+                                // aggregationValues[i] = [valueAP_slap.readArrowVector()].get([valueAP_slap.readArrowVectorOffset()] + [simd_vector_i]);
+                                aggregationValues[i] = createMethodInvocation(
                                         getLocation(),
-                                        createReferenceType(getLocation(), "jdk.incubator.vector.LongVector"),
-                                        SIMDLongKeyVectorName,
-                                        createCast(
-                                                getLocation(),
-                                                createReferenceType(getLocation(), "jdk.incubator.vector.LongVector"),
-                                                createMethodInvocation(
+                                        valueAP_slap.readArrowVector(),
+                                        "get",
+                                        new Java.Rvalue[]{
+                                                plus(
                                                         getLocation(),
-                                                        createAmbiguousNameRef(getLocation(), SIMDIntKeyVectorName),
-                                                        "castShape",
-                                                        new Java.Rvalue[] {
-                                                                createMethodInvocation(
-                                                                        getLocation(),
-                                                                        createAmbiguousNameRef(getLocation(), "oCtx"),
-                                                                        "getVectorSpeciesLong"
-                                                                ),
-                                                                createIntegerLiteral(getLocation(), 0)
-                                                        }
+                                                        valueAP_slap.readArrowVectorOffset(),
+                                                        preHashAndFlattenResult.simdVectorIAp.read()
                                                 )
-                                        )
-                                )
-                        );
+                                        }
+                                );
 
-                        // Compute the a * key part of the pre-hashing
-                        // LongVector [SIMD_a_mul_key_vector] = [SIMD_Key_Vector_Long].mul(Int_Hash_Function.hashConstantA);
-                        String SIMDAMulKeyVectorName = cCtx.defineVariable("SIMD_a_mul_key_vector");
-                        codeGenResult.add(
-                                createLocalVariable(
-                                        getLocation(),
-                                        createReferenceType(getLocation(), "jdk.incubator.vector.LongVector"),
-                                        SIMDAMulKeyVectorName,
-                                        createMethodInvocation(
-                                                getLocation(),
-                                                createAmbiguousNameRef(getLocation(), SIMDLongKeyVectorName),
-                                                "mul",
-                                                new Java.Rvalue[] {
-                                                        createAmbiguousNameRef(getLocation(), "Int_Hash_Function.hashConstantA")
-                                                }
-                                        )
-                                )
-                        );
-
-                        // Compute the a * key + b part of the pre-hashing
-                        // LongVector [SIMD_a_mul_key_plus_b_vector] = [SIMD_a_mul_key_vector].add(Int_Hash_Function.hashConstantB);
-                        String SIMDAMulKeyPlusBVectorName = cCtx.defineVariable("SIMD_a_mul_key_plus_b_vector");
-                        codeGenResult.add(
-                                createLocalVariable(
-                                        getLocation(),
-                                        createReferenceType(getLocation(), "jdk.incubator.vector.LongVector"),
-                                        SIMDAMulKeyPlusBVectorName,
-                                        createMethodInvocation(
-                                                getLocation(),
-                                                createAmbiguousNameRef(getLocation(), SIMDAMulKeyVectorName),
-                                                "add",
-                                                new Java.Rvalue[] {
-                                                        createAmbiguousNameRef(getLocation(), "Int_Hash_Function.hashConstantB")
-                                                }
-                                        )
-                                )
-                        );
-
-                        // Still need to take the final computed value mod p which is done below during flattening
-                        keyColumnPreHashAccessPath = new SIMDVectorVariableAccessPath(SIMDAMulKeyPlusBVectorName, VECTOR_LONG);
-
-                        // Flatten the SIMD processing using a for-loop
-                        // Get the pre-hash values as an array
-                        // long[] pre_hash_values = [keyColumnPreHashAccessPath].toLongArray();
-                        String preHashValuesName = cCtx.defineVariable("pre_hash_values");
-                        codeGenResult.add(
-                                createLocalVariable(
-                                        getLocation(),
-                                        createPrimitiveArrayType(getLocation(), Java.Primitive.LONG),
-                                        preHashValuesName,
-                                        createMethodInvocation(
-                                                getLocation(),
-                                                ((SIMDVectorVariableAccessPath) keyColumnPreHashAccessPath).read(),
-                                                "toLongArray"
-                                        )
-                                )
-                        );
-
-                        // for (int [simd_vector_i] = 0; [simd_vector_i] < [kcap_slap.readSIMDVectorLengthVariable()]; [simd_vector_i]++) { [simdForLoopBody] }
-                        String simdVectorIName = cCtx.defineVariable("simd_vector_i");
-                        ScalarVariableAccessPath simdVectorIAp = new ScalarVariableAccessPath(simdVectorIName, P_INT);
-                        Java.Block simdForLoopBody = createBlock(getLocation());
-                        codeGenResult.add(
-                                createForLoop(
-                                        getLocation(),
-                                        createPrimitiveLocalVar(
-                                                getLocation(),
-                                                Java.Primitive.INT,
-                                                simdVectorIAp.getVariableName(),
-                                                "0"
-                                        ),
-                                        lt(getLocation(), simdVectorIAp.read(), kcap_slap.readSIMDVectorLengthVariable()),
-                                        postIncrement(getLocation(), simdVectorIAp.write()),
-                                        simdForLoopBody
-                                )
-                        );
-
-                        // Check if the current vector element is valid
-                        // if (! [kcap_slap.readSIMDMask()].laneIsSet([simd_vector_i])) continue;
-                        simdForLoopBody.addStatement(
-                                createIfNotContinue(
-                                        getLocation(),
-                                        createMethodInvocation(
-                                                getLocation(),
-                                                kcap_slap.readSIMDMask(),
-                                                "laneIsSet",
-                                                new Java.Rvalue[] { simdVectorIAp.read() }
-                                        )
-                                )
-                        );
-
-                        // Create a variable for the key value
-                        // int flattened_key = [kcap_slap.readArrowVector()].get([kcap_slap.readArrowVectorOffset()] + [simd_vector_i]);
-                        keyColumnAccessPath = new ScalarVariableAccessPath(cCtx.defineVariable("flattened_key"), P_INT);
-                        simdForLoopBody.addStatement(
-                                createLocalVariable(
-                                        getLocation(),
-                                        toJavaType(getLocation(), keyColumnAccessPath.getType()),
-                                        ((ScalarVariableAccessPath) keyColumnAccessPath).getVariableName(),
-                                        createMethodInvocation(
-                                                getLocation(),
-                                                kcap_slap.readArrowVector(),
-                                                "get",
-                                                new Java.Rvalue[] {
-                                                        plus(getLocation(), kcap_slap.readArrowVectorOffset(), simdVectorIAp.read())
-                                                }
-                                        )
-                                )
-                        );
-
-                        // Create a variable for the pre-hash value
-                        // long pre_hash_value = pre_hash_values[simd_vector_i] % Int_Hash_Function.hashConstantP;
-                        keyColumnPreHashAccessPath = new ScalarVariableAccessPath(cCtx.defineVariable("pre_hash_value"), P_LONG);
-                        simdForLoopBody.addStatement(
-                                createLocalVariable(
-                                        getLocation(),
-                                        toJavaType(getLocation(), keyColumnPreHashAccessPath.getType()),
-                                        ((ScalarVariableAccessPath) keyColumnPreHashAccessPath).getVariableName(),
-                                        mod(
-                                                getLocation(),
-                                                createArrayElementAccessExpr(
-                                                        getLocation(),
-                                                        createAmbiguousNameRef(getLocation(), preHashValuesName),
-                                                        simdVectorIAp.read()
-                                                ),
-                                                createAmbiguousNameRef(getLocation(), "Int_Hash_Function.hashConstantP")
-                                        )
-                                )
-                        );
-
-                        // Also obtain the values to insert into the hash-map later on
-                        for (int i = 0; i < this.aggregationFunctions.length; i++) {
-                            AggregationFunction currentFunction = this.aggregationFunctions[i];
-
-                            if (currentFunction == AggregationFunction.G_SUM) {
-
-                                AccessPath valueAP = cCtx.getCurrentOrdinalMapping().get(this.aggregationFunctionInputOrdinals[i][0]);
-                                if (valueAP instanceof SIMDLoopAccessPath valueAP_slap) {
-                                    // aggregationValues[i] = [valueAP_slap.readArrowVector()].get([valueAP_slap.readArrowVectorOffset()] + [simd_vector_i]);
-                                    aggregationValues[i] = createMethodInvocation(
-                                            getLocation(),
-                                            valueAP_slap.readArrowVector(),
-                                            "get",
-                                            new Java.Rvalue[] {
-                                                    plus(getLocation(), valueAP_slap.readArrowVectorOffset(), simdVectorIAp.read())
-                                            }
-                                    );
-
-                                } else {
-                                    throw new UnsupportedOperationException(
-                                            "AggregationOperator.consumeNonVec does not support this valueAP for SIMD flattening");
-                                }
+                            } else {
+                                throw new UnsupportedOperationException(
+                                        "AggregationOperator.consumeNonVec does not support this valueAP for hash-map maintenance");
                             }
-
-                            // No other possibilities due to the constructor
-
                         }
-
-                        // And set the correct hashMapMaintenanceTarget
-                        hashMapMaintenanceTarget = simdForLoopBody;
-
-                    } else {
-                        throw new UnsupportedOperationException(
-                                "AggregationOperator.consumeNonVec does not support this access path for SIMD pre-hashing");
                     }
+
+                    // And set the correct hashMapMaintenanceTarget
+                    hashMapMaintenanceTarget = preHashAndFlattenResult.flattenedForLoopBody;
                 }
 
             } else {
@@ -794,7 +592,7 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
                                     "addToKeyOrPutIfNotExist",
                                     new Java.Rvalue[] {
                                             ((ScalarVariableAccessPath) keyColumnAccessPath).read(),        // Group-By Key
-                                            ((ScalarVariableAccessPath) keyColumnPreHashAccessPath).read(), // Group-By Key pre-hash
+                                            keyColumnPreHashAccessPath.read(),                              // Group-By Key pre-hash
                                             aggregationValues[i]                                            // Value
                                     }
                             )
@@ -1169,7 +967,7 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
             if (this.groupByKeyColumnPrimitiveScalarType == P_INT) {
 
                 // Hashing of the key-column depends on whether we are in SIMD mode or not
-                if (!this.simdEnabled) {
+                if (!this.useSIMDVec()) {
                     if (keyColumnAccessPathType == ARROW_INT_VECTOR) {
                         // VectorisedAggregationOperators.constructPreHashKeyVector([this.groupKeyPreHashVector], [keyColumn]);
                         codeGenResult.add(
@@ -1188,7 +986,7 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
                                 "AggregationOperator.consumeVec does not support his key column access path type for pre-hashing: " + keyColumnAccessPathType);
                     }
 
-                } else { // this.simdEnabled
+                } else { // this.useSIMDVec()
                     if (keyColumnAccessPathType == ARROW_INT_VECTOR) {
                         // VectorisedAggregationOperators.constructPreHashKeyVectorSIMD([this.groupKeyPreHashVector], [keyColumn]);
                         codeGenResult.add(

@@ -57,12 +57,18 @@ import static evaluation.codegen.infrastructure.janino.JaninoVariableGen.createV
 public class ArrowTableScanOperator extends CodeGenOperator<LogicalArrowTableScan> {
 
     /**
+     * Boolean keeping track of whether SIMD production is allowed in this operator.
+     */
+    private boolean SIMDProductionAllowed;
+
+    /**
      * Creates an {@link ArrowTableScanOperator} for a specific {@link LogicalArrowTableScan}.
      * @param logicalSubplan The {@link LogicalArrowTableScan} to create a scan operator for.
      * @param simdEnabled Whether the operator is allowed to use SIMD for processing.
      */
     public ArrowTableScanOperator(LogicalArrowTableScan logicalSubplan, boolean simdEnabled) {
         super(logicalSubplan, simdEnabled);
+        this.SIMDProductionAllowed = simdEnabled;
     }
 
     @Override
@@ -92,7 +98,7 @@ public class ArrowTableScanOperator extends CodeGenOperator<LogicalArrowTableSca
 
         // The specific for-loop that needs to be generated depends on whether SIMD is enabled
         Java.Block forLoopBody = createBlock(getLocation());
-        if (!this.simdEnabled) {
+        if (!this.SIMDProductionAllowed) {
             // for (int aviv = 0; aviv < firstColumnVector.getValueCount; aviv++) { [forLoopBody] }
             String avivName = cCtx.defineVariable("aviv");
             ScalarVariableAccessPath avivAccessPath = new ScalarVariableAccessPath(avivName, P_INT);
@@ -129,7 +135,7 @@ public class ArrowTableScanOperator extends CodeGenOperator<LogicalArrowTableSca
                         );
                     }).toList();
             cCtx.setCurrentOrdinalMapping(updatedOrdinalMapping);
-        } else {
+        } else { // this.SIMDProductionAllowed
             // int commonSIMDVectorLength = ...; (allocated as scan surrounding variable for reuse)
             int commonSIMDVectorLength = OptimisationContext.getVectorSpeciesLong().length();
             String commonSIMDVectorLengthName = cCtx.defineScanSurroundingVariables(

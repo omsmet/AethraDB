@@ -181,7 +181,7 @@ public class FilterOperator extends CodeGenOperator<LogicalFilter> {
         // Check if we are in a SIMD enabled setting with a SIMD-compatible access path
         // or if we can simply perform a scalar code-gen path.
         // Currently, the only SIMD supported path is a lhs RexInputRef and rhs RexLiteral
-        if (this.simdEnabled
+        if (this.useSIMDNonVec(cCtx)
                 && lhs instanceof RexInputRef lhsRef && rhs instanceof RexLiteral rhsLit
                 && cCtx.getCurrentOrdinalMapping().get(lhsRef.getIndex()) instanceof SIMDLoopAccessPath lhsAP) {
             // SIMD enabled path: handle acceleration according to the datatype
@@ -452,7 +452,7 @@ public class FilterOperator extends CodeGenOperator<LogicalFilter> {
         // Handle the generic part of the code generation based on whether SIMD is enabled
         // Do a scan-surrounding allocation for the selection vector/validity mask that will result from this operator
         ArrayAccessPath selectionResultAP;
-        if (this.simdEnabled) {
+        if (this.useSIMDVec()) {
             // boolean[] ordinal_[index]_val_mask = cCtx.getAllocationManager().getBooleanVector()
             String selectionResultVariableName = cCtx.defineScanSurroundingVariables(
                     "ordinal_" + lhsRef.getIndex() + "_val_mask",
@@ -496,7 +496,7 @@ public class FilterOperator extends CodeGenOperator<LogicalFilter> {
                 P_INT
         );
 
-        if (lhsAP instanceof ArrowVectorAccessPath lhsArrowVecAP && !this.simdEnabled) {
+        if (lhsAP instanceof ArrowVectorAccessPath lhsArrowVecAP && !this.useSIMDVec()) {
             // int ordinal_[index]_sel_vec_length = VectorisedFilterOperators.lessThan(
             //      lhsArrowVecAP.read(), rhsIntScalar, ordinal_[index]_sel_vec);
             codegenResult.add(
@@ -517,7 +517,7 @@ public class FilterOperator extends CodeGenOperator<LogicalFilter> {
                     )
             );
 
-        } else if (lhsAP instanceof ArrowVectorAccessPath lhsArrowVecAP && this.simdEnabled) {
+        } else if (lhsAP instanceof ArrowVectorAccessPath lhsArrowVecAP && this.useSIMDVec()) {
             // int ordinal_[index]_val_mask_length = VectorisedFilterOperators.lessThanSIMD(
             //      lhsArrowVecAP.read(), rhsIntScalar, ordinal_[index]_val_mask);
             codegenResult.add(
@@ -541,7 +541,7 @@ public class FilterOperator extends CodeGenOperator<LogicalFilter> {
                     )
             );
 
-        } else if (lhsAP instanceof ArrowVectorWithSelectionVectorAccessPath lhsArrowVecWSAP && !this.simdEnabled) {
+        } else if (lhsAP instanceof ArrowVectorWithSelectionVectorAccessPath lhsArrowVecWSAP && !this.useSIMDVec()) {
             // int ordinal_[index]_sel_vec_length = VectorisedFilterOperators.lessThan(
             //      lhsArrowVecWSAP.readArrowVector(), rhsIntScalar, ordinal_[index]_sel_vec,
             //      lhsArrowVecWSAP.readSelectionVector(), lhsArrowVecWSAP.readSelectionVectorLength());
@@ -565,7 +565,7 @@ public class FilterOperator extends CodeGenOperator<LogicalFilter> {
                     )
             );
 
-        } else if (lhsAP instanceof ArrowVectorWithValidityMaskAccessPath lhsAvwvmAP && this.simdEnabled) {
+        } else if (lhsAP instanceof ArrowVectorWithValidityMaskAccessPath lhsAvwvmAP && this.useSIMDVec()) {
             // int ordinal_[index]_val_mask_length = VectorisedFilterOperators.lessThanSIMD(
             //      lhsAvwvmAP.readArrowVector(), rhsIntScalar, ordinal_[index]_val_mask,
             //      lhsAvwvmAP.readValidityMask(), lhsAvwvmAP.readValidityMaskLength());
@@ -597,25 +597,25 @@ public class FilterOperator extends CodeGenOperator<LogicalFilter> {
         // Update the current ordinal mapping to include the selection vector for all arrow vectors
         List<AccessPath> updatedOrdinalMapping = cCtx.getCurrentOrdinalMapping().stream().map(
                 entry -> {
-                    if (entry instanceof ArrowVectorAccessPath avapEntry && !this.simdEnabled)
+                    if (entry instanceof ArrowVectorAccessPath avapEntry && !this.useSIMDVec())
                         return new ArrowVectorWithSelectionVectorAccessPath(
                                 avapEntry,
                                 selectionResultAP,
                                 selectionResultLengthAP,
                                 arrowVectorWithSelectionVectorType(avapEntry.getType()));
-                    else if (entry instanceof ArrowVectorAccessPath avapEntry && this.simdEnabled)
+                    else if (entry instanceof ArrowVectorAccessPath avapEntry && this.useSIMDVec())
                         return new ArrowVectorWithValidityMaskAccessPath(
                                 avapEntry,
                                 selectionResultAP,
                                 selectionResultLengthAP,
                                 arrowVectorWithValidityMaskType(avapEntry.getType()));
-                    else if (entry instanceof ArrowVectorWithSelectionVectorAccessPath avwsvapEntry && !this.simdEnabled)
+                    else if (entry instanceof ArrowVectorWithSelectionVectorAccessPath avwsvapEntry && !this.useSIMDVec())
                         return new ArrowVectorWithSelectionVectorAccessPath(
                                 avwsvapEntry.getArrowVectorVariable(),
                                 selectionResultAP,
                                 selectionResultLengthAP,
                                 arrowVectorWithSelectionVectorType(avwsvapEntry.getArrowVectorVariable().getType()));
-                    else if (entry instanceof ArrowVectorWithValidityMaskAccessPath avwvmapEntry && this.simdEnabled)
+                    else if (entry instanceof ArrowVectorWithValidityMaskAccessPath avwvmapEntry && this.useSIMDVec())
                         return new ArrowVectorWithValidityMaskAccessPath(
                                 avwvmapEntry.getArrowVectorVariable(),
                                 selectionResultAP,

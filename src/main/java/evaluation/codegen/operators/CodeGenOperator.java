@@ -6,6 +6,7 @@ import evaluation.codegen.infrastructure.context.QueryVariableType;
 import evaluation.codegen.infrastructure.context.access_path.AccessPath;
 import evaluation.codegen.infrastructure.context.access_path.IndexedArrowVectorElementAccessPath;
 import evaluation.codegen.infrastructure.context.access_path.IndexedMapAccessPath;
+import evaluation.codegen.infrastructure.context.access_path.SIMDLoopAccessPath;
 import evaluation.codegen.infrastructure.context.access_path.ScalarVariableAccessPath;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rex.RexLiteral;
@@ -39,7 +40,7 @@ public abstract class CodeGenOperator<T extends RelNode> {
     /**
      * Whether a {@link CodeGenOperator} is allowed to use SIMD for processing.
      */
-    protected final boolean simdEnabled;
+    private final boolean simdEnabled;
 
     /**
      * Initialises a new instance of a specific {@link CodeGenOperator}.
@@ -256,6 +257,38 @@ public abstract class CodeGenOperator<T extends RelNode> {
             default -> throw new UnsupportedOperationException(
                     "FilterOperator.codeGenOperandNonVec does not support his literal type");
         };
+    }
+
+    /**
+     * Method to determine if SIMD processing should be used at the current point in the codebase
+     * when using non-vectorised processing.
+     * @param cCtx The {@link CodeGenContext} to use during the deliberation.
+     * @return {@code true} iff SIMD processing should be used.
+     */
+    protected boolean useSIMDNonVec(CodeGenContext cCtx) {
+        // If SIMD is not enabled, don't use it
+        if (!this.simdEnabled)
+            return false;
+
+        // SIMD is enabled, now check if it used
+        List<AccessPath> currentOrdinalMapping = cCtx.getCurrentOrdinalMapping();
+        if (currentOrdinalMapping.size() > 0
+                && !(currentOrdinalMapping.get(0) instanceof SIMDLoopAccessPath)) {
+            // First ordinal is not of a SIMD access type, so don't use SIMD
+            return false;
+        }
+
+        // SIMD is enabled and in use
+        return true;
+    }
+
+    /**
+     * Method to determine if SIMD processing should be used at the current point in the codebase
+     * when using vectorised processing.
+     * @return {@code true} iff SIMD processing should be used.
+     */
+    protected boolean useSIMDVec() {
+        return this.simdEnabled;
     }
 
 }
