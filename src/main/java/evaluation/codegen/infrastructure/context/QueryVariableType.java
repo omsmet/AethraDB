@@ -51,5 +51,6 @@ public enum QueryVariableType {
 
     // Complex types
     MAP_INT_LONG_SIMPLE,
+    MAP_INT_MULTI_OBJECT,
 
 }

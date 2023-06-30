@@ -194,4 +194,28 @@ public final class QueryVariableTypeMethods {
         };
     }
 
+    /**
+     * Method to get a {@link QueryVariableType} for a given {@link Java.Type}.
+     * @param type The type to find the corresponding {@link QueryVariableType} for.
+     * @return The {@link QueryVariableType} corresponding to {@code type}.
+     */
+    public static QueryVariableType queryVariableTypeFromJavaType(Java.Type type) {
+        if (type instanceof Java.PrimitiveType primitiveType) {
+            return switch (primitiveType.primitive) {
+                case INT -> P_INT;
+                case LONG -> P_LONG;
+                case FLOAT -> P_FLOAT;
+                case DOUBLE -> P_DOUBLE;
+                case BOOLEAN -> P_BOOLEAN;
+                default ->
+                        throw new UnsupportedOperationException(
+                                "QueryVariableTypeMethods.queryVariableTypeFromJavaType does not support this primitive type: "
+                                        + primitiveType.primitive.toString());
+            };
+        }
+
+        throw new UnsupportedOperationException(
+                "QueryVariableTypeMethods.queryVariableTypeFromJavaType does not support this java type: " + type.toString());
+    }
+
 }

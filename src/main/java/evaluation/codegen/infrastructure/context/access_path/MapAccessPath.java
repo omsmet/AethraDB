@@ -29,6 +29,14 @@ public class MapAccessPath extends AccessPath {
     }
 
     /**
+     * Method to obtain the variable name of the variable that is wrapped by {@code this}.
+     * @return The name of the variable wrapped by {@code this}.
+     */
+    public String getVariableName() {
+        return this.variableToAccess;
+    }
+
+    /**
      * Method performing code generation to read the value of the variable represented by {@code this}.
      * @return A {@link Java.Rvalue} to read the value of the variable represented by {@code this}.
      */

@@ -93,6 +93,8 @@ public class QueryCodeGenerator extends SimpleCompiler {
                 "evaluation.general_support.hashmaps.Int_Hash_Function",
                 "evaluation.general_support.hashmaps.Simple_Int_Long_Map",
                 "evaluation.general_support.hashmaps.Simple_Int_Long_Map.Simple_Int_Long_Map_Iterator",
+                "evaluation.general_support.hashmaps.Int_Multi_Object_Map",
+                "evaluation.general_support.hashmaps.Int_Multi_Object_Map.Int_Multi_Object_Map_Iterator",
 
                 "evaluation.codegen.infrastructure.data.ArrowTableReader",
 
@@ -102,6 +104,7 @@ public class QueryCodeGenerator extends SimpleCompiler {
                 "evaluation.vector_support.VectorisedPrintOperators",
 
                 "java.lang.foreign.MemorySegment",
+                "java.util.List"
         };
 
         // Initialise the compiler, so it will allow us to generate a class which extends
@@ -293,6 +296,14 @@ public class QueryCodeGenerator extends SimpleCompiler {
             printCode(forStatement.body, indentationLevel + 4);
             System.out.print("}".indent(indentationLevel));
 
+        } else if (code instanceof Java.ForEachStatement forEachStatement) {
+            String forGuardLine =
+                    "foreach (" + forEachStatement.currentElement.toString() + " : "
+                                + forEachStatement.expression.toString() + ") {";
+            System.out.print(forGuardLine.indent(indentationLevel));
+            printCode(forEachStatement.body, indentationLevel + 4);
+            System.out.print("}".indent(indentationLevel));
+
         } else if (code instanceof Java.IfStatement ifStatement) {
             String ifGuardLine = "if (" + ifStatement.condition.toString() + ") {";
             System.out.print(ifGuardLine.indent(indentationLevel));
@@ -330,7 +341,7 @@ public class QueryCodeGenerator extends SimpleCompiler {
                 System.out.print(constructorDeclarationLine.indent(indentationLevel + 4));
 
                 printCode(constructorDeclarator.statements, indentationLevel + 8);
-                System.out.println("}".indent(indentationLevel + 4));
+                System.out.print("}".indent(indentationLevel + 4));
             }
 
             System.out.println("}".indent(indentationLevel));
