@@ -43,7 +43,7 @@ public class BiggestPrime {
      */
     @Benchmark
     @BenchmarkMode(Mode.SampleTime)
-    @OutputTimeUnit(TimeUnit.MILLISECONDS)
+    @OutputTimeUnit(TimeUnit.NANOSECONDS)
     public void computeLargestPrime(Blackhole blackhole) {
         int largestPrime = n;
         boolean isPrime;

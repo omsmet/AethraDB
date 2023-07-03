@@ -42,7 +42,7 @@ public class Factorial {
      */
     @Benchmark
     @BenchmarkMode(Mode.SampleTime)
-    @OutputTimeUnit(TimeUnit.MILLISECONDS)
+    @OutputTimeUnit(TimeUnit.NANOSECONDS)
     public void computeNFactorial(Blackhole blackhole) {
         int result = 1;
 

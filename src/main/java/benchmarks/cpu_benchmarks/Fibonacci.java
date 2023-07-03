@@ -43,7 +43,7 @@ public class Fibonacci {
      */
     @Benchmark
     @BenchmarkMode(Mode.SampleTime)
-    @OutputTimeUnit(TimeUnit.MILLISECONDS)
+    @OutputTimeUnit(TimeUnit.NANOSECONDS)
     public void computeFibN(Blackhole blackhole) {
         long F_n_2 = 0;     // F_{n - 2}, initialised as F_0 = 0
         long F_n_1 = 1;     // F_{n - 1}, initialised as F_1 = 1
