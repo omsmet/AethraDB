@@ -784,7 +784,7 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
             // Construct the key and value vectors using this iterator
             // while ([groupKeyIterator].hasNext()] {
             //     [aggregationResultVectorLength] = VectorisedAggregationOperators.constructKeyVector([groupKeyVector], [groupKeyIterator]);
-            //     VectorisedAggregationOperators.constructPreHashKeyVector([groupKeyPreHashVector], [groupKeyVector], [aggregationResultVectorLength])
+            //     VectorisedHashOperators.constructPreHashKeyVector([groupKeyPreHashVector], [groupKeyVector], [aggregationResultVectorLength])
             //     $ for each aggregationResult $
             //     VectorisedAggregationOperators.constructValueVector([aggCall_$i$_vector], [groupKeyVector], [groupKeyPreHashVector], [aggregationResultVectorLength], [aggCall_$i$_state]);
             //     [whileLoopBody]
@@ -825,7 +825,7 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
             whileLoopBody.addStatement(
                     createMethodInvocationStm(
                             getLocation(),
-                            createAmbiguousNameRef(getLocation(), "VectorisedAggregationOperators"),
+                            createAmbiguousNameRef(getLocation(), "VectorisedHashOperators"),
                             "constructPreHashKeyVector",
                             new Java.Rvalue[] {
                                     this.groupKeyPreHashVector.read(),
@@ -921,20 +921,27 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
                         if (firstOrdinalAP instanceof ArrowVectorAccessPath avap) {
                             // count += avap.read().getValueCount();
                             countIncrementRValue = createMethodInvocation(getLocation(), avap.read(), "getValueCount");
+
                         } else if (firstOrdinalAP instanceof ArrowVectorWithSelectionVectorAccessPath avwsvap) {
                             // count += avwsvap.readSelectionVectorLength();
                             countIncrementRValue = avwsvap.readSelectionVectorLength();
+
                         } else if (firstOrdinalAP instanceof ArrowVectorWithValidityMaskAccessPath avwvmap) {
                             // count += VectorisedAggregationOperators.count(avwvmap.readValidityMask(), avwvmap.readValidityMaskLength());
                             countIncrementRValue = createMethodInvocation(
                                     getLocation(),
                                     createAmbiguousNameRef(getLocation(), "VectorisedAggregationOperators"),
                                     "count",
-                                    new Java.Rvalue[] {
+                                    new Java.Rvalue[]{
                                             avwvmap.readValidityMask(),
                                             avwvmap.readValidityMaskLength()
                                     }
                             );
+
+                        } else if (firstOrdinalAP instanceof ArrayVectorAccessPath avap) {
+                            // count += avap.getVectorLengthVariable().read();
+                            countIncrementRValue = avap.getVectorLengthVariable().read();
+
                         } else {
                             throw new UnsupportedOperationException(
                                     "AggregationOperator.consumeVec does not support this access path for the count aggregation");
@@ -969,11 +976,11 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
                 // Hashing of the key-column depends on whether we are in SIMD mode or not
                 if (!this.useSIMDVec()) {
                     if (keyColumnAccessPathType == ARROW_INT_VECTOR) {
-                        // VectorisedAggregationOperators.constructPreHashKeyVector([this.groupKeyPreHashVector], [keyColumn]);
+                        // VectorisedHashOperators.constructPreHashKeyVector([this.groupKeyPreHashVector], [keyColumn]);
                         codeGenResult.add(
                                 createMethodInvocationStm(
                                         getLocation(),
-                                        createAmbiguousNameRef(getLocation(), "VectorisedAggregationOperators"),
+                                        createAmbiguousNameRef(getLocation(), "VectorisedHashOperators"),
                                         "constructPreHashKeyVector",
                                         new Java.Rvalue[]{
                                                 this.groupKeyPreHashVector.read(),
@@ -988,11 +995,11 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
 
                 } else { // this.useSIMDVec()
                     if (keyColumnAccessPathType == ARROW_INT_VECTOR) {
-                        // VectorisedAggregationOperators.constructPreHashKeyVectorSIMD([this.groupKeyPreHashVector], [keyColumn]);
+                        // VectorisedHashOperators.constructPreHashKeyVectorSIMD([this.groupKeyPreHashVector], [keyColumn]);
                         codeGenResult.add(
                                 createMethodInvocationStm(
                                         getLocation(),
-                                        createAmbiguousNameRef(getLocation(), "VectorisedAggregationOperators"),
+                                        createAmbiguousNameRef(getLocation(), "VectorisedHashOperators"),
                                         "constructPreHashKeyVectorSIMD",
                                         new Java.Rvalue[]{
                                                 this.groupKeyPreHashVector.read(),

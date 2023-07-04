@@ -4,6 +4,10 @@ import org.apache.calcite.sql.type.SqlTypeName;
 import org.codehaus.commons.compiler.Location;
 import org.codehaus.janino.Java;
 
+import static evaluation.codegen.infrastructure.context.QueryVariableType.ARRAY_DOUBLE_VECTOR;
+import static evaluation.codegen.infrastructure.context.QueryVariableType.ARRAY_FLOAT_VECTOR;
+import static evaluation.codegen.infrastructure.context.QueryVariableType.ARRAY_INT_VECTOR;
+import static evaluation.codegen.infrastructure.context.QueryVariableType.ARRAY_LONG_VECTOR;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_DOUBLE_VECTOR;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_FLOAT_VECTOR;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_INT_VECTOR;
@@ -11,6 +15,11 @@ import static evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_
 import static evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_INT_VECTOR_W_VALIDITY_MASK;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_LONG_VECTOR;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.MEMORY_SEGMENT_INT;
+import static evaluation.codegen.infrastructure.context.QueryVariableType.P_A_BOOLEAN;
+import static evaluation.codegen.infrastructure.context.QueryVariableType.P_A_DOUBLE;
+import static evaluation.codegen.infrastructure.context.QueryVariableType.P_A_FLOAT;
+import static evaluation.codegen.infrastructure.context.QueryVariableType.P_A_INT;
+import static evaluation.codegen.infrastructure.context.QueryVariableType.P_A_LONG;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.P_BOOLEAN;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.P_DOUBLE;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.P_FLOAT;
@@ -60,6 +69,21 @@ public final class QueryVariableTypeMethods {
     }
 
     /**
+     * Method to get the primitive array type for a primitive type.
+     */
+    public static QueryVariableType primitiveArrayTypeForPrimitive(QueryVariableType primitive) {
+        return switch (primitive) {
+            case P_BOOLEAN -> P_A_BOOLEAN;
+            case P_DOUBLE -> P_A_DOUBLE;
+            case P_FLOAT -> P_A_FLOAT;
+            case P_INT -> P_A_INT;
+            case P_LONG -> P_A_LONG;
+            default -> throw new IllegalArgumentException(
+                    "primitiveArrayTypeForPrimitive cannot determine the primitive array type for " + primitive);
+        };
+    }
+
+    /**
      * Method to get the primitive member type for a primitive array type.
      */
     public static QueryVariableType primitiveMemberTypeForArray(QueryVariableType arrayType) {
@@ -70,6 +94,20 @@ public final class QueryVariableTypeMethods {
             case P_A_LONG -> P_LONG;
             default ->
                     throw new IllegalArgumentException("primitiveMemberTypeForArray expects a primitive array type");
+        };
+    }
+
+    /**
+     * Method to get the array vector type for a primitive array type.
+     */
+    public static QueryVariableType vectorTypeForPrimitiveArrayType(QueryVariableType arrayType) {
+        return switch (arrayType) {
+            case P_A_DOUBLE -> ARRAY_DOUBLE_VECTOR;
+            case P_A_FLOAT -> ARRAY_FLOAT_VECTOR;
+            case P_A_INT -> ARRAY_INT_VECTOR;
+            case P_A_LONG -> ARRAY_LONG_VECTOR;
+            default ->
+                throw new IllegalArgumentException("vectorTypeForPrimitiveArrayType expects a primitive array type");
         };
     }
 

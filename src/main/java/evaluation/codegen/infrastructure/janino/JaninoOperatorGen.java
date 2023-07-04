@@ -38,6 +38,17 @@ public class JaninoOperatorGen {
     }
 
     /**
+     * Generate an subtraction operator.
+     * @param location The location at which the operator is requested for generation.
+     * @param lhs The left-hand side of the subtraction.
+     * @param rhs The right-hand side of the subtraction.
+     * @return The generated subtraction operator.
+     */
+    public static Java.BinaryOperation sub(Location location, Java.Rvalue lhs, Java.Rvalue rhs) {
+        return new Java.BinaryOperation(location, lhs, "-", rhs);
+    }
+
+    /**
      * Generate a multiplication operator.
      * @param location The location at which the operator is requested for generation.
      * @param lhs The left-hand side of the multiplication.
@@ -92,6 +103,17 @@ public class JaninoOperatorGen {
      */
     public static Java.BinaryOperation lt(Location location, Java.Rvalue lhs, Java.Rvalue rhs) {
         return new Java.BinaryOperation(location, lhs, "<", rhs);
+    }
+
+    /**
+     * Generate a greater-than comparison operator.
+     * @param location The location at which the operator is requested for generation.
+     * @param lhs The left-hand side of the comparison.
+     * @param rhs The right-hand side of the comparison.
+     * @return The comparison operator.
+     */
+    public static Java.BinaryOperation gt(Location location, Java.Rvalue lhs, Java.Rvalue rhs) {
+        return new Java.BinaryOperation(location, lhs, ">", rhs);
     }
 
 }

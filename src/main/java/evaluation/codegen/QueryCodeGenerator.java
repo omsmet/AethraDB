@@ -100,6 +100,7 @@ public class QueryCodeGenerator extends SimpleCompiler {
 
                 "evaluation.vector_support.VectorisedAggregationOperators",
                 "evaluation.vector_support.VectorisedFilterOperators",
+                "evaluation.vector_support.VectorisedHashOperators",
                 "evaluation.vector_support.VectorisedOperators",
                 "evaluation.vector_support.VectorisedPrintOperators",
 

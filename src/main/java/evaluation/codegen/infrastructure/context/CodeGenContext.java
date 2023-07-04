@@ -150,7 +150,7 @@ public class CodeGenContext implements AutoCloseable {
      * @param deallocate Whether the {@link AllocationManager} should deallocate the variable too.
      * @return The actual name of the allocated variable.
      */
-    public String defineScanSurroundingVariables(
+    public String defineScanSurroundingVariable(
             String preferredName,
             Java.Type typeToAllocate,
             Java.ArrayInitializerOrRvalue initialisationStatement,

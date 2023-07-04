@@ -4,6 +4,9 @@ import evaluation.codegen.infrastructure.context.CodeGenContext;
 import evaluation.codegen.infrastructure.context.OptimisationContext;
 import evaluation.codegen.infrastructure.context.QueryVariableType;
 import evaluation.codegen.infrastructure.context.access_path.AccessPath;
+import evaluation.codegen.infrastructure.context.access_path.ArrayAccessPath;
+import evaluation.codegen.infrastructure.context.access_path.ArrayVectorAccessPath;
+import evaluation.codegen.infrastructure.context.access_path.ArrowVectorAccessPath;
 import evaluation.codegen.infrastructure.context.access_path.MapAccessPath;
 import evaluation.codegen.infrastructure.context.access_path.SIMDLoopAccessPath;
 import evaluation.codegen.infrastructure.context.access_path.ScalarVariableAccessPath;
@@ -21,27 +24,46 @@ import org.codehaus.janino.Java;
 import java.util.ArrayList;
 import java.util.List;
 
+import static evaluation.codegen.infrastructure.context.QueryVariableType.ARRAY_INT_VECTOR;
+import static evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_INT_VECTOR;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.MAP_INT_MULTI_OBJECT;
+import static evaluation.codegen.infrastructure.context.QueryVariableType.P_A_LONG;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.P_INT;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.P_LONG;
+import static evaluation.codegen.infrastructure.context.QueryVariableTypeMethods.primitiveArrayTypeForPrimitive;
 import static evaluation.codegen.infrastructure.context.QueryVariableTypeMethods.primitiveType;
 import static evaluation.codegen.infrastructure.context.QueryVariableTypeMethods.queryVariableTypeFromJavaType;
 import static evaluation.codegen.infrastructure.context.QueryVariableTypeMethods.toJavaType;
+import static evaluation.codegen.infrastructure.context.QueryVariableTypeMethods.vectorTypeForPrimitiveArrayType;
 import static evaluation.codegen.infrastructure.janino.JaninoClassGen.createClassInstance;
 import static evaluation.codegen.infrastructure.janino.JaninoClassGen.createLocalClassDeclaration;
 import static evaluation.codegen.infrastructure.janino.JaninoClassGen.createLocalClassDeclarationStm;
 import static evaluation.codegen.infrastructure.janino.JaninoClassGen.createPublicFinalFieldDeclaration;
 import static evaluation.codegen.infrastructure.janino.JaninoControlGen.createForEachLoop;
+import static evaluation.codegen.infrastructure.janino.JaninoControlGen.createForLoop;
+import static evaluation.codegen.infrastructure.janino.JaninoControlGen.createIf;
 import static evaluation.codegen.infrastructure.janino.JaninoControlGen.createIfNotContinue;
+import static evaluation.codegen.infrastructure.janino.JaninoControlGen.createWhileLoop;
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createAmbiguousNameRef;
+import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createArrayElementAccessExpr;
+import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createIntegerLiteral;
+import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createPrimitiveArrayType;
+import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createPrimitiveType;
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createReferenceType;
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.getLocation;
 import static evaluation.codegen.infrastructure.janino.JaninoMethodGen.createFormalParameter;
 import static evaluation.codegen.infrastructure.janino.JaninoMethodGen.createFormalParameters;
 import static evaluation.codegen.infrastructure.janino.JaninoMethodGen.createMethodInvocation;
 import static evaluation.codegen.infrastructure.janino.JaninoMethodGen.createMethodInvocationStm;
+import static evaluation.codegen.infrastructure.janino.JaninoOperatorGen.gt;
+import static evaluation.codegen.infrastructure.janino.JaninoOperatorGen.lt;
+import static evaluation.codegen.infrastructure.janino.JaninoOperatorGen.not;
 import static evaluation.codegen.infrastructure.janino.JaninoOperatorGen.plus;
+import static evaluation.codegen.infrastructure.janino.JaninoOperatorGen.postIncrement;
+import static evaluation.codegen.infrastructure.janino.JaninoOperatorGen.postIncrementStm;
+import static evaluation.codegen.infrastructure.janino.JaninoOperatorGen.sub;
 import static evaluation.codegen.infrastructure.janino.JaninoVariableGen.createLocalVariable;
+import static evaluation.codegen.infrastructure.janino.JaninoVariableGen.createPrimitiveLocalVar;
 import static evaluation.codegen.infrastructure.janino.JaninoVariableGen.createSimpleVariableDeclaration;
 import static evaluation.codegen.infrastructure.janino.JaninoVariableGen.createVariableAssignmentStm;
 
@@ -75,6 +97,22 @@ public class JoinOperator extends CodeGenOperator<LogicalJoin> {
     private MapAccessPath joinMapAP;
 
     /**
+     * The access path to the pre-hash vector variable used for performing the join.
+     */
+    private ArrayAccessPath preHashVectorAP;
+
+    /**
+     * The names of the result vectors of this operator in the vectorised paradigm.
+     */
+    private String[] resultVectorNames;
+
+    /**
+     * The access paths indicating the vector types that should be exposed as the result of this
+     * operator in the vectorised paradigm.
+     */
+    private ArrayAccessPath[] resultVectorDefinitions;
+
+    /**
      * Boolean indicating if the consume method should perform a hash-table build or a hash-table probe.
      * Will be initialised as false to indicate a hash-table build first.
      */
@@ -99,6 +137,8 @@ public class JoinOperator extends CodeGenOperator<LogicalJoin> {
         this.rightChild = rightChild;
         this.rightChild.setParent(this);
         this.consumeInProbePhase = false;
+        this.resultVectorNames = new String[join.getRowType().getFieldCount()];
+        this.resultVectorDefinitions = new ArrayAccessPath[join.getRowType().getFieldCount()];
 
         // Check pre-conditions
         if (join.getJoinType() != JoinRelType.INNER)
@@ -147,8 +187,8 @@ public class JoinOperator extends CodeGenOperator<LogicalJoin> {
         // which will eventually invoke the consumeNonVec method on @this which should perform the
         // hash-table build.
         // Additionally, the consumeNonVec method will initialise the record type for the hash table
-        // which will have to be added to the codeGenResult first, after which we initialise the actual
-        // map used for the join.
+        // which will have to be added to the codeGenResult first, after which we initialise the
+        // actual map used for the join.
         cCtx.pushCodeGenContext();
         List<Java.Statement> leftChildProduceResult = this.leftChild.produceNonVec(cCtx, oCtx);
         cCtx.popCodeGenContext();
@@ -160,18 +200,18 @@ public class JoinOperator extends CodeGenOperator<LogicalJoin> {
                 "Int_Multi_Object_Map",
                 this.leftChildRecordType.lcd.getName());
         codeGenResult.add(
-            createLocalVariable(
-                getLocation(),
-                joinMapType,
-                this.joinMapAP.getVariableName(),
-                createClassInstance(getLocation(), joinMapType)
-            )
+                createLocalVariable(
+                        getLocation(),
+                        joinMapType,
+                        this.joinMapAP.getVariableName(),
+                        createClassInstance(getLocation(), joinMapType)
+                )
         );
 
         codeGenResult.addAll(leftChildProduceResult);
 
         // Next, call the produce method on the right child operator, which will eventually invoke
-        // the consumeNonvec method on @this, which should perform the hash-table probe and call
+        // the consumeNonVec method on @this, which should perform the hash-table probe and call
         // the consumeNonVec method on the parent.
         cCtx.pushCodeGenContext();
         codeGenResult.addAll(this.rightChild.produceNonVec(cCtx, oCtx));
@@ -182,21 +222,7 @@ public class JoinOperator extends CodeGenOperator<LogicalJoin> {
 
     @Override
     public List<Java.Statement> consumeNonVec(CodeGenContext cCtx, OptimisationContext oCtx) {
-        if (!this.consumeInProbePhase) {
-            // Mark that on the next call, we are in the probe phase
-            this.consumeInProbePhase = true;
-
-            // Then introduce the class to store records of the left-child in the hash-table
-            this.leftChildRecordType = generateRecordTypeForRelation(cCtx.getCurrentOrdinalMapping());
-
-            // And build the hash table
-            return this.consumeNonVecBuild(cCtx, oCtx);
-
-        } else {
-            // Perform the probe (which also has the parent operator consume the result)
-            return this.consumeNonVecProbe(cCtx, oCtx);
-
-        }
+        return this.consume(cCtx, oCtx, false);
     }
 
     /**
@@ -561,6 +587,837 @@ public class JoinOperator extends CodeGenOperator<LogicalJoin> {
         joinLoopBody.addStatements(this.nonVecParentConsume(cCtx, oCtx));
 
         return codeGenResult;
+    }
+
+    @Override
+    public List<Java.Statement> produceVec(CodeGenContext cCtx, OptimisationContext oCtx) {
+        List<Java.Statement> codeGenResult = new ArrayList<>();
+
+        // Reserve a name for the join map and set its access path
+        this.joinMapAP = new MapAccessPath(cCtx.defineVariable("join_map"), MAP_INT_MULTI_OBJECT);
+
+        // Reserve the names for the result vectors
+        for (int i = 0; i < this.resultVectorNames.length; i++)
+            this.resultVectorNames[i] = cCtx.defineVariable("join_result_vector_ord_" + i);
+
+        // For vectorised implementations, allocate a pre-hash vector
+        this.preHashVectorAP = new ArrayAccessPath(cCtx.defineVariable("pre_hash_vector"), P_A_LONG);
+        codeGenResult.add(
+                createLocalVariable(
+                        getLocation(),
+                        createPrimitiveArrayType(getLocation(), Java.Primitive.LONG),
+                        this.preHashVectorAP.getVariableName(),
+                        createMethodInvocation(
+                                getLocation(),
+                                createMethodInvocation(
+                                        getLocation(),
+                                        createAmbiguousNameRef(getLocation(), "cCtx"),
+                                        "getAllocationManager"
+                                ),
+                                "getLongVector"
+                        )
+                )
+        );
+
+        // First build the hash-table by calling the produceVec method on the left child operator,
+        // which will eventually invoke the consumeVec method on @this which should perform the
+        // hash-table build.
+        // Additionally, the consumeVec method will initialise the record type for the hash table and
+        // prepare the left-hand side of the result vector type initialisation.
+        cCtx.pushCodeGenContext();
+        List<Java.Statement> leftChildProduceResult = this.leftChild.produceVec(cCtx, oCtx);
+        cCtx.popCodeGenContext();
+
+        // We first add the join record type to the codegen result, and initialise the join map
+        codeGenResult.add(this.leftChildRecordType);
+
+        Java.Type joinMapType = createReferenceType(
+                getLocation(),
+                "Int_Multi_Object_Map",
+                this.leftChildRecordType.lcd.getName());
+        codeGenResult.add(
+                createLocalVariable(
+                        getLocation(),
+                        joinMapType,
+                        this.joinMapAP.getVariableName(),
+                        createClassInstance(getLocation(), joinMapType)
+                )
+        );
+
+        // Then we add the left-child production code
+        codeGenResult.addAll(leftChildProduceResult);
+
+        // Next, call the produce method on the right child operator, which will eventually invoke
+        // the consumeVec method on @this, which should perform the hash-table probe, continue the
+        // result vector type initialisation and call the consumeVec method on the parent.
+        cCtx.pushCodeGenContext();
+        List<Java.Statement> rightChildProduceResult = this.rightChild.produceVec(cCtx, oCtx);
+        cCtx.popCodeGenContext();
+
+        // Allocate the result vectors first
+        for (int i = 0; i < this.resultVectorDefinitions.length; i++) {
+            ArrayAccessPath vectorDescription = this.resultVectorDefinitions[i];
+            String instantiationMethod = switch (vectorDescription.getType()) {
+                case P_A_BOOLEAN -> "getBooleanVector";
+                case P_A_INT -> "getIntVector";
+                case P_A_LONG -> "getLongVector";
+                default -> throw new UnsupportedOperationException(
+                        "JoinOperator.produceVec does not support allocating this result vector type");
+            };
+
+            codeGenResult.add(
+                    createLocalVariable(
+                            getLocation(),
+                            toJavaType(getLocation(), vectorDescription.getType()),
+                            vectorDescription.getVariableName(),
+                            createMethodInvocation(
+                                    getLocation(),
+                                    createMethodInvocation(
+                                            getLocation(),
+                                            createAmbiguousNameRef(getLocation(), "cCtx"),
+                                            "getAllocationManager"
+                                    ),
+                                    instantiationMethod
+                            )
+                    )
+            );
+        }
+
+        // Then add the right child production result
+        codeGenResult.addAll(rightChildProduceResult);
+
+        // For vectorised implementations, deallocate the pre-hash vector
+        codeGenResult.add(
+                createMethodInvocationStm(
+                        getLocation(),
+                        createMethodInvocation(
+                                getLocation(),
+                                createAmbiguousNameRef(getLocation(), "cCtx"),
+                                "getAllocationManager"
+                        ),
+                        "release",
+                        new Java.Rvalue[] { this.preHashVectorAP.read() }
+                )
+        );
+
+        // And deallocate the result vectors
+        for (int i = 0; i < this.resultVectorDefinitions.length; i++) {
+            codeGenResult.add(
+                    createMethodInvocationStm(
+                            getLocation(),
+                            createMethodInvocation(
+                                    getLocation(),
+                                    createAmbiguousNameRef(getLocation(), "cCtx"),
+                                    "getAllocationManager"
+                            ),
+                            "release",
+                            new Java.Rvalue[] { this.resultVectorDefinitions[i].read() }
+                    )
+            );
+        }
+
+        return codeGenResult;
+    }
+
+    @Override
+    public List<Java.Statement> consumeVec(CodeGenContext cCtx, OptimisationContext oCtx) {
+        // Set-up the current part of the result vector type initialisation
+        List<AccessPath> currentOrdinalMapping = cCtx.getCurrentOrdinalMapping();
+        int vectorOffset = consumeInProbePhase ? this.leftChild.getLogicalSubplan().getRowType().getFieldCount()
+                                               : 0;
+        for (int i = 0; i < currentOrdinalMapping.size(); i++) {
+            int outputVectorIndex = vectorOffset + i;
+            QueryVariableType primitiveOrdinalType =
+                    primitiveType(currentOrdinalMapping.get(i).getType());
+            this.resultVectorDefinitions[outputVectorIndex] =
+                    new ArrayAccessPath(
+                            this.resultVectorNames[outputVectorIndex],
+                            primitiveArrayTypeForPrimitive(primitiveOrdinalType)
+                    );
+        }
+
+        // Now to the actual consume task
+        return this.consume(cCtx, oCtx, true);
+    }
+
+    /**
+     * Method for generating code that perform the hash-table build in the vectorised paradigm.
+     * @param cCtx The {@link CodeGenContext} to use during the generation.
+     * @param oCtx The {@link OptimisationContext} to use during the generation and execution.
+     * @return The generated query code.
+     */
+    private List<Java.Statement> consumeVecBuild(CodeGenContext cCtx, OptimisationContext oCtx) {
+        List<Java.Statement> codeGenResult = new ArrayList<>();
+
+        // Check that we can handle the key type (casts valid due to pre-condition check in constructor)
+        RexCall joinCondition = (RexCall) this.getLogicalSubplan().getCondition();
+        RexInputRef buildKey = (RexInputRef) joinCondition.getOperands().get(0);
+        int buildKeyOrdinal = buildKey.getIndex();
+        List<AccessPath> currentOrdinalMapping = cCtx.getCurrentOrdinalMapping();
+        AccessPath buildKeyAP = currentOrdinalMapping.get(buildKeyOrdinal);
+        QueryVariableType buildKeyAPType = buildKeyAP.getType();
+        QueryVariableType buildKeyOrdinalPrimitiveType = primitiveType(buildKeyAP.getType());
+
+        if (buildKeyOrdinalPrimitiveType != P_INT)
+            throw new UnsupportedOperationException("JoinOperator.consumeVecBuild only supports integer join key columns");
+
+        // Idea: first perform pre-hashing of the key-column and then perform hash-table inserts
+        if (buildKeyAPType == ARROW_INT_VECTOR) {
+            // We know that all other vectors on the build side must be of some arrow vector type
+            // without any validity mask/selection vector
+            ArrowVectorAccessPath buildKeyAVAP = ((ArrowVectorAccessPath) buildKeyAP);
+
+            if (!this.useSIMDVec()) {
+                // VectorisedHashOperators.constructPreHashKeyVector([this.preHashVectorAP.read()], [buildKeyAVAP.read()]);
+                codeGenResult.add(
+                        createMethodInvocationStm(
+                                getLocation(),
+                                createAmbiguousNameRef(getLocation(), "VectorisedHashOperators"),
+                                "constructPreHashKeyVector",
+                                new Java.Rvalue[]{
+                                        this.preHashVectorAP.read(),
+                                        buildKeyAVAP.read()
+                                }
+                        ));
+            } else {
+                // VectorisedHashOperators.constructPreHashKeyVectorSIMD([this.preHashVectorAP.read()], [buildKeyAVAP.read()]);
+                codeGenResult.add(
+                        createMethodInvocationStm(
+                                getLocation(),
+                                createAmbiguousNameRef(getLocation(), "VectorisedHashOperators"),
+                                "constructPreHashKeyVectorSIMD",
+                                new Java.Rvalue[]{
+                                        this.preHashVectorAP.read(),
+                                        buildKeyAVAP.read()
+                                }
+                        ));
+            }
+
+            // Now iterate over the key vector to construct the hash-table records and insert them into the table
+            // int recordCount = [buildKeyAVAP.read()].getValueCount();
+            ScalarVariableAccessPath recordCountAP = new ScalarVariableAccessPath(
+                    cCtx.defineVariable("recordCount"),
+                    P_INT
+            );
+            codeGenResult.add(
+                    createLocalVariable(
+                            getLocation(),
+                            createPrimitiveType(getLocation(), Java.Primitive.INT),
+                            recordCountAP.getVariableName(),
+                            createMethodInvocation(
+                                    getLocation(),
+                                    buildKeyAVAP.read(),
+                                    "getValueCount"
+                            )
+                    )
+            );
+
+            // for (int i = 0; i < recordCount; i++) { [insertionLoopBody] }
+            ScalarVariableAccessPath insertionLoopIndexVariable =
+                    new ScalarVariableAccessPath(cCtx.defineVariable("i"), P_INT);
+            Java.Block insertionLoopBody = new Java.Block(getLocation());
+            codeGenResult.add(
+                    createForLoop(
+                            getLocation(),
+                            createLocalVariable(
+                                    getLocation(),
+                                    toJavaType(getLocation(), insertionLoopIndexVariable.getType()),
+                                    insertionLoopIndexVariable.getVariableName(),
+                                    createIntegerLiteral(getLocation(), 0)
+                            ),
+                            lt(
+                                    getLocation(),
+                                    insertionLoopIndexVariable.read(),
+                                    recordCountAP.read()
+                            ),
+                            postIncrement(getLocation(), insertionLoopIndexVariable.write()),
+                            insertionLoopBody
+                    )
+            );
+
+            // Create the record in the loop body
+            // int left_join_record_key = [buildKeyAVAP].get([i]);
+            ScalarVariableAccessPath leftJoinRecordKeyAP = new ScalarVariableAccessPath(
+                    cCtx.defineVariable("left_join_record_key"),
+                    P_INT
+            );
+            insertionLoopBody.addStatement(
+                    createLocalVariable(
+                            getLocation(),
+                            toJavaType(getLocation(), leftJoinRecordKeyAP.getType()),
+                            leftJoinRecordKeyAP.getVariableName(),
+                            createMethodInvocation(
+                                    getLocation(),
+                                    buildKeyAVAP.read(),
+                                    "get",
+                                    new Java.Rvalue[]{insertionLoopIndexVariable.read()}
+                            )
+                    )
+            );
+
+            // var left_join_record = new [leftRecordType]( [column values] )
+            String recordVariableName = cCtx.defineVariable("left_join_record");
+            Java.Type recordType = createReferenceType(getLocation(), this.leftChildRecordType.lcd.getName());
+
+            Java.Rvalue[] columnValues = new Java.Rvalue[currentOrdinalMapping.size()];
+            for (int i = 0; i < columnValues.length; i++) {
+                if (i == buildKeyOrdinal)
+                    columnValues[i] = leftJoinRecordKeyAP.read();
+                else
+                    columnValues[i] = createMethodInvocation(
+                            getLocation(),
+                            ((ArrowVectorAccessPath) currentOrdinalMapping.get(i)).read(),
+                            "get",
+                            new Java.Rvalue[] { insertionLoopIndexVariable.read() }
+                    );
+            }
+
+            insertionLoopBody.addStatement(
+                    createLocalVariable(
+                            getLocation(),
+                            recordType,
+                            recordVariableName,
+                            createClassInstance(
+                                    getLocation(),
+                                    recordType,
+                                    columnValues
+                            )
+                    )
+            );
+
+            // Insert the record into the hash-table
+            // [join_map].add([left_join_record_key], [preHashVector][[i]], [recordVariableName])
+            insertionLoopBody.addStatement(
+                    createMethodInvocationStm(
+                            getLocation(),
+                            this.joinMapAP.read(),
+                            "add",
+                            new Java.Rvalue[]{
+                                    leftJoinRecordKeyAP.read(),
+                                    createArrayElementAccessExpr(
+                                            getLocation(),
+                                            preHashVectorAP.read(),
+                                            insertionLoopIndexVariable.read()
+                                    ),
+                                    createAmbiguousNameRef(getLocation(), recordVariableName)
+                            }
+                    )
+            );
+
+        } else if (buildKeyAPType == ARRAY_INT_VECTOR) {
+            // We know that all other vectors on the build side must be of some array vector type
+            // without any validity mask/selection vector
+            ArrayVectorAccessPath buildKeyAVAP = ((ArrayVectorAccessPath) buildKeyAP);
+
+            if (!this.useSIMDVec()) {
+                // VectorisedHashOperators.constructPreHashKeyVector(
+                //         [this.preHashVectorAP.read()],
+                //         [buildKeyAVAP.getVectorVariable().read()]
+                //         [buildKeyAVAP.getVectorLengthVariable().read()]);
+                codeGenResult.add(
+                        createMethodInvocationStm(
+                                getLocation(),
+                                createAmbiguousNameRef(getLocation(), "VectorisedHashOperators"),
+                                "constructPreHashKeyVector",
+                                new Java.Rvalue[]{
+                                        this.preHashVectorAP.read(),
+                                        buildKeyAVAP.getVectorVariable().read(),
+                                        buildKeyAVAP.getVectorLengthVariable().read()
+                                }
+                        ));
+            } else {
+                // VectorisedHashOperators.constructPreHashKeyVectorSIMD(
+                //         [this.preHashVectorAP.read()],
+                //         [buildKeyAVAP.getVectorVariable().read()]
+                //         [buildKeyAVAP.getVectorLengthVariable().read()]);
+                codeGenResult.add(
+                        createMethodInvocationStm(
+                                getLocation(),
+                                createAmbiguousNameRef(getLocation(), "VectorisedHashOperators"),
+                                "constructPreHashKeyVectorSIMD",
+                                new Java.Rvalue[]{
+                                        this.preHashVectorAP.read(),
+                                        buildKeyAVAP.getVectorVariable().read(),
+                                        buildKeyAVAP.getVectorLengthVariable().read()
+                                }
+                        ));
+            }
+
+            // Now iterate over the key vector to construct the hash-table records and insert them into the table
+            // for (int i = 0; i < [buildKeyAVAP.getVectorLengthVariable().read()]; i++) { [insertionLoopBody] }
+            ScalarVariableAccessPath insertionLoopIndexVariable =
+                    new ScalarVariableAccessPath(cCtx.defineVariable("i"), P_INT);
+            Java.Block insertionLoopBody = new Java.Block(getLocation());
+            codeGenResult.add(
+                    createForLoop(
+                            getLocation(),
+                            createLocalVariable(
+                                    getLocation(),
+                                    toJavaType(getLocation(), insertionLoopIndexVariable.getType()),
+                                    insertionLoopIndexVariable.getVariableName(),
+                                    createIntegerLiteral(getLocation(), 0)
+                            ),
+                            lt(
+                                    getLocation(),
+                                    insertionLoopIndexVariable.read(),
+                                    buildKeyAVAP.getVectorLengthVariable().read()
+                            ),
+                            postIncrement(getLocation(), insertionLoopIndexVariable.write()),
+                            insertionLoopBody
+                    )
+            );
+
+            // Create the record in the loop body
+            // int left_join_record_key = [buildKeyAVAP.read()][i];
+            ScalarVariableAccessPath leftJoinRecordKeyAP = new ScalarVariableAccessPath(
+                    cCtx.defineVariable("left_join_record_key"),
+                    P_INT
+            );
+            insertionLoopBody.addStatement(
+                    createLocalVariable(
+                            getLocation(),
+                            toJavaType(getLocation(), leftJoinRecordKeyAP.getType()),
+                            leftJoinRecordKeyAP.getVariableName(),
+                            createArrayElementAccessExpr(
+                                    getLocation(),
+                                    buildKeyAVAP.getVectorVariable().read(),
+                                    insertionLoopIndexVariable.read()
+                            )
+                    )
+            );
+
+            // var left_join_record = new [leftRecordType]( [column values] )
+            String recordVariableName = cCtx.defineVariable("left_join_record");
+            Java.Type recordType = createReferenceType(getLocation(), this.leftChildRecordType.lcd.getName());
+
+            Java.Rvalue[] columnValues = new Java.Rvalue[currentOrdinalMapping.size()];
+            for (int i = 0; i < columnValues.length; i++) {
+                ArrayVectorAccessPath columnAP = ((ArrayVectorAccessPath) currentOrdinalMapping.get(i));
+                if (i == buildKeyOrdinal)
+                    columnValues[i] = leftJoinRecordKeyAP.read();
+                else
+                    columnValues[i] = createArrayElementAccessExpr(
+                            getLocation(),
+                            columnAP.getVectorVariable().read(),
+                            insertionLoopIndexVariable.read()
+                    );
+            }
+
+            insertionLoopBody.addStatement(
+                    createLocalVariable(
+                            getLocation(),
+                            recordType,
+                            recordVariableName,
+                            createClassInstance(
+                                    getLocation(),
+                                    recordType,
+                                    columnValues
+                            )
+                    )
+            );
+
+            // Insert the record into the hash-table
+            // [join_map].add([left_join_record_key], [preHashVector][[i]], [recordVariableName])
+            insertionLoopBody.addStatement(
+                    createMethodInvocationStm(
+                            getLocation(),
+                            this.joinMapAP.read(),
+                            "add",
+                            new Java.Rvalue[] {
+                                    leftJoinRecordKeyAP.read(),
+                                    createArrayElementAccessExpr(
+                                            getLocation(),
+                                            preHashVectorAP.read(),
+                                            insertionLoopIndexVariable.read()
+                                    ),
+                                    createAmbiguousNameRef(getLocation(), recordVariableName)
+                            }
+                    )
+            );
+
+        } else {
+            throw new UnsupportedOperationException(
+                    "JoinOperator.consumeVecBuild does not support this key column access path type: " + buildKeyAPType);
+        }
+
+        return codeGenResult;
+    }
+
+    /**
+     * Method for generating the code that performs the hash-table probe in the vectorised paradigm.
+     * @param cCtx The {@link CodeGenContext} to use during the generation.
+     * @param oCtx The {@link OptimisationContext} to use during the generation and execution.
+     * @return The generated query code.
+     */
+    private List<Java.Statement> consumeVecProbe(CodeGenContext cCtx, OptimisationContext oCtx) {
+        List<Java.Statement> codeGenResult = new ArrayList<>();
+
+        // Check that we can handle the key type (casts valid due to pre-condition check in constructor)
+        RexCall joinCondition = (RexCall) this.getLogicalSubplan().getCondition();
+        RexInputRef buildKey = (RexInputRef) joinCondition.getOperands().get(1);
+        // Need to convert the output ordinal to the right-input ordinal
+        int buildKeyOrdinal = buildKey.getIndex() - this.getLogicalSubplan().getLeft().getRowType().getFieldCount();
+        List<AccessPath> currentOrdinalMapping = cCtx.getCurrentOrdinalMapping();
+        AccessPath buildKeyAP = currentOrdinalMapping.get(buildKeyOrdinal);
+        QueryVariableType buildKeyAPType = buildKeyAP.getType();
+        QueryVariableType buildKeyOrdinalPrimitiveType = primitiveType(buildKeyAP.getType());
+
+        if (buildKeyOrdinalPrimitiveType != P_INT)
+            throw new UnsupportedOperationException("JoinOperator.consumeVecProbe only supports integer join key columns");
+
+        // First perform the pre-hashing of the key column and then perform hash-table inserts
+        if (buildKeyAPType == ARROW_INT_VECTOR) {
+            // We know that all other vectors on the probe side must be of some arrow vector type
+            // without any validity mask/selection vector
+            ArrowVectorAccessPath buildKeyAVAP = ((ArrowVectorAccessPath) buildKeyAP);
+
+            if (!this.useSIMDVec()) {
+                // VectorisedHashOperators.constructPreHashKeyVector([this.preHashVectorAP.read()], [buildKeyAVAP.read()]);
+                codeGenResult.add(
+                        createMethodInvocationStm(
+                                getLocation(),
+                                createAmbiguousNameRef(getLocation(), "VectorisedHashOperators"),
+                                "constructPreHashKeyVector",
+                                new Java.Rvalue[]{
+                                        this.preHashVectorAP.read(),
+                                        buildKeyAVAP.read()
+                                }
+                        ));
+            } else {
+                // VectorisedHashOperators.constructPreHashKeyVectorSIMD([this.preHashVectorAP.read()], [buildKeyAVAP.read()]);
+                codeGenResult.add(
+                        createMethodInvocationStm(
+                                getLocation(),
+                                createAmbiguousNameRef(getLocation(), "VectorisedHashOperators"),
+                                "constructPreHashKeyVectorSIMD",
+                                new Java.Rvalue[]{
+                                        this.preHashVectorAP.read(),
+                                        buildKeyAVAP.read()
+                                }
+                        ));
+            }
+
+            // Now we need to iterate over the key vector to construct the result vectors by probing the
+            // hash table and reading the other vectors on the probe side
+            // int recordCount = [buildKeyAVAP.read()].getValueCount();
+            ScalarVariableAccessPath recordCountAP = new ScalarVariableAccessPath(
+                    cCtx.defineVariable("recordCount"),
+                    P_INT
+            );
+            codeGenResult.add(
+                    createLocalVariable(
+                            getLocation(),
+                            createPrimitiveType(getLocation(), Java.Primitive.INT),
+                            recordCountAP.getVariableName(),
+                            createMethodInvocation(
+                                    getLocation(),
+                                    buildKeyAVAP.read(),
+                                    "getValueCount"
+                            )
+                    )
+            );
+
+            // int currentRecordIndex = 0;
+            ScalarVariableAccessPath currentRecordIndexAP = new ScalarVariableAccessPath(
+                    cCtx.defineVariable("currentRecordIndex"),
+                    P_INT
+            );
+            codeGenResult.add(
+                    createPrimitiveLocalVar(
+                            getLocation(),
+                            Java.Primitive.INT,
+                            currentRecordIndexAP.getVariableName(),
+                            "0"
+                    )
+            );
+
+            // while (currentRecordIndex < recordCount) { [whileLoopBody] }
+            Java.Block whileLoopBody = new Java.Block(getLocation());
+            codeGenResult.add(
+                    createWhileLoop(
+                            getLocation(),
+                            lt(getLocation(), currentRecordIndexAP.read(), recordCountAP.read()),
+                            whileLoopBody
+                    )
+            );
+
+            // In the while-loop body, iterate over the keys and insert as many join records while
+            // there is still room left, via a nested loop
+            // int currentResultIndex = 0;
+            ScalarVariableAccessPath currentResultIndexAP = new ScalarVariableAccessPath(
+                    cCtx.defineVariable("currentResultIndex"),
+                    P_INT
+            );
+            whileLoopBody.addStatement(
+                    createPrimitiveLocalVar(
+                            getLocation(),
+                            Java.Primitive.INT,
+                            currentResultIndexAP.getVariableName(),
+                            "0"
+                    )
+            );
+
+            // Add the inner loop which will insert as many records as possible into the result vector
+            // while (currentRecordIndex < recordCount) { [resultVectorConstructionLoop] }
+            Java.Block resultVectorConstructionLoop = new Java.Block(getLocation());
+            whileLoopBody.addStatement(
+                    createWhileLoop(
+                            getLocation(),
+                            lt(getLocation(), currentRecordIndexAP.read(), recordCountAP.read()),
+                            resultVectorConstructionLoop
+                    )
+            );
+
+            // int right_join_key = [buildKeyAVAP.read()].get([currentRecordIndex.read()]);
+            ScalarVariableAccessPath rightJoinKeyAP =
+                    new ScalarVariableAccessPath(cCtx.defineVariable("right_join_key"), P_INT);
+            resultVectorConstructionLoop.addStatement(
+                    createLocalVariable(
+                            getLocation(),
+                            toJavaType(getLocation(), rightJoinKeyAP.getType()),
+                            rightJoinKeyAP.getVariableName(),
+                            createMethodInvocation(
+                                    getLocation(),
+                                    buildKeyAVAP.read(),
+                                    "get",
+                                    new Java.Rvalue[] {
+                                            currentRecordIndexAP.read()
+                                    }
+                            )
+                    )
+            );
+
+            // long right_join_key_pre_hash = [this.preHashVectorAP.read()][[currentRecordIndex.read()]];
+            ScalarVariableAccessPath rightJoinKeyPreHashAP = new ScalarVariableAccessPath(
+                    cCtx.defineVariable(rightJoinKeyAP.getVariableName() + "_pre_hash"),
+                    P_LONG
+            );
+            resultVectorConstructionLoop.addStatement(
+                    createLocalVariable(
+                            getLocation(),
+                            toJavaType(getLocation(), rightJoinKeyPreHashAP.getType()),
+                            rightJoinKeyPreHashAP.getVariableName(),
+                            createArrayElementAccessExpr(
+                                    getLocation(),
+                                    this.preHashVectorAP.read(),
+                                    currentRecordIndexAP.read()
+                            )
+                    )
+            );
+
+            // Check if the left side of the join contains records for the given key, otherwise continue
+            // if (![this.joinMap.read()].contains(key, prehash)) {
+            //     currentRecordIndex++;
+            //     continue;
+            // }
+            Java.Block incrementAndContinueBlock = new Java.Block(getLocation());
+            incrementAndContinueBlock.addStatement(
+                    postIncrementStm(getLocation(), currentRecordIndexAP.write()));
+            incrementAndContinueBlock.addStatement(new Java.ContinueStatement(getLocation(), null));
+
+            resultVectorConstructionLoop.addStatement(
+                    createIf(
+                            getLocation(),
+                            not(
+                                    getLocation(),
+                                    createMethodInvocation(
+                                            getLocation(),
+                                            this.joinMapAP.read(),
+                                            "contains",
+                                            new Java.Rvalue[] {
+                                                    rightJoinKeyAP.read(),
+                                                    rightJoinKeyPreHashAP.read()
+                                            }
+                                    )
+                            ),
+                            incrementAndContinueBlock
+                    )
+            );
+
+            // Obtain the values for the left side of the join for the current key value
+            String joinRecordsListName = cCtx.defineVariable("records_to_join_list");
+            resultVectorConstructionLoop.addStatement(
+                    createLocalVariable(
+                            getLocation(),
+                            createReferenceType(getLocation(), "List", this.leftChildRecordType.lcd.getName()),
+                            joinRecordsListName,
+                            createMethodInvocation(
+                                    getLocation(),
+                                    this.joinMapAP.read(),
+                                    "get",
+                                    new Java.Rvalue[] {
+                                            rightJoinKeyAP.read(),
+                                            rightJoinKeyPreHashAP.read()
+                                    }
+                            )
+                    )
+            );
+
+            // Check if there is still room in the result vector and if not, break from the inner loop
+            // if (records_to_join_list.size() > (VectorisedOperators.VECTOR_LENGTH - currentResultIndex))
+            //     break;
+            Java.Block breakBlock = new Java.Block(getLocation());
+            breakBlock.addStatement(new Java.BreakStatement(getLocation(), null));
+            resultVectorConstructionLoop.addStatement(
+                    createIf(
+                            getLocation(),
+                            gt(
+                                    getLocation(),
+                                    createMethodInvocation(
+                                            getLocation(),
+                                            createAmbiguousNameRef(getLocation(), joinRecordsListName),
+                                            "size"
+                                    ),
+                                    sub(
+                                            getLocation(),
+                                            createAmbiguousNameRef(getLocation(), "VectorisedOperators.VECTOR_LENGTH"),
+                                            currentResultIndexAP.read()
+                                    )
+                            ),
+                            breakBlock
+                    )
+            );
+
+            // There is still room left, so add the records for the current key
+            // Firstly, set-up local variables for the right-hand column values
+            Java.Rvalue[] rightJoinOrdinalValues = new Java.Rvalue[currentOrdinalMapping.size()];
+            for (int i = 0; i < rightJoinOrdinalValues.length; i++) {
+                if (i == buildKeyOrdinal) {
+                    rightJoinOrdinalValues[i] = rightJoinKeyAP.read();
+
+                } else {
+                    ArrowVectorAccessPath rightJoinColumnAP = (ArrowVectorAccessPath) currentOrdinalMapping.get(i);
+                    ScalarVariableAccessPath rightJoinColumnValue = new ScalarVariableAccessPath(
+                            cCtx.defineVariable("right_join_ord_" + i),
+                            primitiveType(rightJoinColumnAP.getType())
+                    );
+
+                    resultVectorConstructionLoop.addStatement(
+                            createLocalVariable(
+                                    getLocation(),
+                                    toJavaType(getLocation(), rightJoinColumnValue.getType()),
+                                    rightJoinColumnValue.getVariableName(),
+                                    createMethodInvocation(
+                                            getLocation(),
+                                            rightJoinColumnAP.read(),
+                                            "get",
+                                            new Java.Rvalue[] { currentRecordIndexAP.read() }
+                                    )
+                            )
+                    );
+
+                    rightJoinOrdinalValues[i] = rightJoinColumnValue.read();
+                }
+            }
+
+            // foreach ([RecordType] left_join_record : records_to_join_list) { [joinLoopBody] }
+            String leftJoinRecordName = cCtx.defineVariable("left_join_record");
+            Java.Block joinLoopBody = new Java.Block(getLocation());
+            resultVectorConstructionLoop.addStatement(
+                    createForEachLoop(
+                            getLocation(),
+                            createFormalParameter(
+                                    getLocation(),
+                                    createReferenceType(getLocation(), this.leftChildRecordType.lcd.getName()),
+                                    leftJoinRecordName
+                            ),
+                            createAmbiguousNameRef(getLocation(), joinRecordsListName),
+                            joinLoopBody
+                    )
+            );
+
+            // In the loop over the left join records, first add the statements to set the correct
+            // values in the result vectors for the left side join columns
+            List< Java.FieldDeclarationOrInitializer> leftJoinFields =
+                    this.leftChildRecordType.lcd.fieldDeclarationsAndInitializers;
+            for (int i = 0; i < leftJoinFields.size(); i++) {
+                Java.FieldDeclaration currentLeftSideField = (Java.FieldDeclaration) leftJoinFields.get(i);
+
+                joinLoopBody.addStatement(
+                        createVariableAssignmentStm(
+                                getLocation(),
+                                createArrayElementAccessExpr(
+                                        getLocation(),
+                                        this.resultVectorDefinitions[i].read(),
+                                        currentResultIndexAP.read()
+                                ),
+                                createAmbiguousNameRef(
+                                        getLocation(),
+                                        leftJoinRecordName + "." + currentLeftSideField.variableDeclarators[0].name
+                                )
+                        )
+                );
+            }
+
+            // And then set the correct values for the right join columns
+            for (int i = 0; i < rightJoinOrdinalValues.length; i++) {
+                int resultIndex = leftJoinFields.size() + i;
+                joinLoopBody.addStatement(
+                        createVariableAssignmentStm(
+                                getLocation(),
+                                createArrayElementAccessExpr(
+                                        getLocation(),
+                                        this.resultVectorDefinitions[resultIndex].read(),
+                                        currentResultIndexAP.read()
+                                ),
+                                rightJoinOrdinalValues[i]
+                        )
+                );
+            }
+
+            // And move onto the next result index
+            joinLoopBody.addStatement(postIncrementStm(getLocation(), currentResultIndexAP.write()));
+            // End of the join-loop
+
+            // Finally, move to the next record
+            // currentRecordIndex++;
+            resultVectorConstructionLoop.addStatement(
+                    postIncrementStm(getLocation(), currentRecordIndexAP.write()));
+
+            // End of the inner result vector construction loop
+            // Set-up the correct ordinal mapping
+            List<AccessPath> resultVectorAPs = new ArrayList<>(this.resultVectorDefinitions.length);
+            for (int i = 0; i < this.resultVectorDefinitions.length; i++) {
+                AccessPath resultVectorAP = new ArrayVectorAccessPath(
+                        this.resultVectorDefinitions[i],
+                        currentResultIndexAP,
+                        vectorTypeForPrimitiveArrayType(this.resultVectorDefinitions[i].getType())
+                );
+                resultVectorAPs.add(i, resultVectorAP);
+            }
+            cCtx.setCurrentOrdinalMapping(resultVectorAPs);
+
+            // Invoke the parent
+            whileLoopBody.addStatements(this.vecParentConsume(cCtx, oCtx));
+
+        }
+
+        return codeGenResult;
+    }
+
+    /**
+     * General consume method used by both the vectorised and non-vectorised execution paradigm.
+     * @param cCtx The {@link CodeGenContext} to use during the generation.
+     * @param oCtx The {@link OptimisationContext} to use during the generation and execution.
+     * @param vectorised Whether to use the vectorised or non-vectorised paradigm.
+     * @return The generated consumption code.
+     */
+    private List<Java.Statement> consume(CodeGenContext cCtx, OptimisationContext oCtx, boolean vectorised) {
+        if (!this.consumeInProbePhase) {
+            // Mark that on the next call, we are in the probe phase
+            this.consumeInProbePhase = true;
+
+            // Then introduce the class to store records of the left-child in the hash-table
+            this.leftChildRecordType = generateRecordTypeForRelation(cCtx.getCurrentOrdinalMapping());
+
+            // And build the hash table
+            return vectorised ? this.consumeVecBuild(cCtx, oCtx) : this.consumeNonVecBuild(cCtx, oCtx);
+
+        } else {
+            // Perform the probe (which also has the parent operator consume the result)
+            return vectorised ? this.consumeVecProbe(cCtx, oCtx) : this.consumeNonVecProbe(cCtx, oCtx);
+
+        }
     }
 
     /**

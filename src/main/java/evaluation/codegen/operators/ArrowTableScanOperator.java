@@ -99,7 +99,27 @@ public class ArrowTableScanOperator extends CodeGenOperator<LogicalArrowTableSca
         // The specific for-loop that needs to be generated depends on whether SIMD is enabled
         Java.Block forLoopBody = createBlock(getLocation());
         if (!this.SIMDProductionAllowed) {
-            // for (int aviv = 0; aviv < firstColumnVector.getValueCount; aviv++) { [forLoopBody] }
+            // Allocate the value count
+            // int recordCount = firstColumnVector.getValueCount();
+            ScalarVariableAccessPath recordCountAP = new ScalarVariableAccessPath(
+                    cCtx.defineVariable("recordCount"),
+                    P_INT
+            );
+            whileLoopBody.addStatement(
+                    createLocalVariable(
+                            getLocation(),
+                            createPrimitiveType(getLocation(), Java.Primitive.INT),
+                            recordCountAP.getVariableName(),
+                            createMethodInvocation(
+                                    getLocation(),
+                                    // Valid to cast to ArrowVectorAccessPath as this is delivered by genericProduce(..)
+                                    ((ArrowVectorAccessPath) cCtx.getCurrentOrdinalMapping().get(0)).read(),
+                                    "getValueCount"
+                            )
+                    )
+            );
+
+            // for (int aviv = 0; aviv < [recordCount]; aviv++) { [forLoopBody] }
             String avivName = cCtx.defineVariable("aviv");
             ScalarVariableAccessPath avivAccessPath = new ScalarVariableAccessPath(avivName, P_INT);
             whileLoopBody.addStatement(
@@ -109,12 +129,7 @@ public class ArrowTableScanOperator extends CodeGenOperator<LogicalArrowTableSca
                             lt(
                                     getLocation(),
                                     avivAccessPath.read(),
-                                    createMethodInvocation(
-                                            getLocation(),
-                                            // Valid to cast to ArrowVectorAccessPath as this is delivered by genericProduce(..)
-                                            ((ArrowVectorAccessPath) cCtx.getCurrentOrdinalMapping().get(0)).read(),
-                                            "getValueCount"
-                                    )
+                                    recordCountAP.read()
                             ),
                             JaninoOperatorGen.postIncrement(getLocation(), createAmbiguousNameRef(getLocation(), avivName)),
                             forLoopBody
@@ -138,7 +153,7 @@ public class ArrowTableScanOperator extends CodeGenOperator<LogicalArrowTableSca
         } else { // this.SIMDProductionAllowed
             // int commonSIMDVectorLength = ...; (allocated as scan surrounding variable for reuse)
             int commonSIMDVectorLength = OptimisationContext.getVectorSpeciesLong().length();
-            String commonSIMDVectorLengthName = cCtx.defineScanSurroundingVariables(
+            String commonSIMDVectorLengthName = cCtx.defineScanSurroundingVariable(
                     "commonSIMDVectorLength",
                     createPrimitiveType(getLocation(), Java.Primitive.INT),
                     createIntegerLiteral(getLocation(), commonSIMDVectorLength),
@@ -250,7 +265,7 @@ public class ArrowTableScanOperator extends CodeGenOperator<LogicalArrowTableSca
 
             // Define integer vector species outside the scan
             // VectorSpecies<Integer> [intVectorSpeciesVarName] = oCtx.getVectorSpeciesInt();
-            String intVectorSpeciesVarName = cCtx.defineScanSurroundingVariables(
+            String intVectorSpeciesVarName = cCtx.defineScanSurroundingVariable(
                 "IntVectorSpecies",
                     toJavaType(getLocation(), VECTOR_SPECIES_INT),
                     createMethodInvocation(
@@ -303,7 +318,7 @@ public class ArrowTableScanOperator extends CodeGenOperator<LogicalArrowTableSca
 
                     if (!definedVectorSpecies.containsKey(vectorElementType)) {
                         // Need to define the vector species first
-                        String vectorSpeciesVarName = cCtx.defineScanSurroundingVariables(
+                        String vectorSpeciesVarName = cCtx.defineScanSurroundingVariable(
                                 "IntVectorSpecies",
                                 toJavaType(getLocation(), VECTOR_SPECIES_INT),
                                 createMethodInvocation(

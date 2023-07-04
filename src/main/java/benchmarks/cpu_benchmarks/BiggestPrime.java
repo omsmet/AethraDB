@@ -52,8 +52,9 @@ public class BiggestPrime {
             isPrime = true;
 
             for (int i = 2; i < Math.ceil(Math.sqrt(largestPrime)) + 1; i++) {
-                if (n % i == 0) {
+                if (largestPrime % i == 0) {
                     isPrime = false;
+                    largestPrime = largestPrime - 1;
                     break;
                 }
             }

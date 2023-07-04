@@ -454,7 +454,7 @@ public class FilterOperator extends CodeGenOperator<LogicalFilter> {
         ArrayAccessPath selectionResultAP;
         if (this.useSIMDVec()) {
             // boolean[] ordinal_[index]_val_mask = cCtx.getAllocationManager().getBooleanVector()
-            String selectionResultVariableName = cCtx.defineScanSurroundingVariables(
+            String selectionResultVariableName = cCtx.defineScanSurroundingVariable(
                     "ordinal_" + lhsRef.getIndex() + "_val_mask",
                     createPrimitiveArrayType(getLocation(), Java.Primitive.BOOLEAN),
                     createMethodInvocation(
@@ -471,7 +471,7 @@ public class FilterOperator extends CodeGenOperator<LogicalFilter> {
             selectionResultAP = new ArrayAccessPath(selectionResultVariableName, P_A_BOOLEAN);
         } else {
             // int[] ordinal_[index]_sel_vec = cCtx.getAllocationManager().getIntVector()
-            String selectionResultVariableName = cCtx.defineScanSurroundingVariables(
+            String selectionResultVariableName = cCtx.defineScanSurroundingVariable(
                     "ordinal_" + lhsRef.getIndex() + "_sel_vec",
                     createPrimitiveArrayType(getLocation(), Java.Primitive.INT),
                     createMethodInvocation(
