@@ -90,28 +90,6 @@ public class JaninoControlGen {
     }
 
     /**
-     * Method for creating an enhanced for-loop.
-     * @param location The location at which the for-loop is requested for generation.
-     * @param currentElement The formal parameter representing the current element in the iteration.
-     * @param elementSource The elements to iterate over.
-     * @param body The body of the for-loop.
-     * @return The enhanced for-loop corresponding to the supplied arguments.
-     */
-    public static Java.ForEachStatement createForEachLoop(
-            Location location,
-            Java.FunctionDeclarator.FormalParameter currentElement,
-            Java.Rvalue elementSource,
-            Java.BlockStatement body
-    ) {
-        return new Java.ForEachStatement(
-                location,
-                currentElement,
-                elementSource,
-                body
-        );
-    }
-
-    /**
      * Method for creating a standard while-loop.
      * @param location The location at which the while loop is requested for generation.
      * @param condition The condition during which the while-loop should execute.

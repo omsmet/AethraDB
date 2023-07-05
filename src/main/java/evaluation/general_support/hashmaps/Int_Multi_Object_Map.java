@@ -2,7 +2,6 @@ package evaluation.general_support.hashmaps;
 
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.List;
 import java.util.NoSuchElementException;
 
 /**
@@ -31,7 +30,7 @@ public class Int_Multi_Object_Map<T> {
     /**
      * Nested list containing the values of each key in the map (in insertion order).
      */
-    private List<List<T>> values;
+    private ArrayList<ArrayList<T>> values;
 
     /**
      * The table mapping a hash value to an index in the {@code keys} and {@code values} arrays.
@@ -119,7 +118,7 @@ public class Int_Multi_Object_Map<T> {
 
         // Store the new key-value association
         keys[newIndex] = key;
-        List<T> keysValueList = new ArrayList<>();
+        ArrayList<T> keysValueList = new ArrayList<>();
         keysValueList.add(value);
         values.add(newIndex, keysValueList);
 
@@ -167,7 +166,7 @@ public class Int_Multi_Object_Map<T> {
      * @return The value associated to the key (if the map contains the key).
      * @throws NoSuchElementException if the map does not contain the provided key.
      */
-    public List<T> get(int key, long preHash) throws NoSuchElementException {
+    public ArrayList<T> get(int key, long preHash) throws NoSuchElementException {
         checkKeyNonNegative(key);
         int index = find(key, preHash);
 

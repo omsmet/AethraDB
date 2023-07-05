@@ -39,13 +39,13 @@ import static evaluation.codegen.infrastructure.janino.JaninoClassGen.createClas
 import static evaluation.codegen.infrastructure.janino.JaninoClassGen.createLocalClassDeclaration;
 import static evaluation.codegen.infrastructure.janino.JaninoClassGen.createLocalClassDeclarationStm;
 import static evaluation.codegen.infrastructure.janino.JaninoClassGen.createPublicFinalFieldDeclaration;
-import static evaluation.codegen.infrastructure.janino.JaninoControlGen.createForEachLoop;
 import static evaluation.codegen.infrastructure.janino.JaninoControlGen.createForLoop;
 import static evaluation.codegen.infrastructure.janino.JaninoControlGen.createIf;
 import static evaluation.codegen.infrastructure.janino.JaninoControlGen.createIfNotContinue;
 import static evaluation.codegen.infrastructure.janino.JaninoControlGen.createWhileLoop;
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createAmbiguousNameRef;
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createArrayElementAccessExpr;
+import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createCast;
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createIntegerLiteral;
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createPrimitiveArrayType;
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createPrimitiveType;
@@ -511,7 +511,7 @@ public class JoinOperator extends CodeGenOperator<LogicalJoin> {
         resultExposureTarget.addStatement(
                 createLocalVariable(
                         getLocation(),
-                        createReferenceType(getLocation(), "List", this.leftChildRecordType.lcd.getName()),
+                        createReferenceType(getLocation(), "ArrayList", this.leftChildRecordType.lcd.getName()),
                         joinRecordsListName,
                         createMethodInvocation(
                                 getLocation(),
@@ -526,19 +526,56 @@ public class JoinOperator extends CodeGenOperator<LogicalJoin> {
         );
 
         // Generate a for-loop to iterate over the join records from the left-hand side
-        // foreach ([RecordType] left_join_record : records_to_join_list) { [joinLoopBody] }
-        String leftJoinRecordName = cCtx.defineVariable("left_join_record");
+        // int left_join_record_count = records_to_join_list.size();
+        ScalarVariableAccessPath leftJoinRecordCount =
+                new ScalarVariableAccessPath(cCtx.defineVariable("left_join_record_count"), P_INT);
+        resultExposureTarget.addStatement(
+                createLocalVariable(
+                        getLocation(),
+                        toJavaType(getLocation(), leftJoinRecordCount.getType()),
+                        leftJoinRecordCount.getVariableName(),
+                        createMethodInvocation(
+                                getLocation(),
+                                createAmbiguousNameRef(getLocation(), joinRecordsListName),
+                                "size"
+                        )
+                )
+        );
+
+        // for (int i = 0; i < left_join_record_count; i++) {
+        //     [RecordType] left_join_record = records_to_join_list.get(i);
+        //     [joinLoopBody]
+        // }
+        ScalarVariableAccessPath joinLoopIndexVar =
+                new ScalarVariableAccessPath(cCtx.defineVariable("i"), P_INT);
         Java.Block joinLoopBody = new Java.Block(getLocation());
         resultExposureTarget.addStatement(
-                createForEachLoop(
+                createForLoop(
                         getLocation(),
-                        createFormalParameter(
-                                getLocation(),
-                                createReferenceType(getLocation(), this.leftChildRecordType.lcd.getName()),
-                                leftJoinRecordName
-                        ),
-                        createAmbiguousNameRef(getLocation(), joinRecordsListName),
+                        createPrimitiveLocalVar(getLocation(), Java.Primitive.INT, joinLoopIndexVar.getVariableName(), "0"),
+                        lt(getLocation(), joinLoopIndexVar.read(), leftJoinRecordCount.read()),
+                        postIncrement(getLocation(), joinLoopIndexVar.write()),
                         joinLoopBody
+                )
+        );
+
+        String leftJoinRecordName = cCtx.defineVariable("left_join_record");
+        Java.Type leftJoinRecordType = createReferenceType(getLocation(), this.leftChildRecordType.lcd.getName());
+        joinLoopBody.addStatement(
+                createLocalVariable(
+                        getLocation(),
+                        leftJoinRecordType,
+                        leftJoinRecordName,
+                        createCast(
+                                getLocation(),
+                                leftJoinRecordType,
+                                createMethodInvocation(
+                                        getLocation(),
+                                        createAmbiguousNameRef(getLocation(), joinRecordsListName),
+                                        "get",
+                                        new Java.Rvalue[] {joinLoopIndexVar.read() }
+                                )
+                        )
                 )
         );
 
@@ -1239,7 +1276,7 @@ public class JoinOperator extends CodeGenOperator<LogicalJoin> {
             resultVectorConstructionLoop.addStatement(
                     createLocalVariable(
                             getLocation(),
-                            createReferenceType(getLocation(), "List", this.leftChildRecordType.lcd.getName()),
+                            createReferenceType(getLocation(), "ArrayList", this.leftChildRecordType.lcd.getName()),
                             joinRecordsListName,
                             createMethodInvocation(
                                     getLocation(),
@@ -1253,8 +1290,24 @@ public class JoinOperator extends CodeGenOperator<LogicalJoin> {
                     )
             );
 
+            // int left_join_record_count = records_to_join_list.size();
+            ScalarVariableAccessPath leftJoinRecordCount =
+                    new ScalarVariableAccessPath(cCtx.defineVariable("left_join_record_count"), P_INT);
+            resultVectorConstructionLoop.addStatement(
+                    createLocalVariable(
+                            getLocation(),
+                            toJavaType(getLocation(), leftJoinRecordCount.getType()),
+                            leftJoinRecordCount.getVariableName(),
+                            createMethodInvocation(
+                                    getLocation(),
+                                    createAmbiguousNameRef(getLocation(), joinRecordsListName),
+                                    "size"
+                            )
+                    )
+            );
+
             // Check if there is still room in the result vector and if not, break from the inner loop
-            // if (records_to_join_list.size() > (VectorisedOperators.VECTOR_LENGTH - currentResultIndex))
+            // if (leftJoinRecordCount > (VectorisedOperators.VECTOR_LENGTH - currentResultIndex))
             //     break;
             Java.Block breakBlock = new Java.Block(getLocation());
             breakBlock.addStatement(new Java.BreakStatement(getLocation(), null));
@@ -1263,11 +1316,7 @@ public class JoinOperator extends CodeGenOperator<LogicalJoin> {
                             getLocation(),
                             gt(
                                     getLocation(),
-                                    createMethodInvocation(
-                                            getLocation(),
-                                            createAmbiguousNameRef(getLocation(), joinRecordsListName),
-                                            "size"
-                                    ),
+                                    leftJoinRecordCount.read(),
                                     sub(
                                             getLocation(),
                                             createAmbiguousNameRef(getLocation(), "VectorisedOperators.VECTOR_LENGTH"),
@@ -1310,19 +1359,40 @@ public class JoinOperator extends CodeGenOperator<LogicalJoin> {
                 }
             }
 
-            // foreach ([RecordType] left_join_record : records_to_join_list) { [joinLoopBody] }
-            String leftJoinRecordName = cCtx.defineVariable("left_join_record");
+            // for (int i = 0; i < left_join_record_count; i++) {
+            //     [RecordType] left_join_record = records_to_join_list.get(i);
+            //     [joinLoopBody]
+            // }
+            ScalarVariableAccessPath joinLoopIndexVar =
+                    new ScalarVariableAccessPath(cCtx.defineVariable("i"), P_INT);
             Java.Block joinLoopBody = new Java.Block(getLocation());
             resultVectorConstructionLoop.addStatement(
-                    createForEachLoop(
+                    createForLoop(
                             getLocation(),
-                            createFormalParameter(
-                                    getLocation(),
-                                    createReferenceType(getLocation(), this.leftChildRecordType.lcd.getName()),
-                                    leftJoinRecordName
-                            ),
-                            createAmbiguousNameRef(getLocation(), joinRecordsListName),
+                            createPrimitiveLocalVar(getLocation(), Java.Primitive.INT, joinLoopIndexVar.getVariableName(), "0"),
+                            lt(getLocation(), joinLoopIndexVar.read(), leftJoinRecordCount.read()),
+                            postIncrement(getLocation(), joinLoopIndexVar.write()),
                             joinLoopBody
+                    )
+            );
+
+            String leftJoinRecordName = cCtx.defineVariable("left_join_record");
+            Java.Type leftJoinRecordType = createReferenceType(getLocation(), this.leftChildRecordType.lcd.getName());
+            joinLoopBody.addStatement(
+                    createLocalVariable(
+                            getLocation(),
+                            leftJoinRecordType,
+                            leftJoinRecordName,
+                            createCast(
+                                    getLocation(),
+                                    leftJoinRecordType,
+                                    createMethodInvocation(
+                                            getLocation(),
+                                            createAmbiguousNameRef(getLocation(), joinRecordsListName),
+                                            "get",
+                                            new Java.Rvalue[] {joinLoopIndexVar.read() }
+                                    )
+                            )
                     )
             );
 
