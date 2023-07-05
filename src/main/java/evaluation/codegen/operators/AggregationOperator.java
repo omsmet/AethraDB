@@ -36,15 +36,18 @@ import static evaluation.codegen.infrastructure.context.QueryVariableType.P_LONG
 import static evaluation.codegen.infrastructure.context.QueryVariableTypeMethods.primitiveType;
 import static evaluation.codegen.infrastructure.context.QueryVariableTypeMethods.toJavaType;
 import static evaluation.codegen.infrastructure.context.QueryVariableTypeMethods.valueTypeForMap;
+import static evaluation.codegen.infrastructure.janino.JaninoControlGen.createForLoop;
 import static evaluation.codegen.infrastructure.janino.JaninoControlGen.createWhileLoop;
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createAmbiguousNameRef;
+import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createArrayElementAccessExpr;
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createIntegerLiteral;
-import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createReferenceType;
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.getLocation;
 import static evaluation.codegen.infrastructure.janino.JaninoMethodGen.createBlock;
 import static evaluation.codegen.infrastructure.janino.JaninoMethodGen.createMethodInvocation;
 import static evaluation.codegen.infrastructure.janino.JaninoMethodGen.createMethodInvocationStm;
+import static evaluation.codegen.infrastructure.janino.JaninoOperatorGen.lt;
 import static evaluation.codegen.infrastructure.janino.JaninoOperatorGen.plus;
+import static evaluation.codegen.infrastructure.janino.JaninoOperatorGen.postIncrement;
 import static evaluation.codegen.infrastructure.janino.JaninoOperatorGen.postIncrementStm;
 import static evaluation.codegen.infrastructure.janino.JaninoVariableGen.createLocalVariable;
 import static evaluation.codegen.infrastructure.janino.JaninoVariableGen.createPrimitiveLocalVar;
@@ -307,43 +310,48 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
             // Even though the group-by aggregation needs to distinguish between SIMD and non-SIMD
             // processing, we handle some code generation in a shared fashion
 
-            // We obtain an iterator to iterate over the group-by key values based on the first aggregation state's first variable
+            // We iterate over the group-by key values based on the first aggregation state's first variable
             AggregationStateMapping firstAggregationState = this.aggregationStateMappings.get(0);
             QueryVariableType firstAggregationStateType = firstAggregationState.variableTypes[0];
 
-            String groupKeyIteratorName;
+            ScalarVariableAccessPath keyIterationIndexVariable =
+                    new ScalarVariableAccessPath(cCtx.defineVariable("key_i"), P_INT);
+            Java.Rvalue numberOfKeys;
+            Java.Rvalue keyAccessExpression;
             if (firstAggregationStateType == MAP_INT_LONG_SIMPLE) {
-                // Simple_Int_Long_Map [groupKeyIterator] = [firstAggregationState.variableNames[0]].getIterator();
-                groupKeyIteratorName = cCtx.defineVariable("groupKeyIterator");
-                codeGenResult.add(
-                        createLocalVariable(
-                                getLocation(),
-                                createReferenceType(getLocation(), "Simple_Int_Long_Map_Iterator"),
-                                groupKeyIteratorName,
-                                createMethodInvocation(
-                                        getLocation(),
-                                        createAmbiguousNameRef(getLocation(), firstAggregationState.variableNames[0]),
-                                        "getIterator"
-                                )
-                        )
+                // [numberOfKeys] = [firstAggregationState.variableNames[0]].numberOfRecords;
+                numberOfKeys = createAmbiguousNameRef(
+                        getLocation(),
+                        firstAggregationState.variableNames[0] + ".numberOfRecords"
                 );
+
+                // [keyAccessExpression] = [firstAggregationState.variableNames[0]].keys[keyIterationIndexVariable];
+                keyAccessExpression = createArrayElementAccessExpr(
+                        getLocation(),
+                        createAmbiguousNameRef(getLocation(), firstAggregationState.variableNames[0] + ".keys"),
+                        keyIterationIndexVariable.read()
+                );
+
             } else {
                 throw new UnsupportedOperationException(
                         "AggregationOperator.produceNonVec does not support obtaining group-by key values from " + firstAggregationStateType);
             }
 
             // Now generate a while loop to iterate over the keys
-            // while ([groupKeyIterator].hasNext()]) { [whileLoopBody] }
-            Java.Block whileLoopBody = createBlock(getLocation());
+            // for (int key_i = 0; i < [numberOfKeys]; key_i++) { [forLoopBody] }
+            Java.Block forLoopBody = createBlock(getLocation());
             codeGenResult.add(
-                    createWhileLoop(
+                    createForLoop(
                             getLocation(),
-                            createMethodInvocation(
+                            createLocalVariable(
                                     getLocation(),
-                                    createAmbiguousNameRef(getLocation(), groupKeyIteratorName),
-                                    "hasNext"
+                                    toJavaType(getLocation(), keyIterationIndexVariable.getType()),
+                                    keyIterationIndexVariable.getVariableName(),
+                                    createIntegerLiteral(getLocation(), 0)
                             ),
-                            whileLoopBody
+                            lt(getLocation(), keyIterationIndexVariable.read(), numberOfKeys),
+                            postIncrement(getLocation(), keyIterationIndexVariable.write()),
+                            forLoopBody
                     )
             );
 
@@ -357,19 +365,15 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
 
             // Simply expose each record as a set of scalar variables
             // First expose the group-by key values
-            // int [groupKey] = [groupKeyIterator].next();
+            // int [groupKey] = [keyAccessExpression];
             ScalarVariableAccessPath groupKeyAP = new ScalarVariableAccessPath(
                     cCtx.defineVariable("groupKey"), P_INT);
-            whileLoopBody.addStatement(
+            forLoopBody.addStatement(
                     createLocalVariable(
                             getLocation(),
                             toJavaType(getLocation(), groupKeyAP.getType()),
                             groupKeyAP.getVariableName(),
-                            createMethodInvocation(
-                                    getLocation(),
-                                    createAmbiguousNameRef(getLocation(), groupKeyIteratorName),
-                                    "next"
-                            )
+                            keyAccessExpression
                     )
             );
             newOrdinalMapping.add(currentOrdinalIndex++, groupKeyAP);
@@ -380,7 +384,7 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
                     cCtx.defineVariable(groupKeyAP.getVariableName() + "PreHash"),
                     P_LONG
             );
-            whileLoopBody.addStatement(
+            forLoopBody.addStatement(
                     createLocalVariable(
                             getLocation(),
                             toJavaType(getLocation(), groupKeyPreHashAP.getType()),
@@ -413,7 +417,7 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
 
             // Have the parent operator consume the result
             cCtx.setCurrentOrdinalMapping(newOrdinalMapping);
-            whileLoopBody.addStatements(this.nonVecParentConsume(cCtx, oCtx));
+            forLoopBody.addStatements(this.nonVecParentConsume(cCtx, oCtx));
         }
 
         // Release the aggregation state variables as needed
@@ -758,22 +762,14 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
             cCtx.setCurrentOrdinalMapping(updatedOrdinalMapping);
 
             // Construct and expose the actual vectors
-            // Get an iterator for they keys based on the first aggregation state's first aggregation variable
-            String groupKeyIteratorName = cCtx.defineVariable("groupKeyIterator");
+            // We iterate over they keys based on the first aggregation state's first aggregation variable
 
+            Java.Rvalue numberOfKeys;
             if (firstAggregationStateType == MAP_INT_LONG_SIMPLE) {
-                // Simple_Int_Long_Map [groupKeyIterator] = [firstAggregationState.variableNames[0]].getIterator();
-                codeGenResult.add(
-                        createLocalVariable(
-                                getLocation(),
-                                createReferenceType(getLocation(), "Simple_Int_Long_Map_Iterator"),
-                                groupKeyIteratorName,
-                                createMethodInvocation(
-                                        getLocation(),
-                                        createAmbiguousNameRef(getLocation(), firstAggregationState.variableNames[0]),
-                                        "getIterator"
-                                )
-                        )
+                // [numberOfKeys] = [firstAggregationState.variableNames[0]].numberOfRecords;
+                numberOfKeys = createAmbiguousNameRef(
+                        getLocation(),
+                        firstAggregationState.variableNames[0] + ".numberOfRecords"
                 );
 
             } else {
@@ -781,25 +777,32 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
                         "obtaining keys from aggregation state type " + firstAggregationStateType);
             }
 
-            // Construct the key and value vectors using this iterator
-            // while ([groupKeyIterator].hasNext()] {
-            //     [aggregationResultVectorLength] = VectorisedAggregationOperators.constructKeyVector([groupKeyVector], [groupKeyIterator]);
+            // Construct the key and value vectors by iterating over the keys
+            // int current_key_offset = 0;
+            // while (current_key_offset < [numberOfKeys]) {
+            //     [aggregationResultVectorLength] = VectorisedAggregationOperators.constructKeyVector([groupKeyVector], [firstAggregationState.variableNames[0]], current_key_offset);
+            //     current_key_offset += [aggregationResultVectorLength];
             //     VectorisedHashOperators.constructPreHashKeyVector([groupKeyPreHashVector], [groupKeyVector], [aggregationResultVectorLength])
             //     $ for each aggregationResult $
             //     VectorisedAggregationOperators.constructValueVector([aggCall_$i$_vector], [groupKeyVector], [groupKeyPreHashVector], [aggregationResultVectorLength], [aggCall_$i$_state]);
             //     [whileLoopBody]
             // }
+            ScalarVariableAccessPath currentKeyOffsetVariable =
+                    new ScalarVariableAccessPath(cCtx.defineVariable("current_key_offset"), P_INT);
+            codeGenResult.add(
+                    createLocalVariable(
+                            getLocation(),
+                            toJavaType(getLocation(), currentKeyOffsetVariable.getType()),
+                            currentKeyOffsetVariable.getVariableName(),
+                            createIntegerLiteral(getLocation(), 0)
+                    )
+            );
 
-            // Iterate over the groupKeyIterator
             Java.Block whileLoopBody = createBlock(getLocation());
             codeGenResult.add(
                     createWhileLoop(
                             getLocation(),
-                            createMethodInvocation(
-                                    getLocation(),
-                                    createAmbiguousNameRef(getLocation(), groupKeyIteratorName),
-                                    "hasNext"
-                            ),
+                            lt(getLocation(), currentKeyOffsetVariable.read(), numberOfKeys),
                             whileLoopBody
                     )
             );
@@ -815,9 +818,19 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
                                     "constructKeyVector",
                                     new Java.Rvalue[] {
                                             groupKeyVectorAP.getVectorVariable().read(),
-                                            createAmbiguousNameRef(getLocation(), groupKeyIteratorName)
+                                            createAmbiguousNameRef(getLocation(), firstAggregationState.variableNames[0]),
+                                            currentKeyOffsetVariable.read()
                                     }
                             )
+                    )
+            );
+
+            // Store the next key offset
+            whileLoopBody.addStatement(
+                    createVariableAdditionAssignmentStm(
+                            getLocation(),
+                            currentKeyOffsetVariable.write(),
+                            aggregationResultVectorLengthAP.read()
                     )
             );
 

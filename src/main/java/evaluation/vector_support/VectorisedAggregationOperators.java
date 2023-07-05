@@ -46,20 +46,19 @@ public class VectorisedAggregationOperators extends VectorisedOperators {
     }
 
     /**
-     * Method to construct a key vector from a {@link Simple_Int_Long_Map.Simple_Int_Long_Map_Iterator}.
+     * Method to construct a key vector from a {@link Simple_Int_Long_Map}.
      * @param keyVector The key vector to construct.
-     * @param keyIterator The iterator to construct the vector from.
+     * @param map The map to construct the vector from.
+     * @param startIndex The key index to start the construction from.
      * @return The length of the valid portion of {@code keyVector}.
      */
-    public static int constructKeyVector(
-            int[] keyVector,
-            Simple_Int_Long_Map.Simple_Int_Long_Map_Iterator keyIterator)
-    {
-        int currentIndex = 0;
-        while (keyIterator.hasNext() && currentIndex < VECTOR_LENGTH) {
-            keyVector[currentIndex++] = keyIterator.next();
+    public static int constructKeyVector(int[] keyVector, Simple_Int_Long_Map map, int startIndex) {
+        int currentMapIndex = startIndex;
+        int currentResultIndex = 0;
+        while (currentMapIndex < map.numberOfRecords && currentResultIndex < VECTOR_LENGTH) {
+            keyVector[currentResultIndex++] = map.keys[currentMapIndex++];
         }
-        return currentIndex;
+        return currentResultIndex;
     }
 
     /**

@@ -92,9 +92,7 @@ public class QueryCodeGenerator extends SimpleCompiler {
         this.defaultImports = new String[] {
                 "evaluation.general_support.hashmaps.Int_Hash_Function",
                 "evaluation.general_support.hashmaps.Simple_Int_Long_Map",
-                "evaluation.general_support.hashmaps.Simple_Int_Long_Map.Simple_Int_Long_Map_Iterator",
                 "evaluation.general_support.hashmaps.Int_Multi_Object_Map",
-                "evaluation.general_support.hashmaps.Int_Multi_Object_Map.Int_Multi_Object_Map_Iterator",
 
                 "evaluation.codegen.infrastructure.data.ArrowTableReader",
 

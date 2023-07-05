@@ -18,12 +18,12 @@ public class Simple_Int_Long_Map {
     /**
      * Variable indicating the current number of records in the map.
      */
-    private int numberOfRecords;
+    public int numberOfRecords;
 
     /**
      * Array containing the key of each element in the map (in insertion order).
      */
-    private int[] keys;
+    public int[] keys;
 
     /**
      * Array containing the values of each element in the map (in insertion order).
@@ -173,16 +173,6 @@ public class Simple_Int_Long_Map {
     /**
      * Method to obtain the value associated to a given key.
      * @param key The key to find the value for.
-     * @return The value associated to the key (if the map contains the key).
-     * @throws NoSuchElementException if the map does not contain the provided key.
-     */
-    private long get(int key) throws NoSuchElementException {
-        return this.get(key, Int_Hash_Function.preHash(key));
-    }
-
-    /**
-     * Method to obtain the value associated to a given key.
-     * @param key The key to find the value for.
      * @param preHash The pre-hash value of the key to find the value for.
      * @return The value associated to the key (if the map contains the key).
      * @throws NoSuchElementException if the map does not contain the provided key.
@@ -195,15 +185,6 @@ public class Simple_Int_Long_Map {
             return values[index];
 
         throw new NoSuchElementException("Simple_Int_Long_Map does not contain key " + key);
-    }
-
-    /**
-     * Method to check whether the map contains a given key.
-     * @param key The key to check.
-     * @return {@code true} iff the map contains the given key.
-     */
-    private boolean contains(int key) {
-        return contains(key, Int_Hash_Function.preHash(key));
     }
 
     /**
@@ -303,56 +284,4 @@ public class Simple_Int_Long_Map {
             throw new IllegalArgumentException("Simple_Int_Long_Map does not support negative keys");
     }
 
-    /**
-     * Method to obtain a primitive-type specific iterator to iterate over the keys of this map.
-     * @return A new {@link Simple_Int_Long_Map_Iterator} for this map.
-     */
-    public Simple_Int_Long_Map_Iterator getIterator() {
-        return new Simple_Int_Long_Map_Iterator();
-    }
-
-    /**
-     * Class definition for iterating over the keys of a {@link Simple_Int_Long_Map}.
-     */
-    public class Simple_Int_Long_Map_Iterator {
-
-        /**
-         * Variable for keeping track of the current key index in the iteration.
-         */
-        private int currentIndex;
-
-        /**
-         * Variable for keeping track of the number of keys in the iteration.
-         */
-        private final int totalNumberOfRecords;
-
-        /**
-         * Creates a new {@link Simple_Int_Long_Map_Iterator} instance.
-         * @return The new {@link Simple_Int_Long_Map_Iterator} instance.
-         */
-        private Simple_Int_Long_Map_Iterator() {
-            this.currentIndex = 0;
-            this.totalNumberOfRecords = numberOfRecords;
-        }
-
-        /**
-         * Method indicating whether there are more keys to iterate over.
-         * @return {@code true} iff there are more keys to iterate over.
-         */
-        public boolean hasNext() {
-            return currentIndex < totalNumberOfRecords;
-        }
-
-        /**
-         * Method to obtain the next key in the iteration if there are keys left.
-         * @return The next key in the current iteration if one exists.
-         * @throws NoSuchElementException If there are no more keys left to iterate over.
-         */
-        public int next() throws NoSuchElementException {
-            if (!this.hasNext())
-                throw new NoSuchElementException("Simple_Int_Long_Map_Iterator has reached the end of the iteration");
-
-            return keys[this.currentIndex++];
-        }
-    }
 }
