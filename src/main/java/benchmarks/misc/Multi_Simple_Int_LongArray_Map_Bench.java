@@ -1,7 +1,7 @@
 package benchmarks.misc;
 
 import evaluation.general_support.hashmaps.Int_Hash_Function;
-import evaluation.general_support.hashmaps.Chaining_Int_Long_Map;
+import evaluation.general_support.hashmaps.Simple_Int_LongArray_Map;
 import org.openjdk.jmh.annotations.Benchmark;
 import org.openjdk.jmh.annotations.BenchmarkMode;
 import org.openjdk.jmh.annotations.Level;
@@ -17,10 +17,11 @@ import java.util.Random;
 import java.util.concurrent.TimeUnit;
 
 /**
- * Benchmark to evaluate the performance of the {@link Chaining_Int_Long_Map}.
+ * Benchmark to evaluate the performance of the {@link Simple_Int_LongArray_Map} when we a single
+ * map for multiple values on the same key column.
  */
 @State(Scope.Benchmark)
-public class Chaining_Int_Long_Map_Bench {
+public class Multi_Simple_Int_LongArray_Map_Bench {
 
     /**
      * The number of records that will be made available in the map under test.
@@ -40,12 +41,16 @@ public class Chaining_Int_Long_Map_Bench {
     /**
      * The values that will be used by the benchmark.
      */
-    private long[] values;
+    private long[] values_col_1;
+    private long[] values_col_2;
+    private long[] values_col_3;
 
     /**
      * The sum that should result for each key after insertion.
      */
-    private long[] perKeySums;
+    private long[] perKeySums_1;
+    private long[] perKeySums_2;
+    private long[] perKeySums_3;
 
     /**
      * The random number generator used for generating the benchmark data.
@@ -55,12 +60,12 @@ public class Chaining_Int_Long_Map_Bench {
     /**
      * An empty to insert records into.
      */
-    private Chaining_Int_Long_Map insertionMap;
+    private Simple_Int_LongArray_Map insertionMap;
 
     /**
      * The full map to read values from.
      */
-    private Chaining_Int_Long_Map retrievalMap;
+    private Simple_Int_LongArray_Map retrievalMap;
 
     /**
      * Boolean keeping track of whether the {@code insertionMap} should be validated.
@@ -70,7 +75,9 @@ public class Chaining_Int_Long_Map_Bench {
     /**
      * Array that can be used to write values to in the read benchmark.
      */
-    private long[] readResult;
+    private long[] readResult_1;
+    private long[] readResult_2;
+    private long[] readResult_3;
 
     /**
      * Boolean keeping track of whether the {@code readResult} should be validated.
@@ -84,26 +91,43 @@ public class Chaining_Int_Long_Map_Bench {
     public void setupFork() {
         this.rng = new Random(507231712);
         this.keys = new int[numberOfRecords];
-        this.values = new long[numberOfRecords];
-        this.perKeySums = new long[numberOfKeys];
+        this.values_col_1 = new long[numberOfRecords];
+        this.values_col_2 = new long[numberOfRecords];
+        this.values_col_3 = new long[numberOfRecords];
+        this.perKeySums_1 = new long[numberOfKeys];
+        this.perKeySums_2 = new long[numberOfKeys];
+        this.perKeySums_3 = new long[numberOfKeys];
 
         // Generate the keys
         for (int i = 0; i < this.keys.length; i++)
             this.keys[i] = this.rng.nextInt(0, numberOfKeys);
 
         // Generate the values and per key sums
-        for (int i = 0; i < this.values.length; i++) {
-            this.values[i] = this.rng.nextLong();
-            this.perKeySums[this.keys[i]] += this.values[i];
+        for (int i = 0; i < this.values_col_1.length; i++) {
+            this.values_col_1[i] = this.rng.nextLong();
+            this.values_col_2[i] = this.rng.nextLong();
+            this.values_col_3[i] = this.rng.nextLong();
+            this.perKeySums_1[this.keys[i]] += this.values_col_1[i];
+            this.perKeySums_2[this.keys[i]] += this.values_col_2[i];
+            this.perKeySums_3[this.keys[i]] += this.values_col_3[i];
         }
 
         // Setup the full map
-        this.retrievalMap = new Chaining_Int_Long_Map();
+        this.retrievalMap = new Simple_Int_LongArray_Map(3);
         for (int i = 0; i < this.keys.length; i++) {
             int key = this.keys[i];
             long preHash = Int_Hash_Function.preHash(key);
-            long value = this.values[i];
-            this.retrievalMap.addToKeyOrPutIfNotExist(key, preHash, value);
+
+            this.retrievalMap.gotoKey(key, preHash);
+
+            long value_1 = this.values_col_1[i];
+            long value_2 = this.values_col_2[i];
+            long value_3 = this.values_col_3[i];
+
+            this.retrievalMap.incrementSubvalue(0, value_1);
+            this.retrievalMap.incrementSubvalue(1, value_2);
+            this.retrievalMap.incrementSubvalue(2, value_3);
+
         }
 
     }
@@ -114,13 +138,14 @@ public class Chaining_Int_Long_Map_Bench {
     @Setup(Level.Invocation)
     public void setupIteration() {
         // Setup the empty map
-        this.insertionMap = new Chaining_Int_Long_Map();
+        this.insertionMap = new Simple_Int_LongArray_Map(3);
         this.validateInsertionMap = false;
 
         // Setup the read result
-        this.readResult = new long[numberOfKeys];
+        this.readResult_1 = new long[numberOfKeys];
+        this.readResult_2 = new long[numberOfKeys];
+        this.readResult_3 = new long[numberOfKeys];
         this.validateReadResult = false;
-
     }
 
     /**
@@ -130,20 +155,33 @@ public class Chaining_Int_Long_Map_Bench {
     public void verify() {
         if (this.validateReadResult) {
             for (int key = 0; key < numberOfKeys; key++) {
-                if (this.perKeySums[key] != this.readResult[key]) {
-                    throw new RuntimeException("The computed read result is not correct");
-                }
+                if (this.perKeySums_1[key] != this.readResult_1[key])
+                    throw new RuntimeException("The first computed read result column is not correct");
+
+                if (this.perKeySums_2[key] != this.readResult_2[key])
+                    throw new RuntimeException("The second computed read result column is not correct");
+
+                if (this.perKeySums_3[key] != this.readResult_3[key])
+                    throw new RuntimeException("The third computed read result column is not correct");
             }
         }
 
         if (this.validateInsertionMap) {
-            for (int key = 0; key < this.perKeySums.length; key++) {
+            for (int key = 0; key < numberOfKeys; key++) {
                 long prehash = Int_Hash_Function.preHash(key);
-                if (this.insertionMap.get(key, prehash) != this.perKeySums[key])
-                    throw new RuntimeException("The computed insertion map is not correct");
+
+                this.insertionMap.gotoKey(key, prehash);
+
+                if (this.insertionMap.getSubvalue(0) != this.perKeySums_1[key])
+                    throw new RuntimeException("The first computed insertion map column is not correct");
+
+                if (this.insertionMap.getSubvalue(1) != this.perKeySums_2[key])
+                    throw new RuntimeException("The second computed insertion map column is not correct");
+
+                if (this.insertionMap.getSubvalue(2) != this.perKeySums_3[key])
+                    throw new RuntimeException("The third computed insertion map column is not correct");
             }
         }
-
     }
 
     /**
@@ -159,10 +197,17 @@ public class Chaining_Int_Long_Map_Bench {
         for (int i = 0; i < this.retrievalMap.numberOfRecords; i++) {
             int key = this.retrievalMap.keys[i];
             long prehash = Int_Hash_Function.preHash(key);
-            this.readResult[key] = this.retrievalMap.get(key, prehash);
+
+            this.retrievalMap.gotoKey(key, prehash);
+
+            this.readResult_1[key] = this.retrievalMap.getSubvalue(0);
+            this.readResult_2[key] = this.retrievalMap.getSubvalue(1);
+            this.readResult_3[key] = this.retrievalMap.getSubvalue(2);
         }
 
-        blackhole.consume(this.readResult);
+        blackhole.consume(this.readResult_1);
+        blackhole.consume(this.readResult_2);
+        blackhole.consume(this.readResult_3);
     }
 
     /**
@@ -178,8 +223,17 @@ public class Chaining_Int_Long_Map_Bench {
         for (int i = 0; i < this.keys.length; i++) {
             int key = this.keys[i];
             long prehash = Int_Hash_Function.preHash(key);
-            long value = this.values[i];
-            this.insertionMap.addToKeyOrPutIfNotExist(key, prehash, value);
+
+            long value_1 = this.values_col_1[i];
+            long value_2 = this.values_col_2[i];
+            long value_3 = this.values_col_3[i];
+
+            this.insertionMap.gotoKey(key, prehash);
+
+            this.insertionMap.incrementSubvalue(0, value_1);
+            this.insertionMap.incrementSubvalue(1, value_2);
+            this.insertionMap.incrementSubvalue(2, value_3);
+
         }
 
         blackhole.consume(this.insertionMap);

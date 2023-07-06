@@ -7,6 +7,7 @@ import org.openjdk.jmh.annotations.BenchmarkMode;
 import org.openjdk.jmh.annotations.Level;
 import org.openjdk.jmh.annotations.Mode;
 import org.openjdk.jmh.annotations.OutputTimeUnit;
+import org.openjdk.jmh.annotations.Param;
 import org.openjdk.jmh.annotations.Scope;
 import org.openjdk.jmh.annotations.Setup;
 import org.openjdk.jmh.annotations.State;
@@ -21,6 +22,20 @@ import java.util.concurrent.TimeUnit;
  */
 @State(Scope.Benchmark)
 public class Standard_Simple_Int_Long_Map_Bench {
+
+    /**
+     * The initial size with which the maps are created.
+     */
+    @Param({
+            "2",
+            "16",
+            "128",
+            "1024",
+            "8192",
+            "65536",
+            "524288"
+    })
+    private int initialMapSize;
 
     /**
      * The number of records that will be made available in the map under test.
@@ -98,7 +113,7 @@ public class Standard_Simple_Int_Long_Map_Bench {
         }
 
         // Setup the full map
-        this.retrievalMap = new Simple_Int_Long_Map();
+        this.retrievalMap = new Simple_Int_Long_Map(initialMapSize);
         for (int i = 0; i < this.keys.length; i++) {
             int key = this.keys[i];
             long preHash = Int_Hash_Function.preHash(key);
@@ -114,7 +129,7 @@ public class Standard_Simple_Int_Long_Map_Bench {
     @Setup(Level.Invocation)
     public void setupIteration() {
         // Setup the empty map
-        this.insertionMap = new Simple_Int_Long_Map();
+        this.insertionMap = new Simple_Int_Long_Map(initialMapSize);
         this.validateInsertionMap = false;
 
         // Setup the read result
