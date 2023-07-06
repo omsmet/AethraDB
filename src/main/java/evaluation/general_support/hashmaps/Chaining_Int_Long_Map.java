@@ -13,16 +13,37 @@ import java.util.NoSuchElementException;
  */
 public class Chaining_Int_Long_Map {
 
+    private static class ChainEntry {
+        public int key = -1;
+        public int index = -1;
+        public ChainEntry next = null;
+
+        public void reset() {
+            this.key = -1;
+            this.index = -1;
+            this.next = null;
+        }
+    }
+
+    LinkedList<ChainEntry> chainEntryPool;
+
+    private ChainEntry getChainEntry() {
+        if (chainEntryPool.size() == 0) {
+            // Need to replenish the pool
+            ChainEntry[] newEntries = new ChainEntry[1024];
+            for (int i = 0; i < newEntries.length; i++)
+                newEntries[i] = new ChainEntry();
+            Collections.addAll(chainEntryPool, newEntries);
+        }
+
+        return chainEntryPool.pop();
+    }
+
     /**
      * The initial capacity with which maps of this type are created.
      * Needs to be power of two, since we need the hash-table length to be a power of 2.
      */
     private static final int INITIAL_CAPACITY = 4;
-
-    /**
-     * The initial length that collision chains get in the hash table. Needs to be a multiple of two.
-     */
-    private static final int INITIAL_COLLISION_CHAIN_LENGTH = 4;
 
     /**
      * Variable indicating the current number of records in the map.
@@ -44,8 +65,9 @@ public class Chaining_Int_Long_Map {
      * for 'key' in the keys and values array. Collisions are chained, which is why  the entries in
      * the table are integer are arrays whose length is a multiple of two where even indices store
      * the keys and the odd indices store the indices of the pairs.
+     * TODO: update when ready
      */
-    private int[][] hashTable;
+    private ChainEntry[] hashTable;
 
     /**
      * Creates an empty {@link Chaining_Int_Long_Map} instance.
@@ -70,10 +92,14 @@ public class Chaining_Int_Long_Map {
         this.values = new long[capacity];
 
         // Hash-table since needs to be a power of two for efficient hashing
-        this.hashTable = new int[capacity][];
-        int[] minusOneArray = new int[INITIAL_COLLISION_CHAIN_LENGTH];
-        Arrays.fill(minusOneArray, -1);
-        Arrays.fill(this.hashTable, minusOneArray);
+        this.hashTable = new ChainEntry[capacity];
+
+        // Fill the chain-entry pool
+        ChainEntry[] chainEntries = new ChainEntry[1024];
+        for (int i = 0; i < chainEntries.length; i++)
+            chainEntries[i] = new ChainEntry();
+        this.chainEntryPool = new LinkedList<>();
+        Collections.addAll(this.chainEntryPool, chainEntries);
     }
 
     /**
@@ -129,16 +155,18 @@ public class Chaining_Int_Long_Map {
      * @param rehashOnCollision Whether to rebuild the hash-table into a larger table on a collision.
      */
     private void putHashEntry(int key, long preHash, int index, boolean rehashOnCollision) {
-        int hashTableIndex = hash(preHash);
-        int[] initialIndex = hashTable[hashTableIndex];
+        // Construct the entry to insert
+        ChainEntry newEntry = this.getChainEntry();
+        newEntry.key = key;
+        newEntry.index = index;
 
-        if (initialIndex == null) {
+        // Check where to insert it
+        int hashTableIndex = hash(preHash);
+        ChainEntry hte = hashTable[hashTableIndex];
+
+        if (hte == null) {
             // Hash-table entry is still free, so create a new chain
-            int[] newChain = new int[INITIAL_COLLISION_CHAIN_LENGTH];
-            Arrays.fill(newChain, -1);
-            newChain[0] = key;
-            newChain[1] = index;
-            this.hashTable[hashTableIndex] = newChain;
+            this.hashTable[hashTableIndex] = newEntry;
             return;
         } else if (rehashOnCollision) {
             // We have a hash-collision and thus need to rebuild
@@ -147,26 +175,11 @@ public class Chaining_Int_Long_Map {
         }
 
         // We have a collision but won't rebuild --> add to the collision chain
-        int[] collisionChain = this.hashTable[hashTableIndex];
-        int collisionChainLength = collisionChain.length;
-        for (int i = 0; i < collisionChainLength; i += 2) {
-            // Look for an empty entry
-            if (collisionChain[i] == -1) {
-                // Store once you found one
-                collisionChain[i] = key;
-                collisionChain[i + 1] = index;
-                this.hashTable[hashTableIndex] = collisionChain;
-                return;
-            }
+        ChainEntry currentEntry = hte;
+        while (currentEntry.next != null) {
+            currentEntry = currentEntry.next;
         }
-
-        // The current collision chain is full, so we need to extend it
-        int[] newChain = new int[collisionChainLength * 2];
-        Arrays.fill(newChain, -1);
-        System.arraycopy(collisionChain, 0, newChain, 0, collisionChainLength);
-        newChain[collisionChainLength] = key;
-        newChain[collisionChainLength + 1] = index;
-        this.hashTable[hashTableIndex] = newChain;
+        currentEntry.next = newEntry;
     }
 
     /**
@@ -223,21 +236,19 @@ public class Chaining_Int_Long_Map {
      */
     private int find(int key, long preHash) {
         int hashTableIndex = hash(preHash);
-        int[] collisionChain = hashTable[hashTableIndex];
+        ChainEntry hte = hashTable[hashTableIndex];
 
-        if (collisionChain == null) // No hash-table entry implies the key is certainly not in the map.
+        if (hte == null) // No hash-table entry implies the key is certainly not in the map.
             return -1;
 
-        for (int i = 0; i < collisionChain.length; i += 2) {
-            int keyAtIndex = collisionChain[i];
-            if (keyAtIndex == key)
-                return collisionChain[i + 1];
-            else if (keyAtIndex == - 1)
+        while (true) {
+            if (hte.key == key)
+                return hte.index;
+            else if (hte.next != null)
+                hte = hte.next;
+            else
                 return -1;
         }
-
-        // Should never arrive here but return statement is required
-        return -1;
     }
 
     /**
@@ -273,11 +284,23 @@ public class Chaining_Int_Long_Map {
         // Add some additional size to prevent collisions (multiply by two to keep the hash-table size a power of two)
         size <<= 1;
 
+        // Return all hash-table entries to the pool
+        for (int i = 0; i < this.hashTable.length; i++) {
+            ChainEntry hte = this.hashTable[i];
+            if (hte == null)
+                continue;
+
+            while (hte != null) {
+                this.chainEntryPool.push(hte);
+                ChainEntry nextEntry = hte.next;
+                hte.reset();
+                hte = nextEntry;
+            }
+
+        }
+
         // Create the new hashTable and reset the next array
-        this.hashTable = new int[size][];
-        int[] minusOneArray = new int[INITIAL_COLLISION_CHAIN_LENGTH];
-        Arrays.fill(minusOneArray, -1);
-        Arrays.fill(this.hashTable, minusOneArray);
+        this.hashTable = new ChainEntry[size];
 
         // And insert all key-value associations again
         for (int i = 0; i < this.numberOfRecords; i++) {
