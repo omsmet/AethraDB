@@ -144,7 +144,9 @@ public class NonVectorisedSimd extends ResultConsumptionTarget {
             "-Darrow.enable_unsafe_memory_access=true",
             "-Darrow.enable_null_check_for_get=false",
             "--enable-preview",
-            "--enable-native-access=ALL-UNNAMED"
+            "--enable-native-access=ALL-UNNAMED",
+            "-Xmx16g",
+            "-Xms8g"
     })
     public void executeFilterQuery() throws IOException {
         this.generatedQuery.execute();

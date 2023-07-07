@@ -40,20 +40,20 @@ public class VectorisedNonSimd extends ResultConsumptionTarget {
      */
     @Param({
             "/nvtmp/AethraTestData/join_query_int/A_B_0.2_C_0.2",
-            "/nvtmp/AethraTestData/join_query_int/A_B_0.2_C_0.4",
-            "/nvtmp/AethraTestData/join_query_int/A_B_0.2_C_0.6",
+//            "/nvtmp/AethraTestData/join_query_int/A_B_0.2_C_0.4",
+//            "/nvtmp/AethraTestData/join_query_int/A_B_0.2_C_0.6",
             "/nvtmp/AethraTestData/join_query_int/A_B_0.2_C_0.8",
             "/nvtmp/AethraTestData/join_query_int/A_B_0.4_C_0.2",
-            "/nvtmp/AethraTestData/join_query_int/A_B_0.4_C_0.4",
-            "/nvtmp/AethraTestData/join_query_int/A_B_0.4_C_0.6",
+//            "/nvtmp/AethraTestData/join_query_int/A_B_0.4_C_0.4",
+//            "/nvtmp/AethraTestData/join_query_int/A_B_0.4_C_0.6",
             "/nvtmp/AethraTestData/join_query_int/A_B_0.4_C_0.8",
             "/nvtmp/AethraTestData/join_query_int/A_B_0.6_C_0.2",
-            "/nvtmp/AethraTestData/join_query_int/A_B_0.6_C_0.4",
-            "/nvtmp/AethraTestData/join_query_int/A_B_0.6_C_0.6",
+//            "/nvtmp/AethraTestData/join_query_int/A_B_0.6_C_0.4",
+//            "/nvtmp/AethraTestData/join_query_int/A_B_0.6_C_0.6",
             "/nvtmp/AethraTestData/join_query_int/A_B_0.6_C_0.8",
             "/nvtmp/AethraTestData/join_query_int/A_B_0.8_C_0.2",
-            "/nvtmp/AethraTestData/join_query_int/A_B_0.8_C_0.4",
-            "/nvtmp/AethraTestData/join_query_int/A_B_0.8_C_0.6",
+//            "/nvtmp/AethraTestData/join_query_int/A_B_0.8_C_0.4",
+//            "/nvtmp/AethraTestData/join_query_int/A_B_0.8_C_0.6",
             "/nvtmp/AethraTestData/join_query_int/A_B_0.8_C_0.8"
     })
     private String tableFilePath;
@@ -167,7 +167,9 @@ public class VectorisedNonSimd extends ResultConsumptionTarget {
             "--add-opens=java.base/java.nio=ALL-UNNAMED",
             "-Darrow.enable_unsafe_memory_access=true",
             "-Darrow.enable_null_check_for_get=false",
-            "--enable-preview"
+            "--enable-preview",
+            "-Xmx16g",
+            "-Xms8g"
     })
     public void executeQuery() throws IOException {
         this.generatedQuery.execute();

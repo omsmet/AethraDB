@@ -143,7 +143,9 @@ public class VectorisedNonSimd extends ResultConsumptionTarget {
             "--add-opens=java.base/java.nio=ALL-UNNAMED",
             "-Darrow.enable_unsafe_memory_access=true",
             "-Darrow.enable_null_check_for_get=false",
-            "--enable-preview"
+            "--enable-preview",
+            "-Xmx16g",
+            "-Xms8g"
     })
     public void executeFilterQuery() throws IOException {
         this.generatedQuery.execute();
