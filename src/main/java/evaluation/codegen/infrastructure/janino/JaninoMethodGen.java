@@ -71,7 +71,7 @@ public class JaninoMethodGen {
      */
     public static void createMethod(
             Location location,
-            Java.PackageMemberClassDeclaration targetClazz,
+            Java.NamedClassDeclaration targetClazz,
             Access accessModifier, // TODO: Also think about static, abstract, final etc.
             Java.Type returnType,
             String methodName,
@@ -100,7 +100,7 @@ public class JaninoMethodGen {
      */
     public static void createMethod(
             Location location,
-            Java.PackageMemberClassDeclaration targetClazz,
+            Java.NamedClassDeclaration targetClazz,
             Access accessModifier, // TODO: Also think about static, abstract, final etc.
             Java.Type returnType,
             String methodName,
@@ -132,7 +132,7 @@ public class JaninoMethodGen {
      */
     public static void createMethod(
             Location location,
-            Java.PackageMemberClassDeclaration targetClazz,
+            Java.NamedClassDeclaration targetClazz,
             Access accessModifier, // TODO: Also think about static, abstract, final etc.
             Java.Type returnType,
             String methodName,

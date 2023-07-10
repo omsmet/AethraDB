@@ -35,6 +35,16 @@ import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createRe
 public final class QueryVariableTypeMethods {
 
     /**
+     * Method to check if a type is a primitive type.
+     */
+    public static boolean isPrimitive(QueryVariableType type) {
+        return switch (type) {
+            case P_BOOLEAN, P_DOUBLE, P_FLOAT, P_INT, P_LONG -> true;
+            default -> false;
+        };
+    }
+
+    /**
      * Method to get the primitive scalar type for a given type.
      */
     public static QueryVariableType primitiveType(QueryVariableType type) {
@@ -229,6 +239,22 @@ public final class QueryVariableTypeMethods {
 
             default -> throw new UnsupportedOperationException(
                     "toJavaType does not currently support this type " + type);
+        };
+    }
+
+    /**
+     * Method to obtain a {@link Java.Primitive} for a primitive type.
+     */
+    public static Java.Primitive toJavaPrimitive(QueryVariableType type) {
+        return switch (type) {
+            case P_BOOLEAN -> Java.Primitive.BOOLEAN;
+            case P_DOUBLE -> Java.Primitive.DOUBLE;
+            case P_FLOAT -> Java.Primitive.FLOAT;
+            case P_INT -> Java.Primitive.INT;
+            case P_LONG -> Java.Primitive.LONG;
+
+            default -> throw new UnsupportedOperationException(
+                    "toJavaPrimitive expects a primitive type");
         };
     }
 

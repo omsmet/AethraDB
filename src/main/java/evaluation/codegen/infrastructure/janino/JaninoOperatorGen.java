@@ -60,6 +60,17 @@ public class JaninoOperatorGen {
     }
 
     /**
+     * Generate a division operator.
+     * @param location The location at which the operator is requested for generation.
+     * @param lhs The left-hand side of the division.
+     * @param rhs The right-hand side of the division.
+     * @return The generated division operator.
+     */
+    public static Java.BinaryOperation div(Location location, Java.Rvalue lhs, Java.Rvalue rhs) {
+        return new Java.BinaryOperation(location, lhs, "/", rhs);
+    }
+
+    /**
      * Generate a modulo operator.
      * @param location The location at which the operator is requested for generation.
      * @param lhs The left-hand side of the modulo.
@@ -68,6 +79,28 @@ public class JaninoOperatorGen {
      */
     public static Java.BinaryOperation mod(Location location, Java.Rvalue lhs, Java.Rvalue rhs) {
         return new Java.BinaryOperation(location, lhs, "%", rhs);
+    }
+
+    /**
+     * Generate a left-shift operator statement.
+     * @param location The location at which the operator is requested for generation.
+     * @param lhs The left-hand side of the left-shift.
+     * @param rhs The right-hand side of the left-shift.
+     * @return The generated left-shift operator.
+     */
+    public static Java.BinaryOperation lShift(Location location, Java.Rvalue lhs, Java.Rvalue rhs) {
+        return new Java.BinaryOperation(location, lhs, "<<", rhs);
+    }
+
+    /**
+     * Generate a binary-and operator.
+     * @param location The location at which the operator is requested for generation.
+     * @param lhs The left-hand side of the binary-and.
+     * @param rhs The right-hand side of the binary-and.
+     * @return The comparison operator.
+     */
+    public static Java.BinaryOperation binAnd(Location location, Java.Rvalue lhs, Java.Rvalue rhs) {
+        return new Java.BinaryOperation(location, lhs, "&", rhs);
     }
 
     /**
@@ -95,6 +128,39 @@ public class JaninoOperatorGen {
     }
 
     /**
+     * Generate an and operator.
+     * @param location The location at which the operator is requested for generation.
+     * @param lhs The left-hand side of the and.
+     * @param rhs The right-hand side of the and.
+     * @return The comparison operator.
+     */
+    public static Java.BinaryOperation and(Location location, Java.Rvalue lhs, Java.Rvalue rhs) {
+        return new Java.BinaryOperation(location, lhs, "&&", rhs);
+    }
+
+    /**
+     * Generate an equality comparison operator.
+     * @param location The location at which the operator is requested for generation.
+     * @param lhs The left-hand side of the comparison.
+     * @param rhs The right-hand side of the comparison.
+     * @return The comparison operator.
+     */
+    public static Java.BinaryOperation eq(Location location, Java.Rvalue lhs, Java.Rvalue rhs) {
+        return new Java.BinaryOperation(location, lhs, "==", rhs);
+    }
+
+    /**
+     * Generate an inequality comparison operator.
+     * @param location The location at which the operator is requested for generation.
+     * @param lhs The left-hand side of the comparison.
+     * @param rhs The right-hand side of the comparison.
+     * @return The comparison operator.
+     */
+    public static Java.BinaryOperation neq(Location location, Java.Rvalue lhs, Java.Rvalue rhs) {
+        return new Java.BinaryOperation(location, lhs, "!=", rhs);
+    }
+
+    /**
      * Generate a less-than comparison operator.
      * @param location The location at which the operator is requested for generation.
      * @param lhs The left-hand side of the comparison.
@@ -103,6 +169,17 @@ public class JaninoOperatorGen {
      */
     public static Java.BinaryOperation lt(Location location, Java.Rvalue lhs, Java.Rvalue rhs) {
         return new Java.BinaryOperation(location, lhs, "<", rhs);
+    }
+
+    /**
+     * Generate a less-than or equal comparison operator.
+     * @param location The location at which the operator is requested for generation.
+     * @param lhs The left-hand side of the comparison.
+     * @param rhs The right-hand side of the comparison.
+     * @return The comparison operator.
+     */
+    public static Java.BinaryOperation le(Location location, Java.Rvalue lhs, Java.Rvalue rhs) {
+        return new Java.BinaryOperation(location, lhs, "<=", rhs);
     }
 
     /**

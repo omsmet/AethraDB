@@ -25,6 +25,7 @@ import static evaluation.codegen.infrastructure.janino.JaninoMethodGen.createCon
 import static evaluation.codegen.infrastructure.janino.JaninoMethodGen.createFormalParameter;
 import static evaluation.codegen.infrastructure.janino.JaninoMethodGen.createFormalParameters;
 import static evaluation.codegen.infrastructure.janino.JaninoMethodGen.createMethod;
+import static evaluation.general_support.QueryCodePrinter.printCode;
 
 /**
  * Class taking care of general purpose operations in query code generation.
@@ -103,7 +104,8 @@ public class QueryCodeGenerator extends SimpleCompiler {
                 "evaluation.vector_support.VectorisedPrintOperators",
 
                 "java.lang.foreign.MemorySegment",
-                "java.util.ArrayList"
+                "java.util.ArrayList",
+                "java.util.Arrays"
         };
 
         // Initialise the compiler, so it will allow us to generate a class which extends
@@ -251,106 +253,6 @@ public class QueryCodeGenerator extends SimpleCompiler {
         }
 
         return l.toArray(new Java.AbstractCompilationUnit.ImportDeclaration[0]);
-    }
-
-    /**
-     * Method to print generated code to the standard output.
-     * @param code The code to print.
-     */
-    private static void printCode(List<Java.Statement> code) {
-        printCode(code, 0);
-    }
-
-    /**
-     * Method to print generated code to the standard output.
-     * @param code The code to print.
-     * @param indentationLevel The number of spaces to add before each line of the code.
-     */
-    private static void printCode(List<? extends Java.BlockStatement> code, int indentationLevel) {
-        for (Java.BlockStatement statement : code)
-            printCode(statement, indentationLevel);
-    }
-
-    /**
-     * Method to print generated code to the standard output.
-     * @param code The code to print.
-     * @param indentationLevel The number of spaces to add before each line of the code.
-     */
-    private static void printCode(Java.BlockStatement code, int indentationLevel) {
-        if (code instanceof Java.Block block) {
-            printCode(block.statements, indentationLevel);
-
-        } else if (code instanceof Java.WhileStatement whileStatement) {
-            String whileGuardLine = "while (" + whileStatement.condition.toString() + ") {";
-            System.out.print(whileGuardLine.indent(indentationLevel));
-            printCode(whileStatement.body, indentationLevel + 4);
-            System.out.print("}".indent(indentationLevel));
-
-        } else if (code instanceof Java.ForStatement forStatement) {
-            String forGuardLine =
-                    "for (" + forStatement.init.toString() + " "
-                            + forStatement.condition.toString() + "; "
-                            + forStatement.update[0].toString() + ") {";
-            System.out.print(forGuardLine.indent(indentationLevel));
-            printCode(forStatement.body, indentationLevel + 4);
-            System.out.print("}".indent(indentationLevel));
-
-        } else if (code instanceof Java.ForEachStatement forEachStatement) {
-            String forGuardLine =
-                    "foreach (" + forEachStatement.currentElement.toString() + " : "
-                                + forEachStatement.expression.toString() + ") {";
-            System.out.print(forGuardLine.indent(indentationLevel));
-            printCode(forEachStatement.body, indentationLevel + 4);
-            System.out.print("}".indent(indentationLevel));
-
-        } else if (code instanceof Java.IfStatement ifStatement) {
-            String ifGuardLine = "if (" + ifStatement.condition.toString() + ") {";
-            System.out.print(ifGuardLine.indent(indentationLevel));
-            printCode(ifStatement.thenStatement, indentationLevel + 4);
-            if (ifStatement.elseStatement != null) {
-                System.out.print("} else }".indent(indentationLevel));
-                printCode(ifStatement.elseStatement, indentationLevel + 4);
-            }
-            System.out.print("}".indent(indentationLevel));
-
-        } else if (code instanceof Java.LocalClassDeclarationStatement lcdStatement) {
-            Java.LocalClassDeclaration lcd = lcdStatement.lcd;
-            String classDeclarationLine = "";
-            for (Java.Modifier modifier : lcd.getModifiers())
-                classDeclarationLine += modifier.toString() + " ";
-            classDeclarationLine += "class " + lcd.getName() + " {";
-            System.out.print(classDeclarationLine.indent(indentationLevel));
-
-            printCode(lcd.fieldDeclarationsAndInitializers, indentationLevel + 4);
-            System.out.println();
-
-            for (Java.ConstructorDeclarator constructorDeclarator : lcd.constructors) {
-                String constructorDeclarationLine = constructorDeclarator.getModifiers()[0].toString();
-                constructorDeclarationLine += " " + constructorDeclarator.getDeclaringType().toString() + "(";
-
-                Java.FunctionDeclarator.FormalParameter[] parameters = constructorDeclarator.formalParameters.parameters;
-                for (int i = 0; i < parameters.length; i++) {
-                    constructorDeclarationLine += parameters[i].toString();
-
-                    if (i != parameters.length - 1)
-                        constructorDeclarationLine += ", ";
-                }
-
-                constructorDeclarationLine += ") {";
-                System.out.print(constructorDeclarationLine.indent(indentationLevel + 4));
-
-                printCode(constructorDeclarator.statements, indentationLevel + 8);
-                System.out.print("}".indent(indentationLevel + 4));
-            }
-
-            System.out.println("}".indent(indentationLevel));
-
-        } else if (code instanceof Java.FieldDeclaration fieldDeclaration) {
-            System.out.print((fieldDeclaration.toString() + ";").indent(indentationLevel));
-
-        } else {
-            System.out.print(code.toString().indent(indentationLevel));
-        }
     }
 
 }

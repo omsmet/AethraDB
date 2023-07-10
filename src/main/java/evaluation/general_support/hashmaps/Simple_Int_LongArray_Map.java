@@ -1,7 +1,6 @@
 package evaluation.general_support.hashmaps;
 
 import java.util.Arrays;
-import java.util.NoSuchElementException;
 
 /**
  * This map provides a simple hash-map implementation for mapping primitive integer keys to a

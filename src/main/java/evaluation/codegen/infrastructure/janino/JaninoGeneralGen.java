@@ -45,6 +45,16 @@ public class JaninoGeneralGen {
     }
 
     /**
+     * Method for creating an {@link Java.Type} instance for an nested array of a java primitive.
+     * @param location The location at which the created primitive array type is requested for generation.
+     * @param type The type of the primitive that should be generated for.
+     * @return A {@link Java.Type} instance for a specific java nested primitive array type.
+     */
+    public static Java.ArrayType createNestedPrimitiveArrayType(Location location, Java.Primitive type) {
+        return new Java.ArrayType(createPrimitiveArrayType(location, type));
+    }
+
+    /**
      * Method for creating an {@link Java.ReferenceType} instance.
      * @param location The location at which the type reference requested for generation.
      * @param identifier The identifier of the referenced type.
@@ -105,6 +115,21 @@ public class JaninoGeneralGen {
         return new Java.AmbiguousName(
                 location,
                 name.split("\\.")
+        );
+    }
+
+    /**
+     * Method to create a {@link Java.FieldAccessExpression} for a member field on a {@code this}
+     * reference.
+     * @param location The location from which the access expression is requested for generation.
+     * @param name The name of the field being referred to.
+     * @return The {@link Java.FieldAccessExpression} corresponding to the provided parameters
+     */
+    public static Java.FieldAccessExpression createThisFieldAccess(Location location, String name) {
+        return new Java.FieldAccessExpression(
+                location,
+                new Java.ThisReference(location),
+                name
         );
     }
 
@@ -227,6 +252,48 @@ public class JaninoGeneralGen {
                 location,
                 primitiveType,
                 new Java.Rvalue[] { createIntegerLiteral(getLocation(), length) },
+                0
+        );
+    }
+
+    /**
+     * Method to create a new array of a primitive java type.
+     * @param location The location where the new array is requested for generation.
+     * @param primitiveType The primitive type that the array should get.
+     * @param length The length to initialise the array with.
+     * @return A {@link Java.NewArray} corresponding to the provided parameters.
+     */
+    public static Java.NewArray createNewPrimitiveArray(
+            Location location,
+            Java.Primitive primitiveType,
+            Java.Rvalue length
+    ) {
+        return new Java.NewArray(
+                location,
+                createPrimitiveType(getLocation(), primitiveType),
+                new Java.Rvalue[] { length },
+                0
+        );
+    }
+
+    /**
+     * Method to create a new 2 dimensional array of a primitive java type.
+     * @param location The location where the new array is requested for generation.
+     * @param primitiveType The primitive type that the array should get.
+     * @param lengthD1 The length to initialise the first array dimension with.
+     * @param lengthD2 The length to initialise the second array dimension with.
+     * @return A {@link Java.NewArray} corresponding to the provided parameters.
+     */
+    public static Java.NewArray createNew2DPrimitiveArray(
+            Location location,
+            Java.Primitive primitiveType,
+            Java.Rvalue lengthD1,
+            Java.Rvalue lengthD2
+    ) {
+        return new Java.NewArray(
+                location,
+                createPrimitiveType(getLocation(), primitiveType),
+                new Java.Rvalue[] { lengthD1, lengthD2 },
                 0
         );
     }
