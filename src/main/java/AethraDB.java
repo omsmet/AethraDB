@@ -3,8 +3,9 @@ import evaluation.codegen.QueryCodeGenerator;
 import evaluation.codegen.QueryTranslator;
 import evaluation.codegen.operators.CodeGenOperator;
 import evaluation.codegen.operators.QueryResultPrinterOperator;
-import org.apache.calcite.plan.RelOptUtil;
 import org.apache.calcite.rel.RelNode;
+import org.apache.calcite.rel.externalize.RelWriterImpl;
+import org.apache.calcite.sql.SqlExplainLevel;
 import org.apache.calcite.sql.SqlNode;
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
@@ -16,6 +17,7 @@ import org.apache.commons.cli.ParseException;
 import util.arrow.ArrowDatabase;
 
 import java.io.File;
+import java.io.PrintWriter;
 import java.nio.file.Files;
 
 /**
@@ -82,7 +84,8 @@ public class AethraDB {
         // Plan the query
         RelNode logicalQueryPlan = database.planQuery(validatedSqlQuery);
         System.out.println("[Optimised query]");
-        System.out.println(RelOptUtil.toString(logicalQueryPlan));
+        var relWriter = new RelWriterImpl(new PrintWriter(System.out, true), SqlExplainLevel.ALL_ATTRIBUTES, false);
+        logicalQueryPlan.explain(relWriter);
 
         // Generate code for the query which prints the result to the standard output
         boolean useVectorisedProcessing = false;

@@ -59,7 +59,7 @@ public class ArrowTableScanOperator extends CodeGenOperator<LogicalArrowTableSca
     /**
      * Boolean keeping track of whether SIMD production is allowed in this operator.
      */
-    private boolean SIMDProductionAllowed;
+    private final boolean SIMDProductionAllowed;
 
     /**
      * Creates an {@link ArrowTableScanOperator} for a specific {@link LogicalArrowTableScan}.

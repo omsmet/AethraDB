@@ -31,9 +31,9 @@ public class Simple_Int_LongArray_Map {
     private long[][] values;
 
     /**
-     * Number indicating the number of values associated to each key.
+     * Number indicating the number of sub-values associated to each key.
      */
-    private int valuesPerKey;
+    private final int valuesPerKey;
 
     /**
      * The table mapping a hash value to an index in the {@code keys} and {@code values} arrays.

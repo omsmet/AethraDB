@@ -37,11 +37,9 @@ import static evaluation.codegen.infrastructure.janino.JaninoClassGen.createClas
 import static evaluation.codegen.infrastructure.janino.JaninoClassGen.createLocalClassDeclarationStm;
 import static evaluation.codegen.infrastructure.janino.JaninoControlGen.createForLoop;
 import static evaluation.codegen.infrastructure.janino.JaninoControlGen.createIf;
-import static evaluation.codegen.infrastructure.janino.JaninoControlGen.createIfNotContinue;
 import static evaluation.codegen.infrastructure.janino.JaninoControlGen.createWhileLoop;
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createAmbiguousNameRef;
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createArrayElementAccessExpr;
-import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createCast;
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createIntegerLiteral;
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createPrimitiveArrayType;
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createPrimitiveType;
@@ -52,7 +50,6 @@ import static evaluation.codegen.infrastructure.janino.JaninoMethodGen.createMet
 import static evaluation.codegen.infrastructure.janino.JaninoOperatorGen.eq;
 import static evaluation.codegen.infrastructure.janino.JaninoOperatorGen.gt;
 import static evaluation.codegen.infrastructure.janino.JaninoOperatorGen.lt;
-import static evaluation.codegen.infrastructure.janino.JaninoOperatorGen.not;
 import static evaluation.codegen.infrastructure.janino.JaninoOperatorGen.plus;
 import static evaluation.codegen.infrastructure.janino.JaninoOperatorGen.postIncrement;
 import static evaluation.codegen.infrastructure.janino.JaninoOperatorGen.postIncrementStm;
@@ -978,7 +975,7 @@ public class JoinOperator extends CodeGenOperator<LogicalJoin> {
                     );
             }
 
-            // [join_map].add([left_join_record_key], [preHashVector][[i]], [columnValues])
+            // [join_map].associate([left_join_record_key], [preHashVector][[i]], [columnValues])
             Java.Rvalue[] associateCallArgs = new Java.Rvalue[columnValues.length + 2];
             associateCallArgs[0] = leftJoinRecordKeyAP.read();
             associateCallArgs[1] =
@@ -989,7 +986,7 @@ public class JoinOperator extends CodeGenOperator<LogicalJoin> {
                     createMethodInvocationStm(
                             getLocation(),
                             this.joinMapAP.read(),
-                            "add",
+                            "associate",
                             associateCallArgs
                     )
             );
