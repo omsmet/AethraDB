@@ -121,6 +121,29 @@ public class JaninoClassGen {
     }
 
     /**
+     * Method to create a "public" field on a class.
+     * @param location The location from which the field is requested for generation.
+     * @param fieldType The type that the field will store.
+     * @param fieldDeclarator The declaration of the field itself.
+     * @return A {@link org.codehaus.janino.Java.FieldDeclaration} matching the provided parameters.
+     */
+    public static Java.FieldDeclaration createPublicFieldDeclaration(
+            Location location,
+            Java.Type fieldType,
+            Java.VariableDeclarator fieldDeclarator
+    ) {
+        return new Java.FieldDeclaration(
+                location,
+                null,
+                new Java.Modifier[] {
+                        new Java.AccessModifier(Access.PUBLIC.toString(), getLocation()),
+                },
+                fieldType,
+                new Java.VariableDeclarator[] { fieldDeclarator }
+        );
+    }
+
+    /**
      * Method to create a "private" field on a class.
      * @param location The location from which the field is requested for generation.
      * @param fieldType The type that the field will store.

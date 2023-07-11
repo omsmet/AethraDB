@@ -22,6 +22,7 @@ import static evaluation.codegen.infrastructure.context.QueryVariableTypeMethods
 import static evaluation.codegen.infrastructure.janino.JaninoClassGen.createClassInstance;
 import static evaluation.codegen.infrastructure.janino.JaninoClassGen.createLocalClassDeclaration;
 import static evaluation.codegen.infrastructure.janino.JaninoClassGen.createPrivateFieldDeclaration;
+import static evaluation.codegen.infrastructure.janino.JaninoClassGen.createPublicFieldDeclaration;
 import static evaluation.codegen.infrastructure.janino.JaninoControlGen.createForLoop;
 import static evaluation.codegen.infrastructure.janino.JaninoControlGen.createIf;
 import static evaluation.codegen.infrastructure.janino.JaninoControlGen.createWhileLoop;
@@ -77,12 +78,12 @@ public class KeyMultiRecordMapGenerator {
     /**
      * The {@link QueryVariableType} indicating the primitive key type of the map to be generated.
      */
-    private final QueryVariableType keyType;
+    public final QueryVariableType keyType;
 
     /**
      * The {@link QueryVariableType}s indicating the primitive type of each record value.
      */
-    private final QueryVariableType[] valueTypes;
+    public final QueryVariableType[] valueTypes;
 
     /**
      * Boolean keeping track of whether generation has already been performed.
@@ -114,7 +115,7 @@ public class KeyMultiRecordMapGenerator {
     /**
      * The names of the arrays storing the record field values in the map.
      */
-    private final String[] valueVariableNames;
+    public final String[] valueVariableNames;
 
     /**
      * The {@link AccessPath} to the array storing the hash-table.
@@ -229,7 +230,7 @@ public class KeyMultiRecordMapGenerator {
 
         // Add the variable storing the record count per key in the map
         this.mapDeclaration.addFieldDeclaration(
-                createPrivateFieldDeclaration(
+                createPublicFieldDeclaration(
                         getLocation(),
                         toJavaType(getLocation(), keysRecordCountAP.getType()),
                         createSimpleVariableDeclaration(
@@ -242,7 +243,7 @@ public class KeyMultiRecordMapGenerator {
         // For each field of the value types, create a nested array
         for (int i = 0; i < this.valueVariableNames.length; i++) {
             this.mapDeclaration.addFieldDeclaration(
-                    createPrivateFieldDeclaration(
+                    createPublicFieldDeclaration(
                             getLocation(),
                             createNestedPrimitiveArrayType(
                                     getLocation(),
@@ -597,6 +598,7 @@ public class KeyMultiRecordMapGenerator {
         //     index = this.numberOfRecords++;
         //     if (this.keys.length == index)
         //         growArrays();
+        //     this.keys[index] = key;
         // }
         ScalarVariableAccessPath newEntryAP = new ScalarVariableAccessPath("newEntry", P_BOOLEAN);
         associateMethodBody.add(
@@ -641,7 +643,7 @@ public class KeyMultiRecordMapGenerator {
                                         new Java.FieldAccessExpression(
                                                 getLocation(),
                                                 new Java.ThisReference(getLocation()),
-                                                keysAP.getVariableName()
+                                                this.keysAP.getVariableName()
                                         ),
                                         "length"
                                 ),
@@ -652,6 +654,20 @@ public class KeyMultiRecordMapGenerator {
                                 new Java.ThisReference(getLocation()),
                                 GROW_ARRAYS_METHOD_NAME
                         )
+                )
+        );
+        allocateIndexBody.addStatement(
+                createVariableAssignmentStm(
+                        getLocation(),
+                        createArrayElementAccessExpr(
+                                getLocation(),
+                                createThisFieldAccess(
+                                        getLocation(),
+                                        this.keysAP.getVariableName()
+                                ),
+                                indexAP.read()
+                        ),
+                        createAmbiguousNameRef(getLocation(), formalParameters[0].name)
                 )
         );
 
