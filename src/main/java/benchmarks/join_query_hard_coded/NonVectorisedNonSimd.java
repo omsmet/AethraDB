@@ -96,6 +96,18 @@ public class NonVectorisedNonSimd {
     private long expectedResult;
 
     /**
+     * State: the table_A_x_table_B join map.
+     * DIFF: usually part of the query execution itself.
+     */
+    private KeyMultiRecordMap_1123573668 join_map;
+
+    /**
+     * State: the table_A join map.
+     * DIFF: usually part of the query execution itself.
+     */
+    private KeyMultiRecordMap_10523395 join_map_0;
+
+    /**
      * This method sets up the state at the start of each benchmark fork.
      */
     @Setup(Level.Trial)
@@ -111,6 +123,10 @@ public class NonVectorisedNonSimd {
         double conversionFactor = Double.parseDouble(this.tableFilePath.split("B_")[1].split("_C_")[0]);
         int expectedJoinSize = (int) (conversionFactor * (3 * 1024 * 1024));
         this.table_A_x_table_B_hashTable_size = Integer.highestOneBit(expectedJoinSize) << 1;
+
+        // Allocate the hash-tables
+        this.join_map = new KeyMultiRecordMap_1123573668(this.table_A_x_table_B_hashTable_size);
+        this.join_map_0 = new KeyMultiRecordMap_10523395(this.table_A_hashTable_size);
 
         // Initialise the result
         this.result = -1;
@@ -130,6 +146,9 @@ public class NonVectorisedNonSimd {
         this.table_A.reset();
         this.table_B.reset();
         this.table_C.reset();
+        // Reset the join maps
+        this.join_map.reset();
+        this.join_map_0.reset();
     }
 
     /**
@@ -159,10 +178,10 @@ public class NonVectorisedNonSimd {
     })
     public void executeQuery() throws IOException {
         int agg_0_count = 0;
-        // DIFF: class definition is moved outside query, different capacity
-        KeyMultiRecordMap_1123573668 join_map = new KeyMultiRecordMap_1123573668(this.table_A_x_table_B_hashTable_size);
-        // DIFF: class definition is moved outside query, different capacity
-        KeyMultiRecordMap_10523395 join_map_0 = new KeyMultiRecordMap_10523395(this.table_A_hashTable_size);
+        // DIFF: class definition is moved outside query, different capacity, allocated before query
+        // KeyMultiRecordMap_1123573668 join_map = new KeyMultiRecordMap_1123573668(this.table_A_x_table_B_hashTable_size);
+        // DIFF: class definition is moved outside query, different capacity, allocated before query
+        // KeyMultiRecordMap_10523395 join_map_0 = new KeyMultiRecordMap_10523395(this.table_A_hashTable_size);
 
         // ArrowTableReader table_A = cCtx.getArrowReader(0);                          DIFF: hard-coded in the setup phase
         while (table_A.loadNextBatch()) {

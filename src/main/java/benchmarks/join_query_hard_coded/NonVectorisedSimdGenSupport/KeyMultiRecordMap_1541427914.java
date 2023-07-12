@@ -153,4 +153,11 @@ public class KeyMultiRecordMap_1541427914 { // DIFF: generated class is private 
         }
         return this.find(key, preHash);
     }
+    public void reset() {
+        this.numberOfRecords = 0;
+        Arrays.fill(this.keys, -1);
+        Arrays.fill(this.keysRecordCount, 0);
+        Arrays.fill(this.hashTable, -1);
+        Arrays.fill(this.next, -1);
+    }
 }

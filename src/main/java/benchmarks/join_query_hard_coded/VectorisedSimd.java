@@ -104,6 +104,18 @@ public class VectorisedSimd {
     private long expectedResult;
 
     /**
+     * State: the table_A_x_table_B join map.
+     * DIFF: usually part of the query execution itself.
+     */
+    private KeyMultiRecordMap_1802415698 join_map;
+
+    /**
+     * State: the table_A join map.
+     * DIFF: usually part of the query execution itself.
+     */
+    private KeyMultiRecordMap_1037793103 join_map_0;
+
+    /**
      * This method sets up the state at the start of each benchmark fork.
      */
     @Setup(Level.Trial)
@@ -119,6 +131,10 @@ public class VectorisedSimd {
         double conversionFactor = Double.parseDouble(this.tableFilePath.split("B_")[1].split("_C_")[0]);
         int expectedJoinSize = (int) (conversionFactor * (3 * 1024 * 1024));
         this.table_A_x_table_B_hashTable_size = Integer.highestOneBit(expectedJoinSize) << 1;
+
+        // Allocate the hash-tables
+        this.join_map = new KeyMultiRecordMap_1802415698(this.table_A_x_table_B_hashTable_size);
+        this.join_map_0 = new KeyMultiRecordMap_1037793103(this.table_A_hashTable_size);
 
         // Setup the allocation manager
         this.allocationManager = new BufferPoolAllocationManager(8);
@@ -141,6 +157,9 @@ public class VectorisedSimd {
         this.table_A.reset();
         this.table_B.reset();
         this.table_C.reset();
+        // Reset the join maps
+        this.join_map.reset();
+        this.join_map_0.reset();
     }
 
     /**
@@ -168,6 +187,7 @@ public class VectorisedSimd {
             "-Darrow.enable_unsafe_memory_access=true",
             "-Darrow.enable_null_check_for_get=false",
             "--enable-preview",
+            "--enable-native-access=ALL-UNNAMED",
             "-Xmx16g",
             "-Xms8g"
     })
@@ -175,12 +195,12 @@ public class VectorisedSimd {
         int agg_0_count = 0;
         // DIFF: hard-coded in the setup phase
         long[] pre_hash_vector = this.allocationManager.getLongVector();
-        // DIFF: class definition is moved outside query, different capacity
-        KeyMultiRecordMap_1802415698 join_map = new KeyMultiRecordMap_1802415698(this.table_A_x_table_B_hashTable_size);
+        // DIFF: class definition is moved outside query, different capacity, allocated before query
+        // KeyMultiRecordMap_1802415698 join_map = new KeyMultiRecordMap_1802415698(this.table_A_x_table_B_hashTable_size);
         // DIFF: hard-coded in the setup phase
         long[] pre_hash_vector_0 = this.allocationManager.getLongVector();
-        // DIFF: class definition is moved outside query, different capacity
-        KeyMultiRecordMap_1037793103 join_map_0 = new KeyMultiRecordMap_1037793103(this.table_A_hashTable_size);
+        // DIFF: class definition is moved outside query, different capacity, allocated before query
+        // KeyMultiRecordMap_1037793103 join_map_0 = new KeyMultiRecordMap_1037793103(this.table_A_hashTable_size);
 
         // ArrowTableReader table_A = cCtx.getArrowReader(0);                           DIFF: hard-coded in the setup phase
         while (table_A.loadNextBatch()) {

@@ -153,4 +153,11 @@ public final class KeyMultiRecordMap_270313690 { // DIFF: generated class is pri
         }
         return this.find(key, preHash);
     }
+    public void reset() {
+        this.numberOfRecords = 0;
+        Arrays.fill(this.keys, -1);
+        Arrays.fill(this.keysRecordCount, 0);
+        Arrays.fill(this.hashTable, -1);
+        Arrays.fill(this.next, -1);
+    }
 }

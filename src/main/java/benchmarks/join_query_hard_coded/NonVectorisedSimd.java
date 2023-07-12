@@ -1,7 +1,5 @@
 package benchmarks.join_query_hard_coded;
 
-import benchmarks.join_query_hard_coded.NonVectorisedNonSimdGenSupport.KeyMultiRecordMap_10523395;
-import benchmarks.join_query_hard_coded.NonVectorisedNonSimdGenSupport.KeyMultiRecordMap_1123573668;
 import benchmarks.join_query_hard_coded.NonVectorisedSimdGenSupport.KeyMultiRecordMap_1541427914;
 import benchmarks.join_query_hard_coded.NonVectorisedSimdGenSupport.KeyMultiRecordMap_1719746158;
 import evaluation.codegen.infrastructure.context.OptimisationContext;
@@ -100,6 +98,19 @@ public class NonVectorisedSimd {
     private long expectedResult;
 
     /**
+     * State: the table_A_x_table_B join map.
+     * DIFF: usually part of the query execution itself.
+     */
+    private KeyMultiRecordMap_1719746158 join_map;
+
+    /**
+     * State: the table_A join map.
+     * DIFF: usually part of the query execution itself.
+     */
+    private KeyMultiRecordMap_1541427914 join_map_0;
+
+
+    /**
      * This method sets up the state at the start of each benchmark fork.
      */
     @Setup(Level.Trial)
@@ -115,6 +126,10 @@ public class NonVectorisedSimd {
         double conversionFactor = Double.parseDouble(this.tableFilePath.split("B_")[1].split("_C_")[0]);
         int expectedJoinSize = (int) (conversionFactor * (3 * 1024 * 1024));
         this.table_A_x_table_B_hashTable_size = Integer.highestOneBit(expectedJoinSize) << 1;
+
+        // Allocate the hash-tables
+        this.join_map = new KeyMultiRecordMap_1719746158(this.table_A_x_table_B_hashTable_size);
+        this.join_map_0 = new KeyMultiRecordMap_1541427914(this.table_A_hashTable_size);
 
         // Initialise the result
         this.result = -1;
@@ -134,6 +149,9 @@ public class NonVectorisedSimd {
         this.table_A.reset();
         this.table_B.reset();
         this.table_C.reset();
+        // Reset the join maps
+        this.join_map.reset();
+        this.join_map_0.reset();
     }
 
     /**
@@ -158,15 +176,16 @@ public class NonVectorisedSimd {
             "-Darrow.enable_unsafe_memory_access=true",
             "-Darrow.enable_null_check_for_get=false",
             "--enable-preview",
+            "--enable-native-access=ALL-UNNAMED",
             "-Xmx16g",
             "-Xms8g"
     })
     public void executeQuery() throws IOException {
         int agg_0_count = 0;
-        // DIFF: class definition is moved outside query, different capacity
-        KeyMultiRecordMap_1719746158 join_map = new KeyMultiRecordMap_1719746158(this.table_A_x_table_B_hashTable_size);
-        // DIFF: class definition is moved outside query, different capacity
-        KeyMultiRecordMap_1541427914 join_map_0 = new KeyMultiRecordMap_1541427914(this.table_A_hashTable_size);
+        // DIFF: class definition is moved outside query, different capacity, allocated before query
+        // KeyMultiRecordMap_1719746158 join_map = new KeyMultiRecordMap_1719746158(this.table_A_x_table_B_hashTable_size);
+        // DIFF: class definition is moved outside query, different capacity, allocated before query
+        // KeyMultiRecordMap_1541427914 join_map_0 = new KeyMultiRecordMap_1541427914(this.table_A_hashTable_size);
 
         int commonSIMDVectorLength = 4;
         // DIFF: direct call on the class, instead of on instance

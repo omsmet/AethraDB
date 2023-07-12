@@ -138,6 +138,7 @@ public class KeyMultiRecordMapGenerator {
     private static final String PUT_HASH_ENTRY_METHOD_NAME = "putHashEntry";
     private static final String REHASH_METHOD_NAME = "rehash";
     private static final String GET_INDEX_METHOD_NAME = "getIndex";
+    private static final String RESET_METHOD_NAME = "reset";
 
     /**
      * Instantiate a {@link KeyMultiRecordMapGenerator} to generate a map type for specific key and
@@ -194,6 +195,7 @@ public class KeyMultiRecordMapGenerator {
         this.generatePutHashEntryMethod();
         this.generateRehashMethod();
         this.generateGetIndexMethod();
+        this.generateResetMethod();
 
         // Mark that generation was finished and return the generated type
         this.generationFinished = true;
@@ -1744,6 +1746,91 @@ public class KeyMultiRecordMapGenerator {
                 GET_INDEX_METHOD_NAME,
                 createFormalParameters(getLocation(), formalParameters),
                 getIndexMethodBody
+        );
+    }
+
+    /**
+     * Method to generate the reset method, which "clears" the generated map. This is achieved
+     * by simply resetting the keys, keyrsRecordCount and next arrays, as well as the hash-table and
+     * the numberOfRecords value.
+     * Values thus remain stored in the map, but are inaccessible as a result.
+     */
+    private void generateResetMethod() {
+        List<Java.Statement> resetMethodBody = new ArrayList<>();
+
+        // this.numberOfRecords = 0;
+        resetMethodBody.add(
+                createVariableAssignmentStm(
+                        getLocation(),
+                        createThisFieldAccess(
+                                getLocation(),
+                                numberOfRecordsAP.getVariableName()
+                        ),
+                        createIntegerLiteral(getLocation(), 0)
+                )
+        );
+
+        // Arrays.fill(this.keys, -1);
+        resetMethodBody.add(
+                createMethodInvocationStm(
+                        getLocation(),
+                        createAmbiguousNameRef(getLocation(), "Arrays"),
+                        "fill",
+                        new Java.Rvalue[] {
+                                createThisFieldAccess(getLocation(), this.keysAP.getVariableName()),
+                                createIntegerLiteral(getLocation(), -1)
+                        }
+                )
+        );
+
+        // Arrays.fill(this.keysRecordCount, 0);
+        resetMethodBody.add(
+                createMethodInvocationStm(
+                        getLocation(),
+                        createAmbiguousNameRef(getLocation(), "Arrays"),
+                        "fill",
+                        new Java.Rvalue[] {
+                                createThisFieldAccess(getLocation(), keysRecordCountAP.getVariableName()),
+                                createIntegerLiteral(getLocation(), 0)
+                        }
+                )
+        );
+
+        // Arrays.fill(this.hashTable, -1);
+        resetMethodBody.add(
+                createMethodInvocationStm(
+                        getLocation(),
+                        createAmbiguousNameRef(getLocation(), "Arrays"),
+                        "fill",
+                        new Java.Rvalue[] {
+                                createThisFieldAccess(getLocation(), hashTableAP.getVariableName()),
+                                createIntegerLiteral(getLocation(), -1)
+                        }
+                )
+        );
+
+        // Arrays.fill(this.next, -1);
+        resetMethodBody.add(
+                createMethodInvocationStm(
+                        getLocation(),
+                        createAmbiguousNameRef(getLocation(), "Arrays"),
+                        "fill",
+                        new Java.Rvalue[] {
+                                createThisFieldAccess(getLocation(), nextArrayAP.getVariableName()),
+                                createIntegerLiteral(getLocation(), -1)
+                        }
+                )
+        );
+
+        // public void reset()
+        createMethod(
+                getLocation(),
+                this.mapDeclaration,
+                Access.PUBLIC,
+                createPrimitiveType(getLocation(), Java.Primitive.VOID),
+                RESET_METHOD_NAME,
+                createFormalParameters(getLocation(), new Java.FunctionDeclarator.FormalParameter[0]),
+                resetMethodBody
         );
     }
 

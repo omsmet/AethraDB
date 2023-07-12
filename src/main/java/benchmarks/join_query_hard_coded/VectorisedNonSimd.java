@@ -1,14 +1,11 @@
 package benchmarks.join_query_hard_coded;
 
-import benchmarks.join_query_hard_coded.NonVectorisedNonSimdGenSupport.KeyMultiRecordMap_10523395;
-import benchmarks.join_query_hard_coded.NonVectorisedNonSimdGenSupport.KeyMultiRecordMap_1123573668;
 import benchmarks.join_query_hard_coded.VectorisedNonSimdGenSupport.KeyMultiRecordMap_270313690;
 import benchmarks.join_query_hard_coded.VectorisedNonSimdGenSupport.KeyMultiRecordMap_333828675;
 import evaluation.codegen.infrastructure.data.AllocationManager;
 import evaluation.codegen.infrastructure.data.ArrowTableReader;
 import evaluation.codegen.infrastructure.data.BufferPoolAllocationManager;
 import evaluation.codegen.infrastructure.data.CachingArrowTableReader;
-import evaluation.general_support.hashmaps.Int_Hash_Function;
 import evaluation.vector_support.VectorisedHashOperators;
 import evaluation.vector_support.VectorisedOperators;
 import org.apache.arrow.memory.RootAllocator;
@@ -107,6 +104,18 @@ public class VectorisedNonSimd {
     private long expectedResult;
 
     /**
+     * State: the table_A_x_table_B join map.
+     * DIFF: usually part of the query execution itself.
+     */
+    private KeyMultiRecordMap_333828675 join_map;
+
+    /**
+     * State: the table_A join map.
+     * DIFF: usually part of the query execution itself.
+     */
+    private KeyMultiRecordMap_270313690 join_map_0;
+
+    /**
      * This method sets up the state at the start of each benchmark fork.
      */
     @Setup(Level.Trial)
@@ -122,6 +131,10 @@ public class VectorisedNonSimd {
         double conversionFactor = Double.parseDouble(this.tableFilePath.split("B_")[1].split("_C_")[0]);
         int expectedJoinSize = (int) (conversionFactor * (3 * 1024 * 1024));
         this.table_A_x_table_B_hashTable_size = Integer.highestOneBit(expectedJoinSize) << 1;
+
+        // Allocate the hash-tables
+        this.join_map = new KeyMultiRecordMap_333828675(this.table_A_x_table_B_hashTable_size);
+        this.join_map_0 = new KeyMultiRecordMap_270313690(this.table_A_hashTable_size);
 
         // Setup the allocation manager
         this.allocationManager = new BufferPoolAllocationManager(8);
@@ -144,6 +157,9 @@ public class VectorisedNonSimd {
         this.table_A.reset();
         this.table_B.reset();
         this.table_C.reset();
+        // Reset the join maps
+        this.join_map.reset();
+        this.join_map_0.reset();
     }
 
     /**
@@ -178,12 +194,12 @@ public class VectorisedNonSimd {
         int agg_0_count = 0;
         // DIFF: hard-coded in the setup phase
         long[] pre_hash_vector = this.allocationManager.getLongVector();
-        // DIFF: class definition is moved outside query, different capacity
-        KeyMultiRecordMap_333828675 join_map = new KeyMultiRecordMap_333828675(this.table_A_x_table_B_hashTable_size);
+        // DIFF: class definition is moved outside query, different capacity, allocated before query
+        // KeyMultiRecordMap_333828675 join_map = new KeyMultiRecordMap_333828675(this.table_A_x_table_B_hashTable_size);
         // DIFF: hard-coded in the setup phase
         long[] pre_hash_vector_0 = this.allocationManager.getLongVector();
-        // DIFF: class definition is moved outside query, different capacity
-        KeyMultiRecordMap_270313690 join_map_0 = new KeyMultiRecordMap_270313690(this.table_A_hashTable_size);
+        // DIFF: class definition is moved outside query, different capacity, allocated before query
+        // KeyMultiRecordMap_270313690 join_map_0 = new KeyMultiRecordMap_270313690(this.table_A_hashTable_size);
 
         // DIFF: hard-coded in the setup phase
         // ArrowTableReader table_A = cCtx.getArrowReader(0);
