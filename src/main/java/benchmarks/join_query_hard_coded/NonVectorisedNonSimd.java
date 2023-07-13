@@ -119,10 +119,10 @@ public class NonVectorisedNonSimd {
         this.table_C = new CachingArrowTableReader(new File(this.tableFilePath + "/table_C.arrow"), this.rootAllocator);
 
         // Compute the hash-table sizes as the correct power of two size
-        this.table_A_hashTable_size = Integer.highestOneBit(3 * 1024 * 1024) << 1;
+        this.table_A_hashTable_size = Integer.highestOneBit(3 * 1024 * 1024) << 2;
         double conversionFactor = Double.parseDouble(this.tableFilePath.split("B_")[1].split("_C_")[0]);
         int expectedJoinSize = (int) (conversionFactor * (3 * 1024 * 1024));
-        this.table_A_x_table_B_hashTable_size = Integer.highestOneBit(expectedJoinSize) << 1;
+        this.table_A_x_table_B_hashTable_size = Integer.highestOneBit(expectedJoinSize) << 2;
 
         // Allocate the hash-tables
         this.join_map = new KeyMultiRecordMap_1123573668(this.table_A_x_table_B_hashTable_size);

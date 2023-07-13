@@ -139,6 +139,11 @@ public class KeyMultiRecordMapGenerator {
     private static final String RESET_METHOD_NAME = "reset";
 
     /**
+     * The default value for how many records should be created per key.
+     */
+    private static final int initialRecordsPerKeyCount = 8;
+
+    /**
      * Instantiate a {@link KeyMultiRecordMapGenerator} to generate a map type for specific key and
      * value types.
      * @param keyType The key type that is to be used by the generated map.
@@ -431,7 +436,7 @@ public class KeyMultiRecordMapGenerator {
                                     getLocation(),
                                     toJavaPrimitive(valueTypes[i]),
                                     capacityParameterAP.read(),
-                                    createIntegerLiteral(getLocation(), 2)
+                                    createIntegerLiteral(getLocation(), initialRecordsPerKeyCount)
                             )
                     )
             );
@@ -1281,7 +1286,7 @@ public class KeyMultiRecordMapGenerator {
                                     getLocation(),
                                     toJavaPrimitive(this.valueTypes[i]),
                                     newSize.read(),
-                                    createIntegerLiteral(getLocation(), 2)
+                                    createIntegerLiteral(getLocation(), initialRecordsPerKeyCount)
                             )
                     )
             );

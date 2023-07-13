@@ -25,9 +25,9 @@ public class KeyMultiRecordMap_1541427914 { // DIFF: generated class is private 
         this.keys = new int[capacity];
         Arrays.fill(this.keys, -1);
         this.keysRecordCount = new int[capacity];
-        this.values_record_ord_0 = new int[capacity][2];
-        this.values_record_ord_1 = new int[capacity][2];
-        this.values_record_ord_2 = new int[capacity][2];
+        this.values_record_ord_0 = new int[capacity][8];
+        this.values_record_ord_1 = new int[capacity][8];
+        this.values_record_ord_2 = new int[capacity][8];
         this.hashTable = new int[capacity];
         Arrays.fill(this.hashTable, -1);
         this.next = new int[capacity];
@@ -105,13 +105,13 @@ public class KeyMultiRecordMap_1541427914 { // DIFF: generated class is private 
         System.arraycopy(this.next, 0, newNext, 0, currentSize);
         Arrays.fill(newNext, currentSize, newSize, -1);
         this.next = newNext;
-        int[][] new_values_record_ord_0 = new int[newSize][2];
+        int[][] new_values_record_ord_0 = new int[newSize][8];
         System.arraycopy(this.values_record_ord_0, 0, new_values_record_ord_0, 0, currentSize);
         this.values_record_ord_0 = new_values_record_ord_0;
-        int[][] new_values_record_ord_1 = new int[newSize][2];
+        int[][] new_values_record_ord_1 = new int[newSize][8];
         System.arraycopy(this.values_record_ord_1, 0, new_values_record_ord_1, 0, currentSize);
         this.values_record_ord_1 = new_values_record_ord_1;
-        int[][] new_values_record_ord_2 = new int[newSize][2];
+        int[][] new_values_record_ord_2 = new int[newSize][8];
         System.arraycopy(this.values_record_ord_2, 0, new_values_record_ord_2, 0, currentSize);
         this.values_record_ord_2 = new_values_record_ord_2;
     }
