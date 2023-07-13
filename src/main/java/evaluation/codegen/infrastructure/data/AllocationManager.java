@@ -9,6 +9,11 @@ import evaluation.general_support.hashmaps.Simple_Int_Long_Map;
 public abstract class AllocationManager {
 
     /**
+     * The default size at which {@link Simple_Int_Long_Map} instances are initialised by {@code this}.
+     */
+    protected int defaultSimpleIntLongMapCapacity = 4;
+
+    /**
      * Default constructor for any {@link AllocationManager} descendant.
      */
     public AllocationManager() {
@@ -67,5 +72,15 @@ public abstract class AllocationManager {
      * @param map The map to mark as unused.
      */
     public abstract void release(Simple_Int_Long_Map map);
+
+    /**
+     * Method to change the default capacity at which {@link Simple_Int_Long_Map} instances are
+     * created. Note that the new default capacity is only enforced after a call to
+     * {@code performMaintenance()}.
+     * @param newCapacity The new default capacity to set for {@link Simple_Int_Long_Map} instances.
+     */
+    public void updateDefaultSimpleIntLongMapCapacity(int newCapacity) {
+        this.defaultSimpleIntLongMapCapacity = newCapacity;
+    }
 
 }

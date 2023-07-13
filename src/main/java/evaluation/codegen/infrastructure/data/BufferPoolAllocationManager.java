@@ -100,7 +100,7 @@ public class BufferPoolAllocationManager extends AllocationManager {
 
         // Maintain the int -> long maps
         for (int i = 0; i < this.intLongMaps.length; i++) {
-            this.intLongMaps[i] = new Simple_Int_Long_Map();
+            this.intLongMaps[i] = new Simple_Int_Long_Map(this.defaultSimpleIntLongMapCapacity);
         }
         this.nextIntLongMapIndex = 0;
     }

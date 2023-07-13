@@ -30,9 +30,8 @@ import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createAm
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createArrayElementAccessExpr;
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createCast;
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createIntegerLiteral;
-import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createNestedPrimitiveArrayType;
-import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createNew2DPrimitiveArray;
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createNewPrimitiveArray;
+import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createPrimitiveArrayType;
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createPrimitiveType;
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createReferenceType;
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createStringLiteral;
@@ -57,21 +56,21 @@ import static evaluation.codegen.infrastructure.janino.JaninoOperatorGen.mul;
 import static evaluation.codegen.infrastructure.janino.JaninoOperatorGen.neq;
 import static evaluation.codegen.infrastructure.janino.JaninoOperatorGen.not;
 import static evaluation.codegen.infrastructure.janino.JaninoOperatorGen.postIncrement;
-import static evaluation.codegen.infrastructure.janino.JaninoOperatorGen.postIncrementStm;
 import static evaluation.codegen.infrastructure.janino.JaninoOperatorGen.sub;
 import static evaluation.codegen.infrastructure.janino.JaninoVariableGen.createLocalVariable;
 import static evaluation.codegen.infrastructure.janino.JaninoVariableGen.createSimpleVariableDeclaration;
+import static evaluation.codegen.infrastructure.janino.JaninoVariableGen.createVariableAdditionAssignmentStm;
 import static evaluation.codegen.infrastructure.janino.JaninoVariableGen.createVariableAssignmentStm;
 
 /**
  * This class provides methods to generate a hash-map implementation for mapping some primitive type
- * keys to multiple objects of some record-like type, where each field of the record is also a
- * primitive type. To hash keys, a generated map relies on the appropriate hash function definitions
- * for the given key type:
+ * keys to a single record-like type containing multiple values, where each field of the record is
+ * also a primitive type. To hash keys, a generated map relies on the appropriate hash function
+ * definitions for the given key type:
  *  - For int keys, the map uses the {@link Int_Hash_Function}.
  *  - Other key types are currently not yet supported.
  */
-public class KeyMultiRecordMapGenerator {
+public class KeyValueMapGenerator {
 
     /**
      * The {@link QueryVariableType} indicating the primitive key type of the map to be generated.
@@ -105,12 +104,6 @@ public class KeyMultiRecordMapGenerator {
     private final ArrayAccessPath keysAP;
 
     /**
-     * The {@link AccessPath} to the array storing the number of records for each key.
-     */
-    private static final ArrayAccessPath keysRecordCountAP =
-            new ArrayAccessPath("keysRecordCount", P_A_INT);
-
-    /**
      * The names of the arrays storing the record field values in the map.
      */
     public final String[] valueVariableNames;
@@ -130,27 +123,26 @@ public class KeyMultiRecordMapGenerator {
     /**
      * Some helper definitions to enhance consistency.
      */
-    private static final String ASSOCIATE_METHOD_NAME = "associate";
+    private static final String INCREMENT_FOR_KEY_METHOD_NAME = "incrementForKey";
     private static final String FIND_METHOD_NAME = "find";
     private static final String GROW_ARRAYS_METHOD_NAME = "growArrays";
     private static final String PUT_HASH_ENTRY_METHOD_NAME = "putHashEntry";
     private static final String REHASH_METHOD_NAME = "rehash";
-    private static final String GET_INDEX_METHOD_NAME = "getIndex";
     private static final String RESET_METHOD_NAME = "reset";
 
     /**
-     * Instantiate a {@link KeyMultiRecordMapGenerator} to generate a map type for specific key and
+     * Instantiate a {@link KeyValueMapGenerator} to generate a map type for specific key and
      * value types.
      * @param keyType The key type that is to be used by the generated map.
      * @param valueTypes The value types that records in the map should be built up of.
      */
-    public KeyMultiRecordMapGenerator(QueryVariableType keyType, QueryVariableType[] valueTypes) {
+    public KeyValueMapGenerator(QueryVariableType keyType, QueryVariableType[] valueTypes) {
         if (!isPrimitive(keyType))
-            throw new IllegalArgumentException("KeyMultiRecordMapGenerator expects a primitive key type, not " + keyType);
+            throw new IllegalArgumentException("KeyValueMapGenerator expects a primitive key type, not " + keyType);
         for (int i = 0; i < valueTypes.length; i++) {
             QueryVariableType valueType = valueTypes[i];
             if (!isPrimitive(valueType))
-                throw new IllegalArgumentException("KeyMultiRecordMapGenerator expects primitive value types, not " + valueType);
+                throw new IllegalArgumentException("KeyValueMapGenerator expects primitive value types, not " + valueType);
         }
 
         this.keyType = keyType;
@@ -161,12 +153,12 @@ public class KeyMultiRecordMapGenerator {
         this.keysAP = new ArrayAccessPath("keys", primitiveArrayTypeForPrimitive(this.keyType));
         this.valueVariableNames = new String[valueTypes.length];
         for (int i = 0; i < valueVariableNames.length; i++)
-            this.valueVariableNames[i] = "values_record_ord_" + i;
+            this.valueVariableNames[i] = "values_ord_" + i;
     }
 
     /**
      * Method to generate the actual map type for the provided specification.
-     * @return A {@link org.codehaus.janino.Java.ClassDeclaration} defining the configured
+     * @return A {@link Java.ClassDeclaration} defining the configured
      * key-record map type.
      */
     public Java.LocalClassDeclaration generate() {
@@ -181,18 +173,17 @@ public class KeyMultiRecordMapGenerator {
                         new Java.AccessModifier(Access.PRIVATE.toString(), getLocation()),
                         new Java.AccessModifier("final", getLocation())
                 },
-                "KeyMultiRecordMap_" + this.hashCode()
+                "KeyValueMap_" + this.hashCode()
         );
 
         // Now generate the class body in a step-by-step fashion
         this.generateFieldDeclarations();
         this.generateConstructors();
-        this.generateAssociateMethod();
+        this.generateIncrementForKeyMethod();
         this.generateFindMethod();
         this.generateGrowArraysMethod();
         this.generatePutHashEntryMethod();
         this.generateRehashMethod();
-        this.generateGetIndexMethod();
         this.generateResetMethod();
 
         // Mark that generation was finished and return the generated type
@@ -206,7 +197,7 @@ public class KeyMultiRecordMapGenerator {
     private void generateFieldDeclarations() {
         // Add the variable indicating the number of records in the map
         this.mapDeclaration.addFieldDeclaration(
-                createPrivateFieldDeclaration(
+                createPublicFieldDeclaration(
                         getLocation(),
                         toJavaType(getLocation(), numberOfRecordsAP.getType()),
                         createSimpleVariableDeclaration(
@@ -218,7 +209,7 @@ public class KeyMultiRecordMapGenerator {
 
         // Add the variable storing the keys in the map
         this.mapDeclaration.addFieldDeclaration(
-                createPrivateFieldDeclaration(
+                createPublicFieldDeclaration(
                         getLocation(),
                         toJavaType(getLocation(), this.keysAP.getType()),
                         createSimpleVariableDeclaration(
@@ -228,24 +219,12 @@ public class KeyMultiRecordMapGenerator {
                 )
         );
 
-        // Add the variable storing the record count per key in the map
-        this.mapDeclaration.addFieldDeclaration(
-                createPublicFieldDeclaration(
-                        getLocation(),
-                        toJavaType(getLocation(), keysRecordCountAP.getType()),
-                        createSimpleVariableDeclaration(
-                                getLocation(),
-                                keysRecordCountAP.getVariableName()
-                        )
-                )
-        );
-
         // For each field of the value types, create a nested array
         for (int i = 0; i < this.valueVariableNames.length; i++) {
             this.mapDeclaration.addFieldDeclaration(
                     createPublicFieldDeclaration(
                             getLocation(),
-                            createNestedPrimitiveArrayType(
+                            createPrimitiveArrayType(
                                     getLocation(),
                                     toJavaPrimitive(this.valueTypes[i])
                             ),
@@ -401,23 +380,6 @@ public class KeyMultiRecordMapGenerator {
                 )
         );
 
-        // Initialise the record count per key
-        constructorBody.add(
-                createVariableAssignmentStm(
-                        getLocation(),
-                        new Java.FieldAccessExpression(
-                                getLocation(),
-                                new Java.ThisReference(getLocation()),
-                                keysRecordCountAP.getVariableName()
-                        ),
-                        createNewPrimitiveArray(
-                                getLocation(),
-                                toJavaPrimitive(primitiveMemberTypeForArray(keysRecordCountAP.getType())),
-                                capacityParameterAP.read()
-                        )
-                )
-        );
-
         // Initialise each of the value arrays
         for (int i = 0; i < this.valueVariableNames.length; i++) {
             constructorBody.add(
@@ -427,11 +389,10 @@ public class KeyMultiRecordMapGenerator {
                                     getLocation(),
                                     this.valueVariableNames[i]
                             ),
-                            createNew2DPrimitiveArray(
+                            createNewPrimitiveArray(
                                     getLocation(),
                                     toJavaPrimitive(valueTypes[i]),
-                                    capacityParameterAP.read(),
-                                    createIntegerLiteral(getLocation(), 2)
+                                    capacityParameterAP.read()
                             )
                     )
             );
@@ -524,10 +485,11 @@ public class KeyMultiRecordMapGenerator {
     }
 
     /**
-     * Method to generate the "associate" method for the generated map type, which associates a
-     * record to a key.
+     * Method to generate the "incrementForKey" method for the generated map type, which increments
+     * all values associated to a specific key by a certain value (or associates a value if the
+     * key is not yet present in the map).
      */
-    private void generateAssociateMethod() {
+    private void generateIncrementForKeyMethod() {
         // Generate the method signature
         Java.FunctionDeclarator.FormalParameter[] formalParameters =
                 new Java.FunctionDeclarator.FormalParameter[this.valueTypes.length + 2];
@@ -683,165 +645,21 @@ public class KeyMultiRecordMapGenerator {
                 )
         );
 
-        // Check if there is enough room left in this key's value arrays to store the new record
-        // int insertionIndex = this.keysRecordCount[index];
-        // if (!(insertionIndex < this.values_record_ord_0[index].length)) [recordStoreExtendArrays]
-        ScalarVariableAccessPath insertionIndexAP =
-                new ScalarVariableAccessPath("insertionIndex", P_INT);
-        associateMethodBody.add(
-                createLocalVariable(
-                        getLocation(),
-                        toJavaType(getLocation(), insertionIndexAP.getType()),
-                        insertionIndexAP.getVariableName(),
-                        createArrayElementAccessExpr(
-                                getLocation(),
-                                createThisFieldAccess(getLocation(), keysRecordCountAP.getVariableName()),
-                                indexAP.read()
-                        )
-                )
-        );
-
-        Java.Block recordStoreExtendArrays = new Java.Block(getLocation());
-        associateMethodBody.add(
-                createIf(
-                        getLocation(),
-                        not(
-                                getLocation(),
-                                lt(
-                                        getLocation(),
-                                        insertionIndexAP.read(),
-                                        new Java.FieldAccessExpression(
-                                                getLocation(),
-                                                createArrayElementAccessExpr(
-                                                        getLocation(),
-                                                        createThisFieldAccess(getLocation(), valueVariableNames[0]),
-                                                        indexAP.read()
-                                                ),
-                                                "length"
-                                        )
-                                )
-                        ),
-                        recordStoreExtendArrays
-                )
-        );
-
-        // Extend the value arrays for the current index by doubling their size
-        // int currentValueArraysSize = this.values_record_ord_0[index].length;
-        ScalarVariableAccessPath currentValueArraysSize =
-                new ScalarVariableAccessPath("currentValueArraysSize", P_INT);
-        recordStoreExtendArrays.addStatement(
-                createLocalVariable(
-                        getLocation(),
-                        toJavaType(getLocation(), currentValueArraysSize.getType()),
-                        currentValueArraysSize.getVariableName(),
-                        new Java.FieldAccessExpression(
-                                getLocation(),
-                                createArrayElementAccessExpr(
-                                        getLocation(),
-                                        createThisFieldAccess(getLocation(), this.valueVariableNames[0]),
-                                        indexAP.read()
-                                ),
-                                "length"
-                        )
-                )
-        );
-
-        // int newValueArraysSize = 2 * currentValueArraysSize;
-        ScalarVariableAccessPath newValueArraysSize =
-                new ScalarVariableAccessPath("newValueArraysSize", P_INT);
-        recordStoreExtendArrays.addStatement(
-                createLocalVariable(
-                        getLocation(),
-                        toJavaType(getLocation(), newValueArraysSize.getType()),
-                        newValueArraysSize.getVariableName(),
-                        mul(
-                                getLocation(),
-                                createIntegerLiteral(getLocation(), 2),
-                                currentValueArraysSize.read()
-                        )
-                )
-        );
-
-        for (int i = 0; i < this.valueVariableNames.length; i++) {
-            String valueVariableName = this.valueVariableNames[i];
-            String tempVarName = "temp_" + valueVariableName;
-
-            recordStoreExtendArrays.addStatement(
-                    createLocalVariable(
-                            getLocation(),
-                            toJavaType(getLocation(), primitiveArrayTypeForPrimitive(this.valueTypes[i])),
-                            tempVarName,
-                            createNewPrimitiveArray(
-                                    getLocation(),
-                                    toJavaPrimitive(this.valueTypes[i]),
-                                    newValueArraysSize.read()
-                            )
-                    )
-            );
-
-            recordStoreExtendArrays.addStatement(
-                    createMethodInvocationStm(
-                            getLocation(),
-                            createAmbiguousNameRef(getLocation(), "System"),
-                            "arraycopy",
-                            new Java.Rvalue[] {
-                                    createArrayElementAccessExpr(
-                                            getLocation(),
-                                            createThisFieldAccess(getLocation(), valueVariableName),
-                                            indexAP.read()
-                                    ),
-                                    createIntegerLiteral(getLocation(), 0),
-                                    createAmbiguousNameRef(getLocation(), tempVarName),
-                                    createIntegerLiteral(getLocation(), 0),
-                                    currentValueArraysSize.read()
-                            }
-                    )
-            );
-
-            recordStoreExtendArrays.addStatement(
-                    createVariableAssignmentStm(
-                            getLocation(),
-                            createArrayElementAccessExpr(
-                                    getLocation(),
-                                    createThisFieldAccess(getLocation(), valueVariableName),
-                                    indexAP.read()
-                            ),
-                            createAmbiguousNameRef(getLocation(), tempVarName)
-                    )
-            );
-        }
-
-        // Insert the record values and increment the correct record count
-        // this.values_record_ord_i[index][insertion_index] = record_ord_i;
+        // Increment this key's values by the provided amounts
+        // this.values_record_ord_i[index] += record_ord_i;
         for (int i = 0; i < valueVariableNames.length; i++) {
             associateMethodBody.add(
-                    createVariableAssignmentStm(
+                    createVariableAdditionAssignmentStm(
                             getLocation(),
                             createArrayElementAccessExpr(
                                     getLocation(),
-                                    createArrayElementAccessExpr(
-                                            getLocation(),
-                                            createThisFieldAccess(getLocation(), valueVariableNames[i]),
-                                            indexAP.read()
-                                    ),
-                                    insertionIndexAP.read()
+                                    createThisFieldAccess(getLocation(), valueVariableNames[i]),
+                                    indexAP.read()
                             ),
                             createAmbiguousNameRef(getLocation(), formalParameters[i + 2].name)
                     )
             );
         }
-
-        // this.keysRecordCount[index]++;
-        associateMethodBody.add(
-                postIncrementStm(
-                        getLocation(),
-                        createArrayElementAccessExpr(
-                                getLocation(),
-                                createThisFieldAccess(getLocation(), keysRecordCountAP.getVariableName()),
-                                indexAP.read()
-                        )
-                )
-        );
 
         // Invoke the putHashEntry method if the records was a new record
         // if (newEntry) {
@@ -901,13 +719,13 @@ public class KeyMultiRecordMapGenerator {
         );
 
 
-        // public void associate([keyType] key, long preHash, [values ...])
+        // public void incrementForKey([keyType] key, long preHash, [values ...])
         createMethod(
                 getLocation(),
                 this.mapDeclaration,
                 Access.PUBLIC,
                 createPrimitiveType(getLocation(), Java.Primitive.VOID),
-                ASSOCIATE_METHOD_NAME,
+                INCREMENT_FOR_KEY_METHOD_NAME,
                 createFormalParameters(getLocation(), formalParameters),
                 associateMethodBody
         );
@@ -1176,43 +994,6 @@ public class KeyMultiRecordMapGenerator {
                 )
         );
 
-        // Grow and copy the keysRecordCount array
-        growArraysMethodBody.add(
-                createLocalVariable(
-                        getLocation(),
-                        toJavaType(getLocation(), keysRecordCountAP.getType()),
-                        "newKeysRecordCount",
-                        createNewPrimitiveArray(
-                                getLocation(),
-                                toJavaPrimitive(primitiveMemberTypeForArray(keysRecordCountAP.getType())),
-                                newSize.read()
-                        )
-                )
-        );
-
-        growArraysMethodBody.add(
-                createMethodInvocationStm(
-                        getLocation(),
-                        createAmbiguousNameRef(getLocation(), "System"),
-                        "arraycopy",
-                        new Java.Rvalue[] {
-                                createThisFieldAccess(getLocation(), keysRecordCountAP.getVariableName()),
-                                createIntegerLiteral(getLocation(), 0),
-                                createAmbiguousNameRef(getLocation(), "newKeysRecordCount"),
-                                createIntegerLiteral(getLocation(), 0),
-                                currentSize.read()
-                        }
-                )
-        );
-
-        growArraysMethodBody.add(
-                createVariableAssignmentStm(
-                        getLocation(),
-                        createThisFieldAccess(getLocation(), keysRecordCountAP.getVariableName()),
-                        createAmbiguousNameRef(getLocation(), "newKeysRecordCount")
-                )
-        );
-
         // Grow, copy and fill the next array
         growArraysMethodBody.add(
                 createLocalVariable(
@@ -1272,16 +1053,15 @@ public class KeyMultiRecordMapGenerator {
             growArraysMethodBody.add(
                     createLocalVariable(
                             getLocation(),
-                            createNestedPrimitiveArrayType(
+                            createPrimitiveArrayType(
                                     getLocation(),
                                     toJavaPrimitive(this.valueTypes[i])
                             ),
                             newName,
-                            createNew2DPrimitiveArray(
+                            createNewPrimitiveArray(
                                     getLocation(),
                                     toJavaPrimitive(this.valueTypes[i]),
-                                    newSize.read(),
-                                    createIntegerLiteral(getLocation(), 2)
+                                    newSize.read()
                             )
                     )
             );
@@ -1652,7 +1432,7 @@ public class KeyMultiRecordMapGenerator {
                                 switch (keyType) {
                                     case P_INT -> createAmbiguousNameRef(getLocation(), "Int_Hash_Function");
                                     default -> throw new UnsupportedOperationException(
-                                            "This key-type is currently not supported by the KeyMultiRecordMapGenerator");
+                                            "This key-type is currently not supported by the KeyValueMapGenerator");
                                 },
                                 "preHash",
                                 new Java.Rvalue[] {
@@ -1689,69 +1469,9 @@ public class KeyMultiRecordMapGenerator {
     }
 
     /**
-     * Method to generate the public "getIndex" method, which returns the index in the map that
-     * contains the values for a given key, or -1 if the map does not contain the key.
-     */
-    private void generateGetIndexMethod() {
-        // Generate the method signature
-        Java.FunctionDeclarator.FormalParameter[] formalParameters =
-                new Java.FunctionDeclarator.FormalParameter[2];
-
-        formalParameters[0] = createFormalParameter(
-                getLocation(),
-                toJavaType(getLocation(), keyType),
-                "key"
-        );
-
-        formalParameters[1] = createFormalParameter(
-                getLocation(),
-                toJavaType(getLocation(), P_LONG),
-                "preHash"
-        );
-
-        // Generate the method body
-        List<Java.Statement> getIndexMethodBody = new ArrayList<>();
-
-        // Check that the provided key is non-negative
-        getIndexMethodBody.add(
-                generateNonNegativeCheck(
-                        createAmbiguousNameRef(getLocation(), formalParameters[0].name)
-                )
-        );
-
-        // Return the result of the find method
-        getIndexMethodBody.add(
-                createReturnStm(
-                        getLocation(),
-                        createMethodInvocation(
-                                getLocation(),
-                                new Java.ThisReference(getLocation()),
-                                FIND_METHOD_NAME,
-                                new Java.Rvalue[] {
-                                        createAmbiguousNameRef(getLocation(), formalParameters[0].name),
-                                        createAmbiguousNameRef(getLocation(), formalParameters[1].name)
-                                }
-                        )
-                )
-        );
-
-        // public int getIndex([keyType key], long preHash)
-        createMethod(
-                getLocation(),
-                this.mapDeclaration,
-                Access.PUBLIC,
-                createPrimitiveType(getLocation(), Java.Primitive.INT),
-                GET_INDEX_METHOD_NAME,
-                createFormalParameters(getLocation(), formalParameters),
-                getIndexMethodBody
-        );
-    }
-
-    /**
      * Method to generate the reset method, which "clears" the generated map. This is achieved
      * by simply resetting the keys, keysRecordCount and next arrays, as well as the hash-table and
-     * the numberOfRecords value.
-     * Values thus remain stored in the map, but are inaccessible as a result.
+     * the numberOfRecords value. The value arrays are also zeroed.
      */
     private void generateResetMethod() {
         List<Java.Statement> resetMethodBody = new ArrayList<>();
@@ -1781,19 +1501,6 @@ public class KeyMultiRecordMapGenerator {
                 )
         );
 
-        // Arrays.fill(this.keysRecordCount, 0);
-        resetMethodBody.add(
-                createMethodInvocationStm(
-                        getLocation(),
-                        createAmbiguousNameRef(getLocation(), "Arrays"),
-                        "fill",
-                        new Java.Rvalue[] {
-                                createThisFieldAccess(getLocation(), keysRecordCountAP.getVariableName()),
-                                createIntegerLiteral(getLocation(), 0)
-                        }
-                )
-        );
-
         // Arrays.fill(this.hashTable, -1);
         resetMethodBody.add(
                 createMethodInvocationStm(
@@ -1819,6 +1526,21 @@ public class KeyMultiRecordMapGenerator {
                         }
                 )
         );
+
+        // Zero the value arrays
+        for (int i = 0; i < this.valueVariableNames.length; i++) {
+            resetMethodBody.add(
+                    createMethodInvocationStm(
+                            getLocation(),
+                            createAmbiguousNameRef(getLocation(), "Arrays"),
+                            "fill",
+                            new Java.Rvalue[] {
+                                    createThisFieldAccess(getLocation(), this.valueVariableNames[i]),
+                                    createIntegerLiteral(getLocation(), 0)
+                            }
+                    )
+            );
+        }
 
         // public void reset()
         createMethod(
