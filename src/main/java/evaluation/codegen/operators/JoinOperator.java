@@ -31,6 +31,7 @@ import static evaluation.codegen.infrastructure.context.QueryVariableType.P_INT;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.P_LONG;
 import static evaluation.codegen.infrastructure.context.QueryVariableTypeMethods.primitiveArrayTypeForPrimitive;
 import static evaluation.codegen.infrastructure.context.QueryVariableTypeMethods.primitiveType;
+import static evaluation.codegen.infrastructure.context.QueryVariableTypeMethods.toJavaPrimitive;
 import static evaluation.codegen.infrastructure.context.QueryVariableTypeMethods.toJavaType;
 import static evaluation.codegen.infrastructure.context.QueryVariableTypeMethods.vectorTypeForPrimitiveArrayType;
 import static evaluation.codegen.infrastructure.janino.JaninoClassGen.createClassInstance;
@@ -545,7 +546,7 @@ public class JoinOperator extends CodeGenOperator<LogicalJoin> {
             // Generate an access path
             ScalarVariableAccessPath currentLeftSideColumnVar =
                     new ScalarVariableAccessPath(
-                            "left_join_ord_" + i,
+                            cCtx.defineVariable("left_join_ord_" + i),
                             this.joinMapGenerator.valueTypes[i]
                     );
             updatedOrdinalMapping.add(i, currentLeftSideColumnVar);
@@ -1021,7 +1022,21 @@ public class JoinOperator extends CodeGenOperator<LogicalJoin> {
         if (buildKeyOrdinalPrimitiveType != P_INT)
             throw new UnsupportedOperationException("JoinOperator.consumeVecProbe only supports integer join key columns");
 
-        // First perform the pre-hashing of the key column and then perform hash-table inserts
+        // We need to handle some functionality based on the input access path:
+        //  - Computation of the pre-hash vector
+        //  - Initialisation of the recordCount variable
+        //  - The statement required to obtain the right_join_key variable
+        // That is done below
+        Java.Rvalue recordCountInitialisation;
+        Java.Rvalue rigthJoinKeyReadCode;
+
+        // Definition of access paths for shared variables
+        // int currentRecordIndex
+        ScalarVariableAccessPath currentRecordIndexAP = new ScalarVariableAccessPath(
+                cCtx.defineVariable("currentRecordIndex"),
+                P_INT
+        );
+
         if (buildKeyAPType == ARROW_INT_VECTOR) {
             // We know that all other vectors on the probe side must be of some arrow vector type
             // without any validity mask/selection vector
@@ -1053,318 +1068,393 @@ public class JoinOperator extends CodeGenOperator<LogicalJoin> {
                         ));
             }
 
-            // Now we need to iterate over the key vector to construct the result vectors by probing the
-            // hash table and reading the other vectors on the probe side
-            // int recordCount = [buildKeyAVAP.read()].getValueCount();
-            ScalarVariableAccessPath recordCountAP = new ScalarVariableAccessPath(
-                    cCtx.defineVariable("recordCount"),
-                    P_INT
-            );
-            codeGenResult.add(
-                    createLocalVariable(
-                            getLocation(),
-                            createPrimitiveType(getLocation(), Java.Primitive.INT),
-                            recordCountAP.getVariableName(),
-                            createMethodInvocation(
-                                    getLocation(),
-                                    buildKeyAVAP.read(),
-                                    "getValueCount"
-                            )
-                    )
+            // Setup the initialisation code for the recordCount variable
+            recordCountInitialisation = createMethodInvocation(
+                    getLocation(),
+                    buildKeyAVAP.read(),
+                    "getValueCount"
             );
 
-            // int currentRecordIndex = 0;
-            ScalarVariableAccessPath currentRecordIndexAP = new ScalarVariableAccessPath(
-                    cCtx.defineVariable("currentRecordIndex"),
-                    P_INT
-            );
-            codeGenResult.add(
-                    createPrimitiveLocalVar(
-                            getLocation(),
-                            Java.Primitive.INT,
-                            currentRecordIndexAP.getVariableName(),
-                            "0"
-                    )
-            );
-
-            // while (currentRecordIndex < recordCount) { [whileLoopBody] }
-            Java.Block whileLoopBody = new Java.Block(getLocation());
-            codeGenResult.add(
-                    createWhileLoop(
-                            getLocation(),
-                            lt(getLocation(), currentRecordIndexAP.read(), recordCountAP.read()),
-                            whileLoopBody
-                    )
-            );
-
-            // In the while-loop body, iterate over the keys and insert as many join records while
-            // there is still room left, via a nested loop
-            // int currentResultIndex = 0;
-            ScalarVariableAccessPath currentResultIndexAP = new ScalarVariableAccessPath(
-                    cCtx.defineVariable("currentResultIndex"),
-                    P_INT
-            );
-            whileLoopBody.addStatement(
-                    createPrimitiveLocalVar(
-                            getLocation(),
-                            Java.Primitive.INT,
-                            currentResultIndexAP.getVariableName(),
-                            "0"
-                    )
-            );
-
-            // Add the inner loop which will insert as many records as possible into the result vector
-            // while (currentRecordIndex < recordCount) { [resultVectorConstructionLoop] }
-            Java.Block resultVectorConstructionLoop = new Java.Block(getLocation());
-            whileLoopBody.addStatement(
-                    createWhileLoop(
-                            getLocation(),
-                            lt(getLocation(), currentRecordIndexAP.read(), recordCountAP.read()),
-                            resultVectorConstructionLoop
-                    )
-            );
-
+            // Setup the code for obtaining the right_join_key variable value
             // int right_join_key = [buildKeyAVAP.read()].get([currentRecordIndex.read()]);
-            ScalarVariableAccessPath rightJoinKeyAP =
-                    new ScalarVariableAccessPath(cCtx.defineVariable("right_join_key"), P_INT);
-            resultVectorConstructionLoop.addStatement(
-                    createLocalVariable(
+            rigthJoinKeyReadCode = createMethodInvocation(
+                    getLocation(),
+                    buildKeyAVAP.read(),
+                    "get",
+                    new Java.Rvalue[] {
+                            currentRecordIndexAP.read()
+                    }
+            );
+
+        } else if (buildKeyAPType == ARRAY_INT_VECTOR) {
+            // We know that all other vectors on the probe side must be of some array vector type
+            // without any validity mask/selection vector
+            ArrayVectorAccessPath buildKeyAVAP = ((ArrayVectorAccessPath) buildKeyAP);
+
+            if (!this.useSIMDVec()) {
+                // VectorisedHashOperators.constructPreHashKeyVector(
+                //     [this.preHashVectorAP.read()],
+                //     [buildKeyAVAP.getVectorVariable().read()],
+                //     [buildKeyAVAP.getVectorLengthVariable().read()]
+                // );
+                codeGenResult.add(
+                        createMethodInvocationStm(
+                                getLocation(),
+                                createAmbiguousNameRef(getLocation(), "VectorisedHashOperators"),
+                                "constructPreHashKeyVector",
+                                new Java.Rvalue[]{
+                                        this.preHashVectorAP.read(),
+                                        buildKeyAVAP.getVectorVariable().read(),
+                                        buildKeyAVAP.getVectorLengthVariable().read()
+                                }
+                        ));
+            } else {
+                // VectorisedHashOperators.constructPreHashKeyVectorSIMD(
+                //     [this.preHashVectorAP.read()],
+                //     [buildKeyAVAP.getVectorVariable().read()],
+                //     [buildKeyAVAP.getVectorLengthVariable().read()]
+                // );
+                codeGenResult.add(
+                        createMethodInvocationStm(
+                                getLocation(),
+                                createAmbiguousNameRef(getLocation(), "VectorisedHashOperators"),
+                                "constructPreHashKeyVectorSIMD",
+                                new Java.Rvalue[]{
+                                        this.preHashVectorAP.read(),
+                                        buildKeyAVAP.getVectorVariable().read(),
+                                        buildKeyAVAP.getVectorLengthVariable().read()
+                                }
+                        ));
+            }
+
+            // Setup the initialisation code for the record count variable
+            recordCountInitialisation = buildKeyAVAP.getVectorLengthVariable().read();
+
+            // int right_join_key = [buildKeyAVAP.getVectorVariable().read()][currentRecordIndexAP.read()];
+            rigthJoinKeyReadCode =  createArrayElementAccessExpr(
+                    getLocation(),
+                    buildKeyAVAP.getVectorVariable().read(),
+                    currentRecordIndexAP.read()
+            );
+
+        } else {
+            throw new UnsupportedOperationException(
+                    "JoinOperator.consumeVecProbe does not support the provided AccessPath for the build key " + buildKeyAPType);
+        }
+
+        // Now we need to iterate over the key vector to construct the result vectors by probing the
+        // hash table and reading the other vectors on the probe side
+        // int recordCount = [accessPathSpecificInitialisation];
+        ScalarVariableAccessPath recordCountAP = new ScalarVariableAccessPath(
+                cCtx.defineVariable("recordCount"),
+                P_INT
+        );
+        codeGenResult.add(
+                createLocalVariable(
+                        getLocation(),
+                        createPrimitiveType(getLocation(), Java.Primitive.INT),
+                        recordCountAP.getVariableName(),
+                        recordCountInitialisation
+                )
+        );
+
+        // Add the actual currentRecordIndex variable
+        // int currentRecordIndex = 0;
+        codeGenResult.add(
+                createPrimitiveLocalVar(
+                        getLocation(),
+                        Java.Primitive.INT,
+                        currentRecordIndexAP.getVariableName(),
+                        "0"
+                )
+        );
+
+        // while (currentRecordIndex < recordCount) { [whileLoopBody] }
+        Java.Block whileLoopBody = new Java.Block(getLocation());
+        codeGenResult.add(
+                createWhileLoop(
+                        getLocation(),
+                        lt(getLocation(), currentRecordIndexAP.read(), recordCountAP.read()),
+                        whileLoopBody
+                )
+        );
+
+        // In the while-loop body, iterate over the keys and insert as many join records while
+        // there is still room left, via a nested loop
+        // int currentResultIndex = 0;
+        ScalarVariableAccessPath currentResultIndexAP = new ScalarVariableAccessPath(
+                cCtx.defineVariable("currentResultIndex"),
+                P_INT
+        );
+        whileLoopBody.addStatement(
+                createPrimitiveLocalVar(
+                        getLocation(),
+                        Java.Primitive.INT,
+                        currentResultIndexAP.getVariableName(),
+                        "0"
+                )
+        );
+
+        // Add the inner loop which will insert as many records as possible into the result vector
+        // while (currentRecordIndex < recordCount) { [resultVectorConstructionLoop] }
+        Java.Block resultVectorConstructionLoop = new Java.Block(getLocation());
+        whileLoopBody.addStatement(
+                createWhileLoop(
+                        getLocation(),
+                        lt(getLocation(), currentRecordIndexAP.read(), recordCountAP.read()),
+                        resultVectorConstructionLoop
+                )
+        );
+
+        // int right_join_key = [AccessPathSpecificCode];
+        ScalarVariableAccessPath rightJoinKeyAP =
+                new ScalarVariableAccessPath(cCtx.defineVariable("right_join_key"), P_INT);
+        resultVectorConstructionLoop.addStatement(
+                createLocalVariable(
+                        getLocation(),
+                        toJavaType(getLocation(), rightJoinKeyAP.getType()),
+                        rightJoinKeyAP.getVariableName(),
+                        rigthJoinKeyReadCode
+                )
+        );
+
+        // long right_join_key_pre_hash = [this.preHashVectorAP.read()][[currentRecordIndex.read()]];
+        ScalarVariableAccessPath rightJoinKeyPreHashAP = new ScalarVariableAccessPath(
+                cCtx.defineVariable(rightJoinKeyAP.getVariableName() + "_pre_hash"),
+                P_LONG
+        );
+        resultVectorConstructionLoop.addStatement(
+                createLocalVariable(
+                        getLocation(),
+                        toJavaType(getLocation(), rightJoinKeyPreHashAP.getType()),
+                        rightJoinKeyPreHashAP.getVariableName(),
+                        createArrayElementAccessExpr(
+                                getLocation(),
+                                this.preHashVectorAP.read(),
+                                currentRecordIndexAP.read()
+                        )
+                )
+        );
+
+        // Obtain the index for the values for the left side of the join for the current key value
+        ScalarVariableAccessPath joinRecordIndex = new ScalarVariableAccessPath(
+                cCtx.defineVariable("records_to_join_index"),
+                P_INT);
+        resultVectorConstructionLoop.addStatement(
+                createLocalVariable(
+                        getLocation(),
+                        toJavaType(getLocation(), joinRecordIndex.getType()),
+                        joinRecordIndex.getVariableName(),
+                        createMethodInvocation(
+                                getLocation(),
+                                this.joinMapAP.read(),
+                                "getIndex",
+                                new Java.Rvalue[] {
+                                        rightJoinKeyAP.read(),
+                                        rightJoinKeyPreHashAP.read()
+                                }
+                        )
+                )
+        );
+
+        // Use the index to check if the left side of the join contains records for the given key
+        // otherwise continue
+        // if ([records_to_join_index] == -1) {
+        //     currentRecordIndex++;
+        //     continue;
+        // }
+        Java.Block incrementAndContinueBlock = new Java.Block(getLocation());
+        incrementAndContinueBlock.addStatement(
+                postIncrementStm(getLocation(), currentRecordIndexAP.write()));
+        incrementAndContinueBlock.addStatement(new Java.ContinueStatement(getLocation(), null));
+
+        resultVectorConstructionLoop.addStatement(
+                createIf(
+                        getLocation(),
+                        eq(
+                                getLocation(),
+                                joinRecordIndex.read(),
+                                createIntegerLiteral(getLocation(), -1)
+                        ),
+                        incrementAndContinueBlock
+                )
+        );
+
+        // int left_join_record_count = [joinMapAP].keysRecordCount[records_to_join_index];
+        ScalarVariableAccessPath leftJoinRecordCount =
+                new ScalarVariableAccessPath(cCtx.defineVariable("left_join_record_count"), P_INT);
+        resultVectorConstructionLoop.addStatement(
+                createLocalVariable(
+                        getLocation(),
+                        toJavaType(getLocation(), leftJoinRecordCount.getType()),
+                        leftJoinRecordCount.getVariableName(),
+                        createArrayElementAccessExpr(
+                                getLocation(),
+                                new Java.FieldAccessExpression(
+                                        getLocation(),
+                                        joinMapAP.read(),
+                                        "keysRecordCount"
+                                ),
+                                joinRecordIndex.read()
+                        )
+                )
+        );
+
+        // Check if there is still room in the result vector and if not, break from the inner loop
+        // if (leftJoinRecordCount > (VectorisedOperators.VECTOR_LENGTH - currentResultIndex))
+        //     break;
+        Java.Block breakBlock = new Java.Block(getLocation());
+        breakBlock.addStatement(new Java.BreakStatement(getLocation(), null));
+        resultVectorConstructionLoop.addStatement(
+                createIf(
+                        getLocation(),
+                        gt(
+                                getLocation(),
+                                leftJoinRecordCount.read(),
+                                sub(
+                                        getLocation(),
+                                        createAmbiguousNameRef(getLocation(), "VectorisedOperators.VECTOR_LENGTH"),
+                                        currentResultIndexAP.read()
+                                )
+                        ),
+                        breakBlock
+                )
+        );
+
+        // There is still room left, so add the records for the current key
+        // Firstly, set-up local variables for the right-hand column values
+        Java.Rvalue[] rightJoinOrdinalValues = new Java.Rvalue[currentOrdinalMapping.size()];
+        for (int i = 0; i < rightJoinOrdinalValues.length; i++) {
+            if (i == buildKeyOrdinal) {
+                rightJoinOrdinalValues[i] = rightJoinKeyAP.read();
+
+            } else {
+                // Need to distinguish the access path
+                AccessPath rightJoinColumnAP = currentOrdinalMapping.get(i);
+                Java.Rvalue rightJoinColumnRValue;
+                if (rightJoinColumnAP instanceof ArrowVectorAccessPath avap) {
+                    rightJoinColumnRValue = createMethodInvocation(
                             getLocation(),
-                            toJavaType(getLocation(), rightJoinKeyAP.getType()),
-                            rightJoinKeyAP.getVariableName(),
-                            createMethodInvocation(
-                                    getLocation(),
-                                    buildKeyAVAP.read(),
-                                    "get",
-                                    new Java.Rvalue[] {
-                                            currentRecordIndexAP.read()
-                                    }
-                            )
-                    )
-            );
+                            avap.read(),
+                            "get",
+                            new Java.Rvalue[] { currentRecordIndexAP.read() }
+                    );
 
-            // long right_join_key_pre_hash = [this.preHashVectorAP.read()][[currentRecordIndex.read()]];
-            ScalarVariableAccessPath rightJoinKeyPreHashAP = new ScalarVariableAccessPath(
-                    cCtx.defineVariable(rightJoinKeyAP.getVariableName() + "_pre_hash"),
-                    P_LONG
-            );
-            resultVectorConstructionLoop.addStatement(
-                    createLocalVariable(
+                } else if (rightJoinColumnAP instanceof ArrayVectorAccessPath avap) {
+                    rightJoinColumnRValue = createArrayElementAccessExpr(
                             getLocation(),
-                            toJavaType(getLocation(), rightJoinKeyPreHashAP.getType()),
-                            rightJoinKeyPreHashAP.getVariableName(),
-                            createArrayElementAccessExpr(
-                                    getLocation(),
-                                    this.preHashVectorAP.read(),
-                                    currentRecordIndexAP.read()
-                            )
-                    )
-            );
-
-            // Obtain the index for the values for the left side of the join for the current key value
-            ScalarVariableAccessPath joinRecordIndex = new ScalarVariableAccessPath(
-                    cCtx.defineVariable("records_to_join_index"),
-                    P_INT);
-            resultVectorConstructionLoop.addStatement(
-                    createLocalVariable(
-                            getLocation(),
-                            toJavaType(getLocation(), joinRecordIndex.getType()),
-                            joinRecordIndex.getVariableName(),
-                            createMethodInvocation(
-                                    getLocation(),
-                                    this.joinMapAP.read(),
-                                    "getIndex",
-                                    new Java.Rvalue[] {
-                                            rightJoinKeyAP.read(),
-                                            rightJoinKeyPreHashAP.read()
-                                    }
-                            )
-                    )
-            );
-
-            // Use the index to check if the left side of the join contains records for the given key
-            // otherwise continue
-            // if ([records_to_join_index] == -1) {
-            //     currentRecordIndex++;
-            //     continue;
-            // }
-            Java.Block incrementAndContinueBlock = new Java.Block(getLocation());
-            incrementAndContinueBlock.addStatement(
-                    postIncrementStm(getLocation(), currentRecordIndexAP.write()));
-            incrementAndContinueBlock.addStatement(new Java.ContinueStatement(getLocation(), null));
-
-            resultVectorConstructionLoop.addStatement(
-                    createIf(
-                            getLocation(),
-                            eq(
-                                    getLocation(),
-                                    joinRecordIndex.read(),
-                                    createIntegerLiteral(getLocation(), -1)
-                            ),
-                            incrementAndContinueBlock
-                    )
-            );
-
-            // int left_join_record_count = [joinMapAP].keysRecordCount[records_to_join_index];
-            ScalarVariableAccessPath leftJoinRecordCount =
-                    new ScalarVariableAccessPath(cCtx.defineVariable("left_join_record_count"), P_INT);
-            resultVectorConstructionLoop.addStatement(
-                    createLocalVariable(
-                            getLocation(),
-                            toJavaType(getLocation(), leftJoinRecordCount.getType()),
-                            leftJoinRecordCount.getVariableName(),
-                            createArrayElementAccessExpr(
-                                    getLocation(),
-                                    new Java.FieldAccessExpression(
-                                            getLocation(),
-                                            joinMapAP.read(),
-                                            "keysRecordCount"
-                                    ),
-                                    joinRecordIndex.read()
-                            )
-                    )
-            );
-
-            // Check if there is still room in the result vector and if not, break from the inner loop
-            // if (leftJoinRecordCount > (VectorisedOperators.VECTOR_LENGTH - currentResultIndex))
-            //     break;
-            Java.Block breakBlock = new Java.Block(getLocation());
-            breakBlock.addStatement(new Java.BreakStatement(getLocation(), null));
-            resultVectorConstructionLoop.addStatement(
-                    createIf(
-                            getLocation(),
-                            gt(
-                                    getLocation(),
-                                    leftJoinRecordCount.read(),
-                                    sub(
-                                            getLocation(),
-                                            createAmbiguousNameRef(getLocation(), "VectorisedOperators.VECTOR_LENGTH"),
-                                            currentResultIndexAP.read()
-                                    )
-                            ),
-                            breakBlock
-                    )
-            );
-
-            // There is still room left, so add the records for the current key
-            // Firstly, set-up local variables for the right-hand column values
-            Java.Rvalue[] rightJoinOrdinalValues = new Java.Rvalue[currentOrdinalMapping.size()];
-            for (int i = 0; i < rightJoinOrdinalValues.length; i++) {
-                if (i == buildKeyOrdinal) {
-                    rightJoinOrdinalValues[i] = rightJoinKeyAP.read();
+                            avap.getVectorVariable().read(),
+                            currentRecordIndexAP.read()
+                    );
 
                 } else {
-                    ArrowVectorAccessPath rightJoinColumnAP = (ArrowVectorAccessPath) currentOrdinalMapping.get(i);
-                    ScalarVariableAccessPath rightJoinColumnValue = new ScalarVariableAccessPath(
-                            cCtx.defineVariable("right_join_ord_" + i),
-                            primitiveType(rightJoinColumnAP.getType())
-                    );
-
-                    resultVectorConstructionLoop.addStatement(
-                            createLocalVariable(
-                                    getLocation(),
-                                    toJavaType(getLocation(), rightJoinColumnValue.getType()),
-                                    rightJoinColumnValue.getVariableName(),
-                                    createMethodInvocation(
-                                            getLocation(),
-                                            rightJoinColumnAP.read(),
-                                            "get",
-                                            new Java.Rvalue[] { currentRecordIndexAP.read() }
-                                    )
-                            )
-                    );
-
-                    rightJoinOrdinalValues[i] = rightJoinColumnValue.read();
+                    throw new UnsupportedOperationException(
+                            "JoinOperator.consumeVecProbe does not support obtaining values for the provided AccessPath");
                 }
-            }
 
-            // for (int i = 0; i < left_join_record_count; i++) {
-            //     [joinLoopBody]
-            // }
-            ScalarVariableAccessPath joinLoopIndexVar =
-                    new ScalarVariableAccessPath(cCtx.defineVariable("i"), P_INT);
-            Java.Block joinLoopBody = new Java.Block(getLocation());
-            resultVectorConstructionLoop.addStatement(
-                    createForLoop(
+                ScalarVariableAccessPath rightJoinColumnValue = new ScalarVariableAccessPath(
+                        cCtx.defineVariable("right_join_ord_" + i),
+                        primitiveType(primitiveType(rightJoinColumnAP.getType()))
+                );
+
+                resultVectorConstructionLoop.addStatement(
+                        createLocalVariable(
+                                getLocation(),
+                                toJavaType(getLocation(), rightJoinColumnValue.getType()),
+                                rightJoinColumnValue.getVariableName(),
+                                rightJoinColumnRValue
+                        )
+                );
+
+                rightJoinOrdinalValues[i] = rightJoinColumnValue.read();
+            }
+        }
+
+        // for (int i = 0; i < left_join_record_count; i++) {
+        //     [joinLoopBody]
+        // }
+        ScalarVariableAccessPath joinLoopIndexVar =
+                new ScalarVariableAccessPath(cCtx.defineVariable("i"), P_INT);
+        Java.Block joinLoopBody = new Java.Block(getLocation());
+        resultVectorConstructionLoop.addStatement(
+                createForLoop(
+                        getLocation(),
+                        createPrimitiveLocalVar(getLocation(), Java.Primitive.INT, joinLoopIndexVar.getVariableName(), "0"),
+                        lt(getLocation(), joinLoopIndexVar.read(), leftJoinRecordCount.read()),
+                        postIncrement(getLocation(), joinLoopIndexVar.write()),
+                        joinLoopBody
+                )
+        );
+
+        // In the loop over the left join records, first add the statements to set the correct
+        // values in the result vectors for the left side join columns
+        int numberOfLhsColumns = this.joinMapGenerator.valueVariableNames.length;
+        for (int i = 0; i < numberOfLhsColumns; i++) {
+            joinLoopBody.addStatement(
+                    createVariableAssignmentStm(
                             getLocation(),
-                            createPrimitiveLocalVar(getLocation(), Java.Primitive.INT, joinLoopIndexVar.getVariableName(), "0"),
-                            lt(getLocation(), joinLoopIndexVar.read(), leftJoinRecordCount.read()),
-                            postIncrement(getLocation(), joinLoopIndexVar.write()),
-                            joinLoopBody
+                            createArrayElementAccessExpr(
+                                    getLocation(),
+                                    this.resultVectorDefinitions[i].read(),
+                                    currentResultIndexAP.read()
+                            ),
+                            createArrayElementAccessExpr(
+                                    getLocation(),
+                                    createArrayElementAccessExpr(
+                                            getLocation(),
+                                            new Java.FieldAccessExpression(
+                                                    getLocation(),
+                                                    this.joinMapAP.read(),
+                                                    this.joinMapGenerator.valueVariableNames[i]
+                                            ),
+                                            joinRecordIndex.read()
+                                    ),
+                                    joinLoopIndexVar.read()
+                            )
                     )
             );
-
-            // In the loop over the left join records, first add the statements to set the correct
-            // values in the result vectors for the left side join columns
-            int numberOfLhsColumns = this.joinMapGenerator.valueVariableNames.length;
-            for (int i = 0; i < numberOfLhsColumns; i++) {
-                joinLoopBody.addStatement(
-                        createVariableAssignmentStm(
-                                getLocation(),
-                                createArrayElementAccessExpr(
-                                        getLocation(),
-                                        this.resultVectorDefinitions[i].read(),
-                                        currentResultIndexAP.read()
-                                ),
-                                createArrayElementAccessExpr(
-                                        getLocation(),
-                                        createArrayElementAccessExpr(
-                                                getLocation(),
-                                                new Java.FieldAccessExpression(
-                                                        getLocation(),
-                                                        this.joinMapAP.read(),
-                                                        this.joinMapGenerator.valueVariableNames[i]
-                                                ),
-                                                joinRecordIndex.read()
-                                        ),
-                                        joinLoopIndexVar.read()
-                                )
-                        )
-                );
-            }
-
-            // And then set the correct values for the right join columns
-            for (int i = 0; i < rightJoinOrdinalValues.length; i++) {
-                int resultIndex = numberOfLhsColumns + i;
-                joinLoopBody.addStatement(
-                        createVariableAssignmentStm(
-                                getLocation(),
-                                createArrayElementAccessExpr(
-                                        getLocation(),
-                                        this.resultVectorDefinitions[resultIndex].read(),
-                                        currentResultIndexAP.read()
-                                ),
-                                rightJoinOrdinalValues[i]
-                        )
-                );
-            }
-
-            // And move onto the next result index
-            joinLoopBody.addStatement(postIncrementStm(getLocation(), currentResultIndexAP.write()));
-            // End of the join-loop
-
-            // Finally, move to the next record
-            // currentRecordIndex++;
-            resultVectorConstructionLoop.addStatement(
-                    postIncrementStm(getLocation(), currentRecordIndexAP.write()));
-
-            // End of the inner result vector construction loop
-            // Set-up the correct ordinal mapping
-            List<AccessPath> resultVectorAPs = new ArrayList<>(this.resultVectorDefinitions.length);
-            for (int i = 0; i < this.resultVectorDefinitions.length; i++) {
-                AccessPath resultVectorAP = new ArrayVectorAccessPath(
-                        this.resultVectorDefinitions[i],
-                        currentResultIndexAP,
-                        vectorTypeForPrimitiveArrayType(this.resultVectorDefinitions[i].getType())
-                );
-                resultVectorAPs.add(i, resultVectorAP);
-            }
-            cCtx.setCurrentOrdinalMapping(resultVectorAPs);
-
-            // Invoke the parent
-            whileLoopBody.addStatements(this.vecParentConsume(cCtx, oCtx));
-
         }
+
+        // And then set the correct values for the right join columns
+        for (int i = 0; i < rightJoinOrdinalValues.length; i++) {
+            int resultIndex = numberOfLhsColumns + i;
+            joinLoopBody.addStatement(
+                    createVariableAssignmentStm(
+                            getLocation(),
+                            createArrayElementAccessExpr(
+                                    getLocation(),
+                                    this.resultVectorDefinitions[resultIndex].read(),
+                                    currentResultIndexAP.read()
+                            ),
+                            rightJoinOrdinalValues[i]
+                    )
+            );
+        }
+
+        // And move onto the next result index
+        joinLoopBody.addStatement(postIncrementStm(getLocation(), currentResultIndexAP.write()));
+        // End of the join-loop
+
+        // Finally, move to the next record
+        // currentRecordIndex++;
+        resultVectorConstructionLoop.addStatement(
+                postIncrementStm(getLocation(), currentRecordIndexAP.write()));
+
+        // End of the inner result vector construction loop
+        // Set-up the correct ordinal mapping
+        List<AccessPath> resultVectorAPs = new ArrayList<>(this.resultVectorDefinitions.length);
+        for (int i = 0; i < this.resultVectorDefinitions.length; i++) {
+            AccessPath resultVectorAP = new ArrayVectorAccessPath(
+                    this.resultVectorDefinitions[i],
+                    currentResultIndexAP,
+                    vectorTypeForPrimitiveArrayType(this.resultVectorDefinitions[i].getType())
+            );
+            resultVectorAPs.add(i, resultVectorAP);
+        }
+        cCtx.setCurrentOrdinalMapping(resultVectorAPs);
+
+        // Invoke the parent
+        whileLoopBody.addStatements(this.vecParentConsume(cCtx, oCtx));
 
         return codeGenResult;
     }

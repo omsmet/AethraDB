@@ -86,6 +86,7 @@ public class AethraDB {
         System.out.println("[Optimised query]");
         var relWriter = new RelWriterImpl(new PrintWriter(System.out, true), SqlExplainLevel.ALL_ATTRIBUTES, false);
         logicalQueryPlan.explain(relWriter);
+        System.out.println();
 
         // Generate code for the query which prints the result to the standard output
         boolean useVectorisedProcessing = false;

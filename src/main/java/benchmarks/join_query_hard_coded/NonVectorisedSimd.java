@@ -1,7 +1,7 @@
 package benchmarks.join_query_hard_coded;
 
-import benchmarks.join_query_hard_coded.NonVectorisedSimdGenSupport.KeyMultiRecordMap_1541427914;
-import benchmarks.join_query_hard_coded.NonVectorisedSimdGenSupport.KeyMultiRecordMap_1719746158;
+import benchmarks.join_query_hard_coded.NonVectorisedSimdGenSupport.KeyMultiRecordMap_169110289;
+import benchmarks.join_query_hard_coded.NonVectorisedSimdGenSupport.KeyMultiRecordMap_582857168;
 import evaluation.codegen.infrastructure.context.OptimisationContext;
 import evaluation.codegen.infrastructure.data.ArrowTableReader;
 import evaluation.codegen.infrastructure.data.CachingArrowTableReader;
@@ -78,16 +78,6 @@ public class NonVectorisedSimd {
     private ArrowTableReader table_C;
 
     /**
-     * State: the size at which the table_A hash-table should be initialised.
-     */
-    private int table_A_hashTable_size;
-
-    /**
-     * State: the size at which the (table_A x table_B) join-result hash-table should be initialised.
-     */
-    private int table_A_x_table_B_hashTable_size;
-
-    /**
      * State: the result of the query (-1 if the query has not been executed yet).
      */
     private long result;
@@ -98,16 +88,16 @@ public class NonVectorisedSimd {
     private long expectedResult;
 
     /**
-     * State: the table_A_x_table_B join map.
+     * State: the table_C join map.
      * DIFF: usually part of the query execution itself.
      */
-    private KeyMultiRecordMap_1719746158 join_map;
+    private KeyMultiRecordMap_169110289 join_map;
 
     /**
      * State: the table_A join map.
      * DIFF: usually part of the query execution itself.
      */
-    private KeyMultiRecordMap_1541427914 join_map_0;
+    private KeyMultiRecordMap_582857168 join_map_0;
 
 
     /**
@@ -122,14 +112,11 @@ public class NonVectorisedSimd {
         this.table_C = new CachingArrowTableReader(new File(this.tableFilePath + "/table_C.arrow"), this.rootAllocator);
 
         // Compute the hash-table sizes as the correct power of two size
-        this.table_A_hashTable_size = Integer.highestOneBit(3 * 1024 * 1024) << 2;
-        double conversionFactor = Double.parseDouble(this.tableFilePath.split("B_")[1].split("_C_")[0]);
-        int expectedJoinSize = (int) (conversionFactor * (3 * 1024 * 1024));
-        this.table_A_x_table_B_hashTable_size = Integer.highestOneBit(expectedJoinSize) << 2;
+        int hashTableSize = Integer.highestOneBit(3 * 1024 * 1024) << 2;
 
         // Allocate the hash-tables
-        this.join_map = new KeyMultiRecordMap_1719746158(this.table_A_x_table_B_hashTable_size);
-        this.join_map_0 = new KeyMultiRecordMap_1541427914(this.table_A_hashTable_size);
+        this.join_map = new KeyMultiRecordMap_169110289(hashTableSize);
+        this.join_map_0 = new KeyMultiRecordMap_582857168(hashTableSize);
 
         // Initialise the result
         this.result = -1;
@@ -181,37 +168,67 @@ public class NonVectorisedSimd {
             "-Xms8g"
     })
     public void executeQuery() throws IOException {
-        int agg_0_count = 0;
-        // DIFF: class definition is moved outside query, different capacity, allocated before query
-        // KeyMultiRecordMap_1719746158 join_map = new KeyMultiRecordMap_1719746158(this.table_A_x_table_B_hashTable_size);
-        // DIFF: class definition is moved outside query, different capacity, allocated before query
-        // KeyMultiRecordMap_1541427914 join_map_0 = new KeyMultiRecordMap_1541427914(this.table_A_hashTable_size);
-
+        long count = 0;
+        // KeyMultiRecordMap_169110289 join_map = new KeyMultiRecordMap_169110289();                DIFF: hard-coded
         int commonSIMDVectorLength = 4;
-        // DIFF: direct call on the class, instead of on instance
-        jdk.incubator.vector.VectorSpecies<Integer> IntVectorSpecies = OptimisationContext.getVectorSpeciesInt();
-        // ArrowTableReader table_A = cCtx.getArrowReader(0);                          DIFF: hard-coded in the setup phase
-        while (table_A.loadNextBatch()) {
-            org.apache.arrow.vector.IntVector table_A_vc_0 = ((org.apache.arrow.vector.IntVector) table_A.getVector(0));
-            org.apache.arrow.vector.IntVector table_A_vc_1 = ((org.apache.arrow.vector.IntVector) table_A.getVector(1));
-            org.apache.arrow.vector.IntVector table_A_vc_2 = ((org.apache.arrow.vector.IntVector) table_A.getVector(2));
-            int arrowVectorLength = table_A_vc_0.getValueCount();
-            // DIFF: direct call on the class, instead of on instance
-            MemorySegment col_0_ms = OptimisationContext.createMemorySegmentForAddress(table_A_vc_0.getDataBufferAddress(), arrowVectorLength * table_A_vc_0.TYPE_WIDTH);
-            // DIFF: direct call on the class, instead of on instance
-            MemorySegment col_1_ms = OptimisationContext.createMemorySegmentForAddress(table_A_vc_1.getDataBufferAddress(), arrowVectorLength * table_A_vc_1.TYPE_WIDTH);
-            // DIFF: direct call on the class, instead of on instance
-            MemorySegment col_2_ms = OptimisationContext.createMemorySegmentForAddress(table_A_vc_2.getDataBufferAddress(), arrowVectorLength * table_A_vc_2.TYPE_WIDTH);
+        jdk.incubator.vector.VectorSpecies<Integer> IntVectorSpecies = OptimisationContext.getVectorSpeciesInt();   // DIFF: call on class, not instance
+        // ArrowTableReader table_C = cCtx.getArrowReader(0);                                       DIFF: hard-coded
+        while (table_C.loadNextBatch()) {
+            org.apache.arrow.vector.IntVector table_C_vc_0 = ((org.apache.arrow.vector.IntVector) table_C.getVector(0));
+            org.apache.arrow.vector.IntVector table_C_vc_1 = ((org.apache.arrow.vector.IntVector) table_C.getVector(1));
+            org.apache.arrow.vector.IntVector table_C_vc_2 = ((org.apache.arrow.vector.IntVector) table_C.getVector(2));
+            int arrowVectorLength = table_C_vc_0.getValueCount();
+            // DIFF: call on class, not instance
+            MemorySegment col_0_ms = OptimisationContext.createMemorySegmentForAddress(table_C_vc_0.getDataBufferAddress(), arrowVectorLength * table_C_vc_0.TYPE_WIDTH);
+            // DIFF: call on class, not instance
+            MemorySegment col_1_ms = OptimisationContext.createMemorySegmentForAddress(table_C_vc_1.getDataBufferAddress(), arrowVectorLength * table_C_vc_1.TYPE_WIDTH);
+            // DIFF: call on class, not instance
+            MemorySegment col_2_ms = OptimisationContext.createMemorySegmentForAddress(table_C_vc_2.getDataBufferAddress(), arrowVectorLength * table_C_vc_2.TYPE_WIDTH);
             for (int currentVectorOffset = 0; currentVectorOffset < arrowVectorLength; currentVectorOffset += commonSIMDVectorLength) {
                 jdk.incubator.vector.VectorMask<Integer> inRangeSIMDMask = IntVectorSpecies.indexInRange(currentVectorOffset, arrowVectorLength);
-                // DIFF: direct call on the class, instead of on instance
-                jdk.incubator.vector.IntVector SIMD_Key_Vector_Int = OptimisationContext.createIntVector(IntVectorSpecies, col_0_ms, currentVectorOffset * table_A_vc_0.TYPE_WIDTH, java.nio.ByteOrder.LITTLE_ENDIAN, inRangeSIMDMask);
-                // DIFF: direct call on the class, instead of on instance
+                // DIFF: call on class, not instance
+                jdk.incubator.vector.IntVector SIMD_Key_Vector_Int = OptimisationContext.createIntVector(IntVectorSpecies, col_0_ms, currentVectorOffset * table_C_vc_0.TYPE_WIDTH, java.nio.ByteOrder.LITTLE_ENDIAN, inRangeSIMDMask);
+                // DIFF: call on class, not instance
                 jdk.incubator.vector.LongVector SIMD_Key_Vector_Long = ((jdk.incubator.vector.LongVector) SIMD_Key_Vector_Int.castShape(OptimisationContext.getVectorSpeciesLong(), 0));
                 jdk.incubator.vector.LongVector SIMD_a_mul_key_vector = SIMD_Key_Vector_Long.mul(Int_Hash_Function.hashConstantA);
                 jdk.incubator.vector.LongVector SIMD_a_mul_key_plus_b_vector = SIMD_a_mul_key_vector.add(Int_Hash_Function.hashConstantB);
                 long[] pre_hash_values = SIMD_a_mul_key_plus_b_vector.toLongArray();
                 for (int simd_vector_i = 0; simd_vector_i < commonSIMDVectorLength; simd_vector_i++) {
+                    if (!(inRangeSIMDMask.laneIsSet(simd_vector_i))) {
+                        continue;
+                    }
+                    int flattened_key = table_C_vc_0.get(currentVectorOffset + simd_vector_i);
+                    long pre_hash_value = (pre_hash_values[simd_vector_i] % Int_Hash_Function.hashConstantP);
+                    join_map.associate(flattened_key, pre_hash_value, flattened_key, table_C_vc_1.get(currentVectorOffset + simd_vector_i), table_C_vc_2.get(currentVectorOffset + simd_vector_i));
+                }
+            }
+        }
+        // KeyMultiRecordMap_582857168 join_map_0 = new KeyMultiRecordMap_582857168();              DIFF: hard-coded
+        int commonSIMDVectorLength_0 = 4;
+        // DIFF: call on class, not instance
+        jdk.incubator.vector.VectorSpecies<Integer> IntVectorSpecies_0 = OptimisationContext.getVectorSpeciesInt();
+        // ArrowTableReader table_A = cCtx.getArrowReader(1);                                       DIFF: hard-coded
+        while (table_A.loadNextBatch()) {
+            org.apache.arrow.vector.IntVector table_A_vc_0 = ((org.apache.arrow.vector.IntVector) table_A.getVector(0));
+            org.apache.arrow.vector.IntVector table_A_vc_1 = ((org.apache.arrow.vector.IntVector) table_A.getVector(1));
+            org.apache.arrow.vector.IntVector table_A_vc_2 = ((org.apache.arrow.vector.IntVector) table_A.getVector(2));
+            int arrowVectorLength = table_A_vc_0.getValueCount();
+            // DIFF: call on class, not instance
+            MemorySegment col_0_ms = OptimisationContext.createMemorySegmentForAddress(table_A_vc_0.getDataBufferAddress(), arrowVectorLength * table_A_vc_0.TYPE_WIDTH);
+            // DIFF: call on class, not instance
+            MemorySegment col_1_ms = OptimisationContext.createMemorySegmentForAddress(table_A_vc_1.getDataBufferAddress(), arrowVectorLength * table_A_vc_1.TYPE_WIDTH);
+            // DIFF: call on class, not instance
+            MemorySegment col_2_ms = OptimisationContext.createMemorySegmentForAddress(table_A_vc_2.getDataBufferAddress(), arrowVectorLength * table_A_vc_2.TYPE_WIDTH);
+            for (int currentVectorOffset = 0; currentVectorOffset < arrowVectorLength; currentVectorOffset += commonSIMDVectorLength_0) {
+                jdk.incubator.vector.VectorMask<Integer> inRangeSIMDMask = IntVectorSpecies_0.indexInRange(currentVectorOffset, arrowVectorLength);
+                // DIFF: call on class, not instance
+                jdk.incubator.vector.IntVector SIMD_Key_Vector_Int = OptimisationContext.createIntVector(IntVectorSpecies_0, col_0_ms, currentVectorOffset * table_A_vc_0.TYPE_WIDTH, java.nio.ByteOrder.LITTLE_ENDIAN, inRangeSIMDMask);
+                // DIFF: call on class, not instance
+                jdk.incubator.vector.LongVector SIMD_Key_Vector_Long = ((jdk.incubator.vector.LongVector) SIMD_Key_Vector_Int.castShape(OptimisationContext.getVectorSpeciesLong(), 0));
+                jdk.incubator.vector.LongVector SIMD_a_mul_key_vector = SIMD_Key_Vector_Long.mul(Int_Hash_Function.hashConstantA);
+                jdk.incubator.vector.LongVector SIMD_a_mul_key_plus_b_vector = SIMD_a_mul_key_vector.add(Int_Hash_Function.hashConstantB);
+                long[] pre_hash_values = SIMD_a_mul_key_plus_b_vector.toLongArray();
+                for (int simd_vector_i = 0; simd_vector_i < commonSIMDVectorLength_0; simd_vector_i++) {
                     if (!(inRangeSIMDMask.laneIsSet(simd_vector_i))) {
                         continue;
                     }
@@ -221,31 +238,31 @@ public class NonVectorisedSimd {
                 }
             }
         }
-        int commonSIMDVectorLength_0 = 4;
-        // DIFF: direct call on the class, instead of on instance
-        jdk.incubator.vector.VectorSpecies<Integer> IntVectorSpecies_0 = OptimisationContext.getVectorSpeciesInt();
-        // ArrowTableReader table_B = cCtx.getArrowReader(1);                          DIFF: hard-coded in the setup phase
+        int commonSIMDVectorLength_1 = 4;
+        // DIFF: call on class, not instance
+        jdk.incubator.vector.VectorSpecies<Integer> IntVectorSpecies_1 = OptimisationContext.getVectorSpeciesInt();
+        // ArrowTableReader table_B = cCtx.getArrowReader(2);                                       DIFF: hard-coded
         while (table_B.loadNextBatch()) {
             org.apache.arrow.vector.IntVector table_B_vc_0 = ((org.apache.arrow.vector.IntVector) table_B.getVector(0));
             org.apache.arrow.vector.IntVector table_B_vc_1 = ((org.apache.arrow.vector.IntVector) table_B.getVector(1));
             org.apache.arrow.vector.IntVector table_B_vc_2 = ((org.apache.arrow.vector.IntVector) table_B.getVector(2));
             int arrowVectorLength = table_B_vc_0.getValueCount();
-            // DIFF: direct call on the class, instead of on instance
+            // DIFF: call on class, not instance
             MemorySegment col_0_ms = OptimisationContext.createMemorySegmentForAddress(table_B_vc_0.getDataBufferAddress(), arrowVectorLength * table_B_vc_0.TYPE_WIDTH);
-            // DIFF: direct call on the class, instead of on instance
+            // DIFF: call on class, not instance
             MemorySegment col_1_ms = OptimisationContext.createMemorySegmentForAddress(table_B_vc_1.getDataBufferAddress(), arrowVectorLength * table_B_vc_1.TYPE_WIDTH);
-            // DIFF: direct call on the class, instead of on instance
+            // DIFF: call on class, not instance
             MemorySegment col_2_ms = OptimisationContext.createMemorySegmentForAddress(table_B_vc_2.getDataBufferAddress(), arrowVectorLength * table_B_vc_2.TYPE_WIDTH);
-            for (int currentVectorOffset = 0; currentVectorOffset < arrowVectorLength; currentVectorOffset += commonSIMDVectorLength_0) {
-                jdk.incubator.vector.VectorMask<Integer> inRangeSIMDMask = IntVectorSpecies_0.indexInRange(currentVectorOffset, arrowVectorLength);
-                // DIFF: direct call on the class, instead of on instance
-                jdk.incubator.vector.IntVector SIMD_Key_Vector_Int = OptimisationContext.createIntVector(IntVectorSpecies_0, col_0_ms, currentVectorOffset * table_B_vc_0.TYPE_WIDTH, java.nio.ByteOrder.LITTLE_ENDIAN, inRangeSIMDMask);
-                // DIFF: direct call on the class, instead of on instance
+            for (int currentVectorOffset = 0; currentVectorOffset < arrowVectorLength; currentVectorOffset += commonSIMDVectorLength_1) {
+                jdk.incubator.vector.VectorMask<Integer> inRangeSIMDMask = IntVectorSpecies_1.indexInRange(currentVectorOffset, arrowVectorLength);
+                // DIFF: call on class, not instance
+                jdk.incubator.vector.IntVector SIMD_Key_Vector_Int = OptimisationContext.createIntVector(IntVectorSpecies_1, col_0_ms, currentVectorOffset * table_B_vc_0.TYPE_WIDTH, java.nio.ByteOrder.LITTLE_ENDIAN, inRangeSIMDMask);
+                // DIFF: call on class, not instance
                 jdk.incubator.vector.LongVector SIMD_Key_Vector_Long = ((jdk.incubator.vector.LongVector) SIMD_Key_Vector_Int.castShape(OptimisationContext.getVectorSpeciesLong(), 0));
                 jdk.incubator.vector.LongVector SIMD_a_mul_key_vector = SIMD_Key_Vector_Long.mul(Int_Hash_Function.hashConstantA);
                 jdk.incubator.vector.LongVector SIMD_a_mul_key_plus_b_vector = SIMD_a_mul_key_vector.add(Int_Hash_Function.hashConstantB);
                 long[] pre_hash_values = SIMD_a_mul_key_plus_b_vector.toLongArray();
-                for (int simd_vector_i = 0; simd_vector_i < commonSIMDVectorLength_0; simd_vector_i++) {
+                for (int simd_vector_i = 0; simd_vector_i < commonSIMDVectorLength_1; simd_vector_i++) {
                     if (!(inRangeSIMDMask.laneIsSet(simd_vector_i))) {
                         continue;
                     }
@@ -262,63 +279,24 @@ public class NonVectorisedSimd {
                         int left_join_ord_0 = join_map_0.values_record_ord_0[records_to_join_index][i];
                         int left_join_ord_1 = join_map_0.values_record_ord_1[records_to_join_index][i];
                         int left_join_ord_2 = join_map_0.values_record_ord_2[records_to_join_index][i];
-                        long left_join_key_prehash = Int_Hash_Function.preHash(left_join_ord_1);
-                        join_map.associate(left_join_ord_1, left_join_key_prehash, left_join_ord_0, left_join_ord_1, left_join_ord_2, flattened_key, right_join_ord_1, right_join_ord_2);
+                        long right_join_key_prehash = Int_Hash_Function.preHash(left_join_ord_1);
+                        int records_to_join_index_0 = join_map.getIndex(left_join_ord_1, right_join_key_prehash);
+                        if ((records_to_join_index_0 == -1)) {
+                            continue;
+                        }
+                        int left_join_record_count_0 = join_map.keysRecordCount[records_to_join_index_0];
+                        for (int i_0 = 0; i_0 < left_join_record_count_0; i_0++) {
+                            int left_join_ord_0_0 = join_map.values_record_ord_0[records_to_join_index_0][i_0];
+                            int left_join_ord_1_0 = join_map.values_record_ord_1[records_to_join_index_0][i_0];
+                            int left_join_ord_2_0 = join_map.values_record_ord_2[records_to_join_index_0][i_0];
+                            count++;
+                        }
                     }
                 }
             }
         }
-        int commonSIMDVectorLength_1 = 4;
-        // DIFF: direct call on the class, instead of on instance
-        jdk.incubator.vector.VectorSpecies<Integer> IntVectorSpecies_1 = OptimisationContext.getVectorSpeciesInt();
-        // ArrowTableReader table_C = cCtx.getArrowReader(2);                          DIFF: hard-coded in the setup phase
-        while (table_C.loadNextBatch()) {
-            org.apache.arrow.vector.IntVector table_C_vc_0 = ((org.apache.arrow.vector.IntVector) table_C.getVector(0));
-            org.apache.arrow.vector.IntVector table_C_vc_1 = ((org.apache.arrow.vector.IntVector) table_C.getVector(1));
-            org.apache.arrow.vector.IntVector table_C_vc_2 = ((org.apache.arrow.vector.IntVector) table_C.getVector(2));
-            int arrowVectorLength = table_C_vc_0.getValueCount();
-            // DIFF: direct call on the class, instead of on instance
-            MemorySegment col_0_ms = OptimisationContext.createMemorySegmentForAddress(table_C_vc_0.getDataBufferAddress(), arrowVectorLength * table_C_vc_0.TYPE_WIDTH);
-            // DIFF: direct call on the class, instead of on instance
-            MemorySegment col_1_ms = OptimisationContext.createMemorySegmentForAddress(table_C_vc_1.getDataBufferAddress(), arrowVectorLength * table_C_vc_1.TYPE_WIDTH);
-            // DIFF: direct call on the class, instead of on instance
-            MemorySegment col_2_ms = OptimisationContext.createMemorySegmentForAddress(table_C_vc_2.getDataBufferAddress(), arrowVectorLength * table_C_vc_2.TYPE_WIDTH);
-            for (int currentVectorOffset = 0; currentVectorOffset < arrowVectorLength; currentVectorOffset += commonSIMDVectorLength_1) {
-                jdk.incubator.vector.VectorMask<Integer> inRangeSIMDMask = IntVectorSpecies_1.indexInRange(currentVectorOffset, arrowVectorLength);
-                // DIFF: direct call on the class, instead of on instance
-                jdk.incubator.vector.IntVector SIMD_Key_Vector_Int = OptimisationContext.createIntVector(IntVectorSpecies_1, col_0_ms, currentVectorOffset * table_C_vc_0.TYPE_WIDTH, java.nio.ByteOrder.LITTLE_ENDIAN, inRangeSIMDMask);
-                // DIFF: direct call on the class, instead of on instance
-                jdk.incubator.vector.LongVector SIMD_Key_Vector_Long = ((jdk.incubator.vector.LongVector) SIMD_Key_Vector_Int.castShape(OptimisationContext.getVectorSpeciesLong(), 0));
-                jdk.incubator.vector.LongVector SIMD_a_mul_key_vector = SIMD_Key_Vector_Long.mul(Int_Hash_Function.hashConstantA);
-                jdk.incubator.vector.LongVector SIMD_a_mul_key_plus_b_vector = SIMD_a_mul_key_vector.add(Int_Hash_Function.hashConstantB);
-                long[] pre_hash_values = SIMD_a_mul_key_plus_b_vector.toLongArray();
-                for (int simd_vector_i = 0; simd_vector_i < commonSIMDVectorLength_1; simd_vector_i++) {
-                    if (!(inRangeSIMDMask.laneIsSet(simd_vector_i))) {
-                        continue;
-                    }
-                    int flattened_key = table_C_vc_0.get(currentVectorOffset + simd_vector_i);
-                    long pre_hash_value = (pre_hash_values[simd_vector_i] % Int_Hash_Function.hashConstantP);
-                    int records_to_join_index = join_map.getIndex(flattened_key, pre_hash_value);
-                    if ((records_to_join_index == -1)) {
-                        continue;
-                    }
-                    int right_join_ord_1 = table_C_vc_1.get(currentVectorOffset + simd_vector_i);
-                    int right_join_ord_2 = table_C_vc_2.get(currentVectorOffset + simd_vector_i);
-                    int left_join_record_count = join_map.keysRecordCount[records_to_join_index];
-                    for (int i = 0; i < left_join_record_count; i++) {
-                        int left_join_ord_0 = join_map.values_record_ord_0[records_to_join_index][i];
-                        int left_join_ord_1 = join_map.values_record_ord_1[records_to_join_index][i];
-                        int left_join_ord_2 = join_map.values_record_ord_2[records_to_join_index][i];
-                        int left_join_ord_3 = join_map.values_record_ord_3[records_to_join_index][i];
-                        int left_join_ord_4 = join_map.values_record_ord_4[records_to_join_index][i];
-                        int left_join_ord_5 = join_map.values_record_ord_5[records_to_join_index][i];
-                        agg_0_count++;
-                    }
-                }
-            }
-        }
-        // System.out.println(agg_0_count);                                            DIFF: replaced with line below
-        this.result = agg_0_count;                                                  // DIFF: introduced to replace line above
+        // System.out.println(count);                                                               DIFF: removed
+        this.result = count;                                                                     // DIFF: added
     }
 
 }

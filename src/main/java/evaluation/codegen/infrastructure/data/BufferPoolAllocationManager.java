@@ -111,7 +111,8 @@ public class BufferPoolAllocationManager extends AllocationManager {
         if (this.nextIntVectorIndex >= this.intVectors.length) {
             int[][] newIntVectors = new int[this.intVectors.length * 2][];
             System.arraycopy(this.intVectors, 0, newIntVectors, 0, this.intVectors.length);
-            Arrays.fill(newIntVectors, this.intVectors.length, newIntVectors.length, new int[VectorisedOperators.VECTOR_LENGTH]);
+            for (int i = this.intVectors.length; i < newIntVectors.length; i++)
+                newIntVectors[i] = new int[VectorisedOperators.VECTOR_LENGTH];
             this.intVectors = newIntVectors;
         }
 
@@ -130,7 +131,8 @@ public class BufferPoolAllocationManager extends AllocationManager {
         if (this.nextLongVectorIndex >= this.longVectors.length) {
             long[][] newLongVectors = new long[this.longVectors.length * 2][];
             System.arraycopy(this.longVectors, 0, newLongVectors, 0, this.longVectors.length);
-            Arrays.fill(newLongVectors, this.longVectors.length, newLongVectors.length, new long[VectorisedOperators.VECTOR_LENGTH]);
+            for (int i = this.intVectors.length; i < newLongVectors.length; i++)
+                newLongVectors[i] = new long[VectorisedOperators.VECTOR_LENGTH];
             this.longVectors = newLongVectors;
         }
 
@@ -149,7 +151,8 @@ public class BufferPoolAllocationManager extends AllocationManager {
         if (this.nextBooleanVectorIndex >= this.booleanVectors.length) {
             boolean[][] newBooleanVectors = new boolean[this.booleanVectors.length * 2][];
             System.arraycopy(this.booleanVectors, 0, newBooleanVectors, 0, this.booleanVectors.length);
-            Arrays.fill(newBooleanVectors, this.booleanVectors.length, newBooleanVectors.length, new boolean[VectorisedOperators.VECTOR_LENGTH]);
+            for (int i = this.booleanVectors.length; i < newBooleanVectors.length; i++)
+                newBooleanVectors[i] = new boolean[VectorisedOperators.VECTOR_LENGTH];
             this.booleanVectors = newBooleanVectors;
         }
 
@@ -168,7 +171,8 @@ public class BufferPoolAllocationManager extends AllocationManager {
         if (this.nextIntLongMapIndex >= this.intLongMaps.length) {
             Simple_Int_Long_Map[] newIntLongMaps = new Simple_Int_Long_Map[this.intLongMaps.length * 2];
             System.arraycopy(this.intLongMaps, 0, newIntLongMaps, 0, this.intLongMaps.length);
-            Arrays.fill(newIntLongMaps, this.intLongMaps.length, newIntLongMaps.length, new Simple_Int_Long_Map());
+            for (int i = this.intLongMaps.length; i < newIntLongMaps.length; i++)
+                newIntLongMaps[i] = new Simple_Int_Long_Map(this.defaultSimpleIntLongMapCapacity);
             this.intLongMaps = newIntLongMaps;
         }
 

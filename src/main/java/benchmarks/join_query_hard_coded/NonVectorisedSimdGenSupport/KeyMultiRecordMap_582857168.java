@@ -1,26 +1,23 @@
-package benchmarks.join_query_hard_coded.NonVectorisedNonSimdGenSupport;
+package benchmarks.join_query_hard_coded.NonVectorisedSimdGenSupport;
 
 import evaluation.general_support.hashmaps.Int_Hash_Function;
 
 import java.util.Arrays;
 
-public final class KeyMultiRecordMap_1123573668 { // DIFF: generated class is private (as it is local)
+public final class KeyMultiRecordMap_582857168 {
     private int numberOfRecords;
     private int[] keys;
     public int[] keysRecordCount;
     public int[][] values_record_ord_0;
     public int[][] values_record_ord_1;
     public int[][] values_record_ord_2;
-    public int[][] values_record_ord_3;
-    public int[][] values_record_ord_4;
-    public int[][] values_record_ord_5;
     private int[] hashTable;
     private int[] next;
 
-    public KeyMultiRecordMap_1123573668() {
+    public KeyMultiRecordMap_582857168() {
         this(4);
     }
-    public KeyMultiRecordMap_1123573668(int capacity) {
+    public KeyMultiRecordMap_582857168(int capacity) {
         if (!(((capacity > 1) && ((capacity & (capacity - 1)) == 0)))) {
             throw new java.lang.IllegalArgumentException("The map capacity is required to be a power of two");
         }
@@ -31,16 +28,13 @@ public final class KeyMultiRecordMap_1123573668 { // DIFF: generated class is pr
         this.values_record_ord_0 = new int[capacity][8];
         this.values_record_ord_1 = new int[capacity][8];
         this.values_record_ord_2 = new int[capacity][8];
-        this.values_record_ord_3 = new int[capacity][8];
-        this.values_record_ord_4 = new int[capacity][8];
-        this.values_record_ord_5 = new int[capacity][8];
         this.hashTable = new int[capacity];
         Arrays.fill(this.hashTable, -1);
         this.next = new int[capacity];
         Arrays.fill(this.next, -1);
     }
 
-    public void associate(int key, long preHash, int record_ord_0, int record_ord_1, int record_ord_2, int record_ord_3, int record_ord_4, int record_ord_5) {
+    public void associate(int key, long preHash, int record_ord_0, int record_ord_1, int record_ord_2) {
         if ((key < 0)) {
             throw new java.lang.IllegalArgumentException("The map expects non-negative keys");
         }
@@ -67,22 +61,10 @@ public final class KeyMultiRecordMap_1123573668 { // DIFF: generated class is pr
             int[] temp_values_record_ord_2 = new int[newValueArraysSize];
             System.arraycopy(this.values_record_ord_2[index], 0, temp_values_record_ord_2, 0, currentValueArraysSize);
             this.values_record_ord_2[index] = temp_values_record_ord_2;
-            int[] temp_values_record_ord_3 = new int[newValueArraysSize];
-            System.arraycopy(this.values_record_ord_3[index], 0, temp_values_record_ord_3, 0, currentValueArraysSize);
-            this.values_record_ord_3[index] = temp_values_record_ord_3;
-            int[] temp_values_record_ord_4 = new int[newValueArraysSize];
-            System.arraycopy(this.values_record_ord_4[index], 0, temp_values_record_ord_4, 0, currentValueArraysSize);
-            this.values_record_ord_4[index] = temp_values_record_ord_4;
-            int[] temp_values_record_ord_5 = new int[newValueArraysSize];
-            System.arraycopy(this.values_record_ord_5[index], 0, temp_values_record_ord_5, 0, currentValueArraysSize);
-            this.values_record_ord_5[index] = temp_values_record_ord_5;
         }
         this.values_record_ord_0[index][insertionIndex] = record_ord_0;
         this.values_record_ord_1[index][insertionIndex] = record_ord_1;
         this.values_record_ord_2[index][insertionIndex] = record_ord_2;
-        this.values_record_ord_3[index][insertionIndex] = record_ord_3;
-        this.values_record_ord_4[index][insertionIndex] = record_ord_4;
-        this.values_record_ord_5[index][insertionIndex] = record_ord_5;
         this.keysRecordCount[index]++;
         if (newEntry) {
             boolean rehashOnCollision = (this.numberOfRecords > ((3 * this.hashTable.length) / 4));
@@ -132,15 +114,6 @@ public final class KeyMultiRecordMap_1123573668 { // DIFF: generated class is pr
         int[][] new_values_record_ord_2 = new int[newSize][8];
         System.arraycopy(this.values_record_ord_2, 0, new_values_record_ord_2, 0, currentSize);
         this.values_record_ord_2 = new_values_record_ord_2;
-        int[][] new_values_record_ord_3 = new int[newSize][8];
-        System.arraycopy(this.values_record_ord_3, 0, new_values_record_ord_3, 0, currentSize);
-        this.values_record_ord_3 = new_values_record_ord_3;
-        int[][] new_values_record_ord_4 = new int[newSize][8];
-        System.arraycopy(this.values_record_ord_4, 0, new_values_record_ord_4, 0, currentSize);
-        this.values_record_ord_4 = new_values_record_ord_4;
-        int[][] new_values_record_ord_5 = new int[newSize][8];
-        System.arraycopy(this.values_record_ord_5, 0, new_values_record_ord_5, 0, currentSize);
-        this.values_record_ord_5 = new_values_record_ord_5;
     }
     private void putHashEntry(int key, long preHash, int index, boolean rehashOnCollision) {
         int htIndex = ((int) (preHash & (this.hashTable.length - 1)));

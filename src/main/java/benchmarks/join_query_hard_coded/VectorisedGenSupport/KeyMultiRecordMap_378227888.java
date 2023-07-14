@@ -1,10 +1,10 @@
-package benchmarks.join_query_hard_coded.NonVectorisedSimdGenSupport;
+package benchmarks.join_query_hard_coded.VectorisedGenSupport;
 
 import evaluation.general_support.hashmaps.Int_Hash_Function;
 
 import java.util.Arrays;
 
-public class KeyMultiRecordMap_1541427914 { // DIFF: generated class is private (as it is local)
+public final class KeyMultiRecordMap_378227888 {
     private int numberOfRecords;
     private int[] keys;
     public int[] keysRecordCount;
@@ -14,10 +14,10 @@ public class KeyMultiRecordMap_1541427914 { // DIFF: generated class is private 
     private int[] hashTable;
     private int[] next;
 
-    public KeyMultiRecordMap_1541427914() {
+    public KeyMultiRecordMap_378227888() {
         this(4);
     }
-    public KeyMultiRecordMap_1541427914(int capacity) {
+    public KeyMultiRecordMap_378227888(int capacity) {
         if (!(((capacity > 1) && ((capacity & (capacity - 1)) == 0)))) {
             throw new java.lang.IllegalArgumentException("The map capacity is required to be a power of two");
         }
