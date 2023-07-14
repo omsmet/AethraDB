@@ -230,11 +230,12 @@ public class VectorisedSimd {
         long[] agg_G_SUM_1_vector = this.allocationManager.getLongVector(); // DIFF: hard-coded
         long[] agg_G_SUM_2_vector = this.allocationManager.getLongVector(); // DIFF: hard-coded
         int current_key_offset = 0;
-        while (current_key_offset < aggregation_state_map.numberOfRecords) {
-            aggregationResultVectorLength = VectorisedAggregationOperators.constructVector(groupKeyVector, aggregation_state_map.keys, current_key_offset);
-            VectorisedAggregationOperators.constructVector(agg_G_SUM_0_vector, aggregation_state_map.values_ord_0, current_key_offset);
-            VectorisedAggregationOperators.constructVector(agg_G_SUM_1_vector, aggregation_state_map.values_ord_1, current_key_offset);
-            VectorisedAggregationOperators.constructVector(agg_G_SUM_2_vector, aggregation_state_map.values_ord_2, current_key_offset);
+        int number_of_records = aggregation_state_map.numberOfRecords;
+        while (current_key_offset < number_of_records) {
+            aggregationResultVectorLength = VectorisedAggregationOperators.constructVector(groupKeyVector, aggregation_state_map.keys, number_of_records, current_key_offset);
+            VectorisedAggregationOperators.constructVector(agg_G_SUM_0_vector, aggregation_state_map.values_ord_0, number_of_records, current_key_offset);
+            VectorisedAggregationOperators.constructVector(agg_G_SUM_1_vector, aggregation_state_map.values_ord_1, number_of_records, current_key_offset);
+            VectorisedAggregationOperators.constructVector(agg_G_SUM_2_vector, aggregation_state_map.values_ord_2, number_of_records, current_key_offset);
             System.arraycopy(groupKeyVector, 0, this.keyResult, current_key_offset, aggregationResultVectorLength);         // DIFF: added
             System.arraycopy(agg_G_SUM_0_vector, 0, this.col2SumResult, current_key_offset, aggregationResultVectorLength); // DIFF: added
             System.arraycopy(agg_G_SUM_1_vector, 0, this.col3SumResult, current_key_offset, aggregationResultVectorLength); // DIFF: added

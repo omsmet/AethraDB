@@ -667,21 +667,15 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
             cCtx.setCurrentOrdinalMapping(updatedOrdinalMapping);
 
             // Construct and expose the actual vectors
-            // [numberOfKeys] = [this.aggregationStateVariable).read()].numberOfRecords;
-            Java.Rvalue numberOfKeys = new Java.FieldAccessExpression(
-                    getLocation(),
-                    ((MapAccessPath) this.aggregationStateVariable).read(),
-                    "numberOfRecords"
-            );
-
             // Construct the key and value vectors by iterating over the keys
             // int current_key_offset = 0;
-            // while (current_key_offset < [numberOfKeys]) {
+            // int number_of_records = [this.aggregationStateVariable).read()].numberOfRecords;
+            // while (current_key_offset < number_of_records) {
             //     [aggregationResultVectorLength] = VectorisedAggregationOperators.constructVector(
-            //             [groupKeyVector], [this.aggregationStateVariable.read()].keys, current_key_offset);
+            //             [groupKeyVector], [this.aggregationStateVariable.read()].keys, number_of_records, current_key_offset);
             //     $ for each aggregationResult $
             //         VectorisedAggregationOperators.constructVector(
-            //             [aggCall_$i$_vector], [this.aggregationStateVariable.read()].values_ord_[currentMapValueOrdinalIndex], current_key_offset);
+            //             [aggCall_$i$_vector], [this.aggregationStateVariable.read()].values_ord_[currentMapValueOrdinalIndex], number_of_records, current_key_offset);
             //     current_key_offset += [aggregationResultVectorLength];
             //     [whileLoopBody]
             // }
@@ -696,11 +690,26 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
                     )
             );
 
+            ScalarVariableAccessPath numberOfRecordsAP =
+                    new ScalarVariableAccessPath(cCtx.defineVariable("number_of_records"), P_INT);
+            codeGenResult.add(
+                    createLocalVariable(
+                            getLocation(),
+                            toJavaType(getLocation(), numberOfRecordsAP.getType()),
+                            numberOfRecordsAP.getVariableName(),
+                            new Java.FieldAccessExpression(
+                                    getLocation(),
+                                    ((MapAccessPath) this.aggregationStateVariable).read(),
+                                    "numberOfRecords"
+                            )
+                    )
+            );
+
             Java.Block whileLoopBody = createBlock(getLocation());
             codeGenResult.add(
                     createWhileLoop(
                             getLocation(),
-                            lt(getLocation(), currentKeyOffsetVariable.read(), numberOfKeys),
+                            lt(getLocation(), currentKeyOffsetVariable.read(), numberOfRecordsAP.read()),
                             whileLoopBody
                     )
             );
@@ -721,6 +730,7 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
                                                     ((MapAccessPath) this.aggregationStateVariable).read(),
                                                     "keys"
                                             ),
+                                            numberOfRecordsAP.read(),
                                             currentKeyOffsetVariable.read()
                                     }
                             )
@@ -746,6 +756,7 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
                                                     ((MapAccessPath) this.aggregationStateVariable).read(),
                                                     this.aggregationMapGenerator.valueVariableNames[currentMapValueOrdinalIndex]
                                             ),
+                                            numberOfRecordsAP.read(),
                                             currentKeyOffsetVariable.read()
                                     }
                             )
