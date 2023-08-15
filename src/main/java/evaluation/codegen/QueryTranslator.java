@@ -6,10 +6,12 @@ import evaluation.codegen.operators.ArrowTableScanOperator;
 import evaluation.codegen.operators.CodeGenOperator;
 import evaluation.codegen.operators.FilterOperator;
 import evaluation.codegen.operators.JoinOperator;
+import evaluation.codegen.operators.ProjectOperator;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.logical.LogicalAggregate;
 import org.apache.calcite.rel.logical.LogicalFilter;
 import org.apache.calcite.rel.logical.LogicalJoin;
+import org.apache.calcite.rel.logical.LogicalProject;
 
 /**
  * Class which can translate a Calcite logical plan into a tree of {@link CodeGenOperator}s that
@@ -44,6 +46,8 @@ public class QueryTranslator {
             return convert(logicalAggregate, simdEnabled);
         else if (logicalPlan instanceof LogicalJoin logicalJoin)
             return convert(logicalJoin, simdEnabled);
+        else if (logicalPlan instanceof LogicalProject logicalProject)
+            return convert(logicalProject, simdEnabled);
 
         throw new IllegalArgumentException(
                 "The supplied logical plan cannot be converted due to an unimplemented RelNode type");
@@ -100,6 +104,20 @@ public class QueryTranslator {
                 simdEnabled,
                 convert(join.getLeft(), simdEnabled),
                 convert(join.getRight(), simdEnabled)
+        );
+    }
+
+    /**
+     * Method to translate an {@link LogicalProject} into a {@link CodeGenOperator}.
+     * @param project The {@link LogicalProject} to translate.
+     * @param simdEnabled Whether the operator is allowed to use SIMD for processing.
+     * @return A {@link CodeGenOperator} corresponding to {@code project}.
+     */
+    protected CodeGenOperator<LogicalProject> convert(LogicalProject project, boolean simdEnabled) {
+        return new ProjectOperator(
+                project,
+                simdEnabled,
+                convert(project.getInput(), simdEnabled)
         );
     }
 

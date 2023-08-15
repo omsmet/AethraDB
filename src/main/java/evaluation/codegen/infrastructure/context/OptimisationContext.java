@@ -151,4 +151,23 @@ public class OptimisationContext {
         return IntVector.fromMemorySegment(species, memorySegment, offset, byteOrder, mask);
     }
 
+    /**
+     * Wrapper method to be able to create {@link DoubleVector}s in Janino generated code.
+     * @param species The species of the vector to create.
+     * @param memorySegment The memory segment from which to create the vector.
+     * @param offset The offset into the memory segment to start reading data from.
+     * @param byteOrder The byte order of the memory segment used.
+     * @param mask A mask indicating which elements of the vector are valid.
+     * @return The {@link DoubleVector} corresponding to the provided arguments.
+     */
+    public static DoubleVector createDoubleVector(
+            VectorSpecies<Double> species,
+            MemorySegment memorySegment,
+            long offset,
+            ByteOrder byteOrder,
+            VectorMask<Double> mask
+    ) {
+        return DoubleVector.fromMemorySegment(species, memorySegment, offset, byteOrder, mask);
+    }
+
 }

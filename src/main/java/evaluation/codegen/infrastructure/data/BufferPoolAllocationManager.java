@@ -3,8 +3,6 @@ package evaluation.codegen.infrastructure.data;
 import evaluation.general_support.hashmaps.Simple_Int_Long_Map;
 import evaluation.vector_support.VectorisedOperators;
 
-import java.util.Arrays;
-
 /**
  * An {@link AllocationManager} specialisation which returns allocation instances to consumers by
  * returning them from a buffer of available instances. Any query using this
@@ -44,6 +42,16 @@ public class BufferPoolAllocationManager extends AllocationManager {
     private int nextBooleanVectorIndex;
 
     /**
+     * Buffer of double vectors.
+     */
+    private double[][] doubleVectors;
+
+    /**
+     * The index of the next double vector to return on request.
+     */
+    private int nextDoubleVectorIndex;
+
+    /**
      * Buffer of {@link Simple_Int_Long_Map} instances.
      */
     private Simple_Int_Long_Map[] intLongMaps;
@@ -69,6 +77,10 @@ public class BufferPoolAllocationManager extends AllocationManager {
         // Setup boolean vectors
         this.booleanVectors = new boolean[initialBufferCapacity][];
         this.nextBooleanVectorIndex = 0;
+
+        // Setup double vectors
+        this.doubleVectors = new double[initialBufferCapacity][];
+        this.nextDoubleVectorIndex = 0;
 
         // Setup the Simple_Int_Long_Map instances
         this.intLongMaps = new Simple_Int_Long_Map[initialBufferCapacity];
@@ -97,6 +109,12 @@ public class BufferPoolAllocationManager extends AllocationManager {
             this.booleanVectors[i] = new boolean[VectorisedOperators.VECTOR_LENGTH];
         }
         this.nextBooleanVectorIndex = 0;
+
+        // Maintain double vectors
+        for (int i = 0; i < this.doubleVectors.length; i++) {
+            this.doubleVectors[i] = new double[VectorisedOperators.VECTOR_LENGTH];
+        }
+        this.nextDoubleVectorIndex = 0;
 
         // Maintain the int -> long maps
         for (int i = 0; i < this.intLongMaps.length; i++) {
@@ -162,6 +180,26 @@ public class BufferPoolAllocationManager extends AllocationManager {
     @Override
     public void release(boolean[] vector) {
         // Do nothing as all boolean vectors will be cleaned at the end of the query via the call to
+        // performMaintenance()
+    }
+
+    @Override
+    public double[] getDoubleVector() {
+        // Check if we need to grow the buffer of boolean vectors
+        if (this.nextDoubleVectorIndex >= this.doubleVectors.length) {
+            double[][] newDoubleVectors = new double[this.doubleVectors.length * 2][];
+            System.arraycopy(this.doubleVectors, 0, newDoubleVectors, 0, this.doubleVectors.length);
+            for (int i = this.doubleVectors.length; i < newDoubleVectors.length; i++)
+                newDoubleVectors[i] = new double[VectorisedOperators.VECTOR_LENGTH];
+            this.doubleVectors = newDoubleVectors;
+        }
+
+        return this.doubleVectors[this.nextDoubleVectorIndex++];
+    }
+
+    @Override
+    public void release(double[] vector) {
+        // Do nothing as all double vectors will be cleaned at the end of the query via the call to
         // performMaintenance()
     }
 

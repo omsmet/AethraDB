@@ -1,8 +1,11 @@
 package evaluation.codegen.infrastructure.data;
 
 import org.apache.arrow.memory.RootAllocator;
+import org.apache.arrow.vector.DateDayVector;
 import org.apache.arrow.vector.FieldVector;
+import org.apache.arrow.vector.Float8Vector;
 import org.apache.arrow.vector.IntVector;
+import org.apache.arrow.vector.LargeVarCharVector;
 import org.apache.arrow.vector.VectorSchemaRoot;
 import org.apache.arrow.vector.ipc.ArrowFileReader;
 
@@ -84,8 +87,22 @@ public class CachingArrowTableReader extends ArrowTableReader {
                 if (fv_cvi_i instanceof IntVector int_fv_cvi_i) {
                     this.fieldVectors[cvi][i] = new IntVector(int_fv_cvi_i.getField(), this.tableAllocator);
                     int_fv_cvi_i.transferTo((IntVector) this.fieldVectors[cvi][i]);
+
+                } else if (fv_cvi_i instanceof Float8Vector f8_fv_cvi_i) {
+                    this.fieldVectors[cvi][i] = new Float8Vector(f8_fv_cvi_i.getField(), this.tableAllocator);
+                    f8_fv_cvi_i.transferTo((Float8Vector) this.fieldVectors[cvi][i]);
+
+                } else if (fv_cvi_i instanceof LargeVarCharVector lvc_fv_cvi_i) {
+                    this.fieldVectors[cvi][i] = new LargeVarCharVector(lvc_fv_cvi_i.getField(), this.tableAllocator);
+                    lvc_fv_cvi_i.transferTo((LargeVarCharVector) this.fieldVectors[cvi][i]);
+
+                } else if (fv_cvi_i instanceof DateDayVector dd_fv_cvi_i) {
+                    this.fieldVectors[cvi][i] = new DateDayVector(dd_fv_cvi_i.getField(), this.tableAllocator);
+                    dd_fv_cvi_i.transferTo((DateDayVector) this.fieldVectors[cvi][i]);
+
                 } else {
-                    throw new UnsupportedOperationException("CachingArrowTableReader.reset could not cache the current field vector type");
+                    throw new UnsupportedOperationException(
+                            "CachingArrowTableReader.reset could not cache the current field vector type: " + fv_cvi_i.getClass());
                 }
             }
             cvi++;

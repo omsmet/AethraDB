@@ -25,10 +25,13 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import static evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_DOUBLE_VECTOR;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_INT_VECTOR;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.P_INT;
+import static evaluation.codegen.infrastructure.context.QueryVariableType.VECTOR_DOUBLE_MASKED;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.VECTOR_INT_MASKED;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.VECTOR_MASK_INT;
+import static evaluation.codegen.infrastructure.context.QueryVariableType.VECTOR_SPECIES_DOUBLE;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.VECTOR_SPECIES_INT;
 import static evaluation.codegen.infrastructure.context.QueryVariableTypeMethods.memorySegmentTypeForArrowVector;
 import static evaluation.codegen.infrastructure.context.QueryVariableTypeMethods.primitiveMemberTypeForArrowVector;
@@ -188,7 +191,7 @@ public class ArrowTableScanOperator extends CodeGenOperator<LogicalArrowTableSca
                 ArrowVectorAccessPath currentOrdinal = (ArrowVectorAccessPath) currentOrdinalMapping.get(i);
 
                 // Process based on ordinal type
-                if (currentOrdinal.getType() == ARROW_INT_VECTOR) {
+                if (currentOrdinal.getType() == ARROW_DOUBLE_VECTOR || currentOrdinal.getType() == ARROW_INT_VECTOR) {
                     // MemorySegment col_[i]_ms = MemorySegment.ofAddress(
                     //                    [currentOrdinal].getDataBufferAddress(),
                     //                    [arrowVectorLength] * [currentOrdinal].TYPE_WIDTH);
@@ -312,8 +315,34 @@ public class ArrowTableScanOperator extends CodeGenOperator<LogicalArrowTableSca
 
                 // Compute the vector species required for this Arrow vector row values based on its type
                 SIMDVectorSpeciesAccessPath svsap;
+                QueryVariableType maskedSvsapType;
 
-                if (currentOrdinal.getType() == ARROW_INT_VECTOR) {
+                if (currentOrdinal.getType() == ARROW_DOUBLE_VECTOR) {
+                    QueryVariableType vectorElementType = primitiveMemberTypeForArrowVector(currentOrdinal.getType()); // P_DOUBLE
+
+                    if (!definedVectorSpecies.containsKey(vectorElementType)) {
+                        // Need to define the vector species first
+                        String vectorSpeciesVarName = cCtx.defineScanSurroundingVariable(
+                                "DoubleVectorSpecies",
+                                toJavaType(getLocation(), VECTOR_SPECIES_DOUBLE),
+                                createMethodInvocation(
+                                        getLocation(),
+                                        createAmbiguousNameRef(getLocation(), "oCtx"),
+                                        "getVectorSpeciesDouble"
+                                ),
+                                false
+                        );
+
+                        definedVectorSpecies.put(
+                                vectorElementType,
+                                new SIMDVectorSpeciesAccessPath(vectorSpeciesVarName, VECTOR_SPECIES_DOUBLE)
+                        );
+                    }
+
+                    svsap = definedVectorSpecies.get(vectorElementType);
+                    maskedSvsapType = VECTOR_DOUBLE_MASKED;
+
+                } else if (currentOrdinal.getType() == ARROW_INT_VECTOR) {
                     QueryVariableType vectorElementType = primitiveMemberTypeForArrowVector(currentOrdinal.getType()); // P_INT
 
                     if (!definedVectorSpecies.containsKey(vectorElementType)) {
@@ -324,10 +353,7 @@ public class ArrowTableScanOperator extends CodeGenOperator<LogicalArrowTableSca
                                 createMethodInvocation(
                                         getLocation(),
                                         createAmbiguousNameRef(getLocation(), "oCtx"),
-                                        "getIntVectorSpecies",
-                                        new Java.Rvalue[] {
-                                                commonSIMDVectorLengthAP.read()
-                                        }
+                                        "getVectorSpeciesInt"
                                 ),
                                 false
                         );
@@ -339,6 +365,8 @@ public class ArrowTableScanOperator extends CodeGenOperator<LogicalArrowTableSca
                     }
 
                     svsap = definedVectorSpecies.get(vectorElementType);
+                    maskedSvsapType = VECTOR_INT_MASKED;
+
                 } else {
                     throw new UnsupportedOperationException(
                             "ArrowTableScanOperator.produceNonVec does not support this data type for SIMD wrapping");
@@ -351,10 +379,10 @@ public class ArrowTableScanOperator extends CodeGenOperator<LogicalArrowTableSca
                         arrowVectorLengthAP,
                         currentVectorOffsetAccessPath,
                         commonSIMDVectorLengthAP,
-                        inRangeSIMDMaskAP,
+                        inRangeSIMDMaskAP,                  // TODO: this mask is not necessarily of the same type as the vector itself (e.g. Int vs Double mask)
                         memorySegmentAccessPaths.get(i),
                         svsap,
-                        VECTOR_INT_MASKED
+                        maskedSvsapType
                 ));
             }
 

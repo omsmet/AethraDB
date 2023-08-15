@@ -14,6 +14,7 @@ import static evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_
 import static evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_INT_VECTOR_W_SELECTION_VECTOR;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_INT_VECTOR_W_VALIDITY_MASK;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_LONG_VECTOR;
+import static evaluation.codegen.infrastructure.context.QueryVariableType.MEMORY_SEGMENT_DOUBLE;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.MEMORY_SEGMENT_INT;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.P_A_BOOLEAN;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.P_A_DOUBLE;
@@ -45,6 +46,20 @@ public final class QueryVariableTypeMethods {
     }
 
     /**
+     * Method to translate a SQL type to a primitive type.
+     */
+    public static QueryVariableType sqlTypeToPrimitiveType(SqlTypeName sqlType) {
+        return switch (sqlType) {
+            case DOUBLE -> P_DOUBLE;
+            case FLOAT -> P_FLOAT;
+            case INTEGER -> P_INT;
+            case BIGINT -> P_LONG;
+            default ->
+                    throw new IllegalArgumentException("sqlTypeToPrimitiveType does not support type " + sqlType.getName());
+        };
+    }
+
+    /**
      * Method to get the primitive scalar type for a given type.
      */
     public static QueryVariableType primitiveType(QueryVariableType type) {
@@ -71,6 +86,7 @@ public final class QueryVariableTypeMethods {
             case ARRAY_INT_VECTOR -> P_INT;
             case ARRAY_LONG_VECTOR -> P_LONG;
 
+            case VECTOR_DOUBLE_MASKED -> P_DOUBLE;
             case VECTOR_INT_MASKED -> P_INT;
 
             default -> throw new IllegalArgumentException(
@@ -154,6 +170,7 @@ public final class QueryVariableTypeMethods {
      */
     public static QueryVariableType memorySegmentTypeForArrowVector(QueryVariableType arrowType) {
         return switch (arrowType) {
+            case ARROW_DOUBLE_VECTOR -> MEMORY_SEGMENT_DOUBLE;
             case ARROW_INT_VECTOR -> MEMORY_SEGMENT_INT;
             default ->
                     throw new IllegalArgumentException("memorySegmentTypeForArrowVector expects an arrow type");
@@ -224,11 +241,12 @@ public final class QueryVariableTypeMethods {
             case P_A_INT -> createPrimitiveArrayType(location, Java.Primitive.INT);
             case P_A_LONG -> createPrimitiveArrayType(location, Java.Primitive.LONG);
 
-            case ARROW_DOUBLE_VECTOR -> createReferenceType(location, "org.apache.arrow.vector.DoubleVector");
-            case ARROW_FLOAT_VECTOR -> createReferenceType(location, "org.apache.arrow.vector.FloatVector");
+            case ARROW_DOUBLE_VECTOR -> createReferenceType(location, "org.apache.arrow.vector.Float8Vector");
+            case ARROW_FLOAT_VECTOR -> createReferenceType(location, "org.apache.arrow.vector.Float4Vector");
             case ARROW_INT_VECTOR -> createReferenceType(location, "org.apache.arrow.vector.IntVector");
             case ARROW_LONG_VECTOR -> createReferenceType(location, "org.apache.arrow.vector.BigIntVector");
 
+            case VECTOR_SPECIES_DOUBLE -> createReferenceType(location, "jdk.incubator.vector.VectorSpecies", "Double");
             case VECTOR_SPECIES_INT -> createReferenceType(location, "jdk.incubator.vector.VectorSpecies", "Integer");
 
             case VECTOR_MASK_INT -> createReferenceType(location, "jdk.incubator.vector.VectorMask", "Integer");

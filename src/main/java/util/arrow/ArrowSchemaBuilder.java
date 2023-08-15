@@ -3,6 +3,7 @@ package util.arrow;
 import org.apache.arrow.memory.RootAllocator;
 import org.apache.arrow.vector.VectorSchemaRoot;
 import org.apache.arrow.vector.ipc.ArrowFileReader;
+import org.apache.arrow.vector.types.FloatingPointPrecision;
 import org.apache.arrow.vector.types.pojo.ArrowType;
 import org.apache.arrow.vector.types.pojo.Field;
 import org.apache.arrow.vector.types.pojo.Schema;
@@ -91,7 +92,7 @@ public class ArrowSchemaBuilder {
 
             // Add each column to the calcite type
             for (Field column : arrowSchema.getFields()) {
-                RelDataType columnType = typeFactory.createTypeWithNullability(typeFactory.createSqlType(arrowToSqlType(column.getType())), false);
+                RelDataType columnType = typeFactory.createTypeWithNullability(arrowToSqlType(column.getType(), typeFactory), false);
                 builderForTable.add(column.getName(), columnType);
             }
 
@@ -109,19 +110,26 @@ public class ArrowSchemaBuilder {
     }
 
     /**
-     * Method for converting an {@link ArrowType} into a {@link SqlTypeName}.
+     * Method for converting an {@link ArrowType} into a {@link RelDataType}.
      * @param arrowType The {@link ArrowType} to convert.
-     * @return The {@link SqlTypeName} corresponding to {@code arrowType}.
+     * @return The {@link RelDataType} corresponding to {@code arrowType}.
      */
-    private static SqlTypeName arrowToSqlType(ArrowType arrowType) {
+    private static RelDataType arrowToSqlType(ArrowType arrowType, RelDataTypeFactory typeFactory) {
         if (arrowType instanceof ArrowType.Int)
-            return SqlTypeName.INTEGER;
+            return typeFactory.createSqlType(SqlTypeName.INTEGER);
+
         else if (arrowType instanceof ArrowType.LargeUtf8)
-            return SqlTypeName.VARCHAR;
-        else if (arrowType instanceof ArrowType.Decimal)
-            return SqlTypeName.DECIMAL;
+            return typeFactory.createSqlType(SqlTypeName.VARCHAR);
+
+        else if (arrowType instanceof ArrowType.Decimal arrowDecimalType)
+            return typeFactory.createSqlType(SqlTypeName.DECIMAL, arrowDecimalType.getPrecision(), arrowDecimalType.getScale());
+
         else if (arrowType instanceof ArrowType.Date)
-            return SqlTypeName.DATE;
+            return typeFactory.createSqlType(SqlTypeName.DATE);
+
+        else if (arrowType instanceof ArrowType.FloatingPoint fpat && fpat.getPrecision() == FloatingPointPrecision.DOUBLE)
+            return typeFactory.createSqlType(SqlTypeName.DOUBLE);
+
         else
             throw new IllegalArgumentException("The provided ArrowType is currently not supported: " + arrowType.toString());
     }

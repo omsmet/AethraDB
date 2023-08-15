@@ -38,15 +38,19 @@ public enum QueryVariableType {
     ARRAY_LONG_VECTOR,
 
     // SIMD related types
+    VECTOR_SPECIES_DOUBLE,
     VECTOR_SPECIES_INT,
 
+    VECTOR_MASK_DOUBLE,
     VECTOR_MASK_INT,
 
+    VECTOR_DOUBLE_MASKED,
     VECTOR_INT_MASKED,
 
     VECTOR_LONG,
 
     // Memory segment types
+    MEMORY_SEGMENT_DOUBLE,
     MEMORY_SEGMENT_INT,
 
     // Complex types

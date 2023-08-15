@@ -62,6 +62,18 @@ public abstract class AllocationManager {
     public abstract void release(boolean[] vector);
 
     /**
+     * Method for obtaining a double vector to use in query processing.
+     * @return A double vector of length {@code evaluation.vector_support.VectorisedOperators.VECTOR_LENGTH}.
+     */
+    public abstract double[] getDoubleVector();
+
+    /**
+     * Method to mark a double vector used in query processing as unused. ("free a vector")
+     * @param vector The vector to mark as unused.
+     */
+    public abstract void release(double[] vector);
+
+    /**
      * Method for obtaining a {@link Simple_Int_Long_Map} instance for use in query processing.
      * @return An empty {@link Simple_Int_Long_Map} instance.
      */

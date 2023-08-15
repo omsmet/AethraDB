@@ -53,6 +53,17 @@ public class DirectAllocationManager extends AllocationManager {
     }
 
     @Override
+    public double[] getDoubleVector() {
+        // Simply return a new vector
+        return new double[VectorisedOperators.VECTOR_LENGTH];
+    }
+
+    @Override
+    public void release(double[] vector) {
+        // Do nothing since we do not keep track of vectors which are in circulation.
+    }
+
+    @Override
     public Simple_Int_Long_Map getSimpleIntLongMap() {
         // Simply return a new map
         return new Simple_Int_Long_Map();
