@@ -2,6 +2,7 @@ package evaluation.codegen.infrastructure.data;
 
 import org.apache.arrow.memory.RootAllocator;
 import org.apache.arrow.vector.DateDayVector;
+import org.apache.arrow.vector.DecimalVector;
 import org.apache.arrow.vector.FieldVector;
 import org.apache.arrow.vector.Float8Vector;
 import org.apache.arrow.vector.IntVector;
@@ -99,6 +100,10 @@ public class CachingArrowTableReader extends ArrowTableReader {
                 } else if (fv_cvi_i instanceof DateDayVector dd_fv_cvi_i) {
                     this.fieldVectors[cvi][i] = new DateDayVector(dd_fv_cvi_i.getField(), this.tableAllocator);
                     dd_fv_cvi_i.transferTo((DateDayVector) this.fieldVectors[cvi][i]);
+
+                } else if (fv_cvi_i instanceof DecimalVector dd_fv_cvi_i) {
+                    this.fieldVectors[cvi][i] = new DecimalVector(dd_fv_cvi_i.getField(), this.tableAllocator);
+                    dd_fv_cvi_i.transferTo((DecimalVector) this.fieldVectors[cvi][i]);
 
                 } else {
                     throw new UnsupportedOperationException(
