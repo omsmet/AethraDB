@@ -4,6 +4,7 @@ import org.apache.arrow.memory.RootAllocator;
 import org.apache.arrow.vector.DateDayVector;
 import org.apache.arrow.vector.DecimalVector;
 import org.apache.arrow.vector.FieldVector;
+import org.apache.arrow.vector.FixedSizeBinaryVector;
 import org.apache.arrow.vector.Float8Vector;
 import org.apache.arrow.vector.IntVector;
 import org.apache.arrow.vector.LargeVarCharVector;
@@ -88,6 +89,10 @@ public class CachingArrowTableReader extends ArrowTableReader {
                 if (fv_cvi_i instanceof IntVector int_fv_cvi_i) {
                     this.fieldVectors[cvi][i] = new IntVector(int_fv_cvi_i.getField(), this.tableAllocator);
                     int_fv_cvi_i.transferTo((IntVector) this.fieldVectors[cvi][i]);
+
+                } else if (fv_cvi_i instanceof FixedSizeBinaryVector fsbv_fv_cvi_i) {
+                    this.fieldVectors[cvi][i] = new FixedSizeBinaryVector(fsbv_fv_cvi_i.getField(), this.tableAllocator);
+                    fsbv_fv_cvi_i.transferTo((FixedSizeBinaryVector) this.fieldVectors[cvi][i]);
 
                 } else if (fv_cvi_i instanceof Float8Vector f8_fv_cvi_i) {
                     this.fieldVectors[cvi][i] = new Float8Vector(f8_fv_cvi_i.getField(), this.tableAllocator);

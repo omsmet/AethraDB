@@ -159,6 +159,26 @@ public class JaninoGeneralGen {
      * @param value The value of the float/double literal.
      * @return a {@link Java.FloatingPointLiteral} with the specified value.
      */
+    public static Java.FloatingPointLiteral createFloatingPointLiteral(Location location, double value) {
+        return new Java.FloatingPointLiteral(location, Double.toString(value));
+    }
+
+    /**
+     * Method for creating a float/double literal.
+     * @param location The location at which the created primitive is requested for generation.
+     * @param value The value of the float/double literal.
+     * @return a {@link Java.FloatingPointLiteral} with the specified value.
+     */
+    public static Java.FloatingPointLiteral createFloatingPointLiteral(Location location, float value) {
+        return new Java.FloatingPointLiteral(location, Float.toString(value));
+    }
+
+    /**
+     * Method for creating a float/double literal.
+     * @param location The location at which the created primitive is requested for generation.
+     * @param value The value of the float/double literal.
+     * @return a {@link Java.FloatingPointLiteral} with the specified value.
+     */
     public static Java.FloatingPointLiteral createFloatingPointLiteral(Location location, String value) {
         return new Java.FloatingPointLiteral(location, value);
     }

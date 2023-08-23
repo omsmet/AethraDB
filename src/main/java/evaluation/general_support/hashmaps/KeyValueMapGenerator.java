@@ -29,6 +29,7 @@ import static evaluation.codegen.infrastructure.janino.JaninoControlGen.createWh
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createAmbiguousNameRef;
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createArrayElementAccessExpr;
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createCast;
+import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createFloatingPointLiteral;
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createIntegerLiteral;
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createNewPrimitiveArray;
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createPrimitiveArrayType;
@@ -61,6 +62,7 @@ import static evaluation.codegen.infrastructure.janino.JaninoVariableGen.createL
 import static evaluation.codegen.infrastructure.janino.JaninoVariableGen.createSimpleVariableDeclaration;
 import static evaluation.codegen.infrastructure.janino.JaninoVariableGen.createVariableAdditionAssignmentStm;
 import static evaluation.codegen.infrastructure.janino.JaninoVariableGen.createVariableAssignmentStm;
+import static evaluation.codegen.infrastructure.janino.JaninoVariableGen.createVariableXorAssignmentStm;
 
 /**
  * This class provides methods to generate a hash-map implementation for mapping some primitive type
@@ -75,7 +77,7 @@ public class KeyValueMapGenerator {
     /**
      * The {@link QueryVariableType} indicating the primitive key type of the map to be generated.
      */
-    public final QueryVariableType keyType;
+    public final QueryVariableType[] keyTypes;
 
     /**
      * The {@link QueryVariableType}s indicating the primitive type of each record value.
@@ -99,9 +101,9 @@ public class KeyValueMapGenerator {
             new ScalarVariableAccessPath("numberOfRecords", P_INT);
 
     /**
-     * The {@link AccessPath} to the array storing the keys in the map.
+     * The names of the arrays storing the record field keys in the map.
      */
-    private final ArrayAccessPath keysAP;
+    public final String[] keyVariableNames;
 
     /**
      * The names of the arrays storing the record field values in the map.
@@ -133,24 +135,29 @@ public class KeyValueMapGenerator {
     /**
      * Instantiate a {@link KeyValueMapGenerator} to generate a map type for specific key and
      * value types.
-     * @param keyType The key type that is to be used by the generated map.
+     * @param keyTypes The key types that are to be used by the generated map.
      * @param valueTypes The value types that records in the map should be built up of.
      */
-    public KeyValueMapGenerator(QueryVariableType keyType, QueryVariableType[] valueTypes) {
-        if (!isPrimitive(keyType))
-            throw new IllegalArgumentException("KeyValueMapGenerator expects a primitive key type, not " + keyType);
-        for (int i = 0; i < valueTypes.length; i++) {
-            QueryVariableType valueType = valueTypes[i];
+    public KeyValueMapGenerator(QueryVariableType[] keyTypes, QueryVariableType[] valueTypes) {
+        for (QueryVariableType keyType : keyTypes) {
+            if (!isPrimitive(keyType))
+                throw new IllegalArgumentException("KeyValueMapGenerator expects a primitive key type, not " + keyType);
+        }
+
+        for (QueryVariableType valueType : valueTypes) {
             if (!isPrimitive(valueType))
                 throw new IllegalArgumentException("KeyValueMapGenerator expects primitive value types, not " + valueType);
         }
 
-        this.keyType = keyType;
+        this.keyTypes = keyTypes;
         this.valueTypes = valueTypes;
 
         this.generationFinished = false;
 
-        this.keysAP = new ArrayAccessPath("keys", primitiveArrayTypeForPrimitive(this.keyType));
+        this.keyVariableNames = new String[keyTypes.length];
+        for (int i = 0; i < keyVariableNames.length; i++)
+            this.keyVariableNames[i] = "keys_ord_" + i;
+
         this.valueVariableNames = new String[valueTypes.length];
         for (int i = 0; i < valueVariableNames.length; i++)
             this.valueVariableNames[i] = "values_ord_" + i;
@@ -207,19 +214,24 @@ public class KeyValueMapGenerator {
                 )
         );
 
-        // Add the variable storing the keys in the map
-        this.mapDeclaration.addFieldDeclaration(
-                createPublicFieldDeclaration(
-                        getLocation(),
-                        toJavaType(getLocation(), this.keysAP.getType()),
-                        createSimpleVariableDeclaration(
-                                getLocation(),
-                                this.keysAP.getVariableName()
-                        )
-                )
-        );
+        // For each field of the key types, create an array
+        for (int i = 0; i < this.keyVariableNames.length; i++) {
+            this.mapDeclaration.addFieldDeclaration(
+                    createPublicFieldDeclaration(
+                            getLocation(),
+                            createPrimitiveArrayType(
+                                    getLocation(),
+                                    toJavaPrimitive(this.keyTypes[i])
+                            ),
+                            createSimpleVariableDeclaration(
+                                    getLocation(),
+                                    this.keyVariableNames[i]
+                            )
+                    )
+            );
+        }
 
-        // For each field of the value types, create a nested array
+        // For each field of the value types, create an array
         for (int i = 0; i < this.valueVariableNames.length; i++) {
             this.mapDeclaration.addFieldDeclaration(
                     createPublicFieldDeclaration(
@@ -347,38 +359,50 @@ public class KeyValueMapGenerator {
                 )
         );
 
-        // Initialise the keys array
-        constructorBody.add(
-                createVariableAssignmentStm(
-                        getLocation(),
-                        new Java.FieldAccessExpression(
-                                getLocation(),
-                                new Java.ThisReference(getLocation()),
-                                keysAP.getVariableName()
-                        ),
-                        createNewPrimitiveArray(
-                                getLocation(),
-                                toJavaPrimitive(keyType),
-                                capacityParameterAP.read()
-                        )
-                )
-        );
+        // Initialise the key arrays
+        for (int i = 0; i < this.keyVariableNames.length; i++) {
+            String keyVarName = this.keyVariableNames[i];
+            QueryVariableType keyVarPrimType = this.keyTypes[i];
 
-        constructorBody.add(
-                createMethodInvocationStm(
-                        getLocation(),
-                        createAmbiguousNameRef(getLocation(), "Arrays"),
-                        "fill",
-                        new Java.Rvalue[] {
-                                new Java.FieldAccessExpression(
-                                        getLocation(),
-                                        new Java.ThisReference(getLocation()),
-                                        keysAP.getVariableName()
-                                ),
-                                createIntegerLiteral(getLocation(), -1)
-                        }
-                )
-        );
+            constructorBody.add(
+                    createVariableAssignmentStm(
+                            getLocation(),
+                            new Java.FieldAccessExpression(
+                                    getLocation(),
+                                    new Java.ThisReference(getLocation()),
+                                    keyVarName
+                            ),
+                            createNewPrimitiveArray(
+                                    getLocation(),
+                                    toJavaPrimitive(keyVarPrimType),
+                                    capacityParameterAP.read()
+                            )
+                    )
+            );
+
+            Java.Rvalue initialisationLiteral = switch (keyVarPrimType) {
+                case P_INT -> createIntegerLiteral(getLocation(), -1);
+
+                default -> throw new UnsupportedOperationException(
+                        "KeyValueMapGenerator.generateConstructors does not support this key type: " + keyVarPrimType);
+            };
+
+            constructorBody.add(
+                    createMethodInvocationStm(
+                            getLocation(),
+                            createAmbiguousNameRef(getLocation(), "Arrays"),
+                            "fill",
+                            new Java.Rvalue[] {
+                                    new Java.FieldAccessExpression(
+                                            getLocation(),
+                                            new Java.ThisReference(getLocation()),
+                                            keyVarName
+                                    ),
+                                    initialisationLiteral
+                            }
+                    )
+            );
+        }
 
         // Initialise each of the value arrays
         for (int i = 0; i < this.valueVariableNames.length; i++) {
@@ -492,22 +516,25 @@ public class KeyValueMapGenerator {
     private void generateIncrementForKeyMethod() {
         // Generate the method signature
         Java.FunctionDeclarator.FormalParameter[] formalParameters =
-                new Java.FunctionDeclarator.FormalParameter[this.valueTypes.length + 2];
+                new Java.FunctionDeclarator.FormalParameter[this.keyTypes.length + 1 + this.valueTypes.length];
+        int currentFormalParamIndex = 0;
 
-        formalParameters[0] = createFormalParameter(
-                getLocation(),
-                toJavaType(getLocation(), keyType),
-                "key"
-        );
+        for (int i = 0; i < this.keyTypes.length; i++) {
+            formalParameters[currentFormalParamIndex++] = createFormalParameter(
+                    getLocation(),
+                    toJavaType(getLocation(), this.keyTypes[i]),
+                    "key_ord_" + i
+            );
+        }
 
-        formalParameters[1] = createFormalParameter(
+        formalParameters[currentFormalParamIndex++] = createFormalParameter(
                 getLocation(),
                 toJavaType(getLocation(), P_LONG),
                 "preHash"
         );
 
         for (int i = 0; i < this.valueTypes.length; i++) {
-            formalParameters[i + 2] = createFormalParameter(
+            formalParameters[currentFormalParamIndex++] = createFormalParameter(
                     getLocation(),
                     toJavaType(getLocation(), this.valueTypes[i]),
                     "record_ord_" + i
@@ -515,22 +542,31 @@ public class KeyValueMapGenerator {
         }
 
         // Create the method body
-        List<Java.Statement> associateMethodBody = new ArrayList<>();
+        List<Java.Statement> incrementForKeyMethodBody = new ArrayList<>();
 
-        // Create the non-negative key check
-        associateMethodBody.add(
-                generateNonNegativeCheck(
-                        createAmbiguousNameRef(
-                                getLocation(),
-                                formalParameters[0].name
-                        )
-                )
-        );
+        // Create the non-negative keys check
+        for (int i = 0; i < this.keyVariableNames.length; i++) {
+            incrementForKeyMethodBody.add(
+                    generateNonNegativeCheck(
+                            createAmbiguousNameRef(
+                                    getLocation(),
+                                    formalParameters[i].name
+                            )
+                    )
+            );
+        }
 
         // Declare the index variable and check whether the key is already contained in the map
-        // int index = find(key, preHash);
+        // int index = find(keys ..., preHash);
         ScalarVariableAccessPath indexAP = new ScalarVariableAccessPath("index", P_INT);
-        associateMethodBody.add(
+        Java.Rvalue[] findMethodArguments = new Java.Rvalue[this.keyVariableNames.length + 1];
+        for (int i = 0; i < findMethodArguments.length; i++)
+            findMethodArguments[i] = createAmbiguousNameRef(
+                    getLocation(),
+                    formalParameters[i].name
+            );
+
+        incrementForKeyMethodBody.add(
                 createLocalVariable(
                         getLocation(),
                         toJavaType(getLocation(), indexAP.getType()),
@@ -539,16 +575,7 @@ public class KeyValueMapGenerator {
                                 getLocation(),
                                 new Java.ThisReference(getLocation()),
                                 FIND_METHOD_NAME,
-                                new Java.Rvalue[] {
-                                        createAmbiguousNameRef(
-                                                getLocation(),
-                                                formalParameters[0].name
-                                        ),
-                                        createAmbiguousNameRef(
-                                                getLocation(),
-                                                formalParameters[1].name
-                                        )
-                                }
+                                findMethodArguments
                         )
                 )
         );
@@ -558,12 +585,13 @@ public class KeyValueMapGenerator {
         // if (index == -1) {
         //     newEntry = true;
         //     index = this.numberOfRecords++;
-        //     if (this.keys.length == index)
+        //     if (this.keys_ord_0.length == index)
         //         growArrays();
-        //     this.keys[index] = key;
+        //     $ for each key ord j $
+        //     this.keys_ord_j[index] = key_j;
         // }
         ScalarVariableAccessPath newEntryAP = new ScalarVariableAccessPath("newEntry", P_BOOLEAN);
-        associateMethodBody.add(
+        incrementForKeyMethodBody.add(
                 createLocalVariable(
                         getLocation(),
                         toJavaType(getLocation(), newEntryAP.getType()),
@@ -605,7 +633,7 @@ public class KeyValueMapGenerator {
                                         new Java.FieldAccessExpression(
                                                 getLocation(),
                                                 new Java.ThisReference(getLocation()),
-                                                this.keysAP.getVariableName()
+                                                this.keyVariableNames[0]
                                         ),
                                         "length"
                                 ),
@@ -618,22 +646,24 @@ public class KeyValueMapGenerator {
                         )
                 )
         );
-        allocateIndexBody.addStatement(
-                createVariableAssignmentStm(
-                        getLocation(),
-                        createArrayElementAccessExpr(
-                                getLocation(),
-                                createThisFieldAccess(
-                                        getLocation(),
-                                        this.keysAP.getVariableName()
-                                ),
-                                indexAP.read()
-                        ),
-                        createAmbiguousNameRef(getLocation(), formalParameters[0].name)
-                )
-        );
+        for (int i = 0; i < this.keyVariableNames.length; i++) {
+            allocateIndexBody.addStatement(
+                    createVariableAssignmentStm(
+                            getLocation(),
+                            createArrayElementAccessExpr(
+                                    getLocation(),
+                                    createThisFieldAccess(
+                                            getLocation(),
+                                            this.keyVariableNames[i]
+                                    ),
+                                    indexAP.read()
+                            ),
+                            createAmbiguousNameRef(getLocation(), formalParameters[i].name)
+                    )
+            );
+        }
 
-        associateMethodBody.add(
+        incrementForKeyMethodBody.add(
                 createIf(
                         getLocation(),
                         eq(
@@ -648,7 +678,7 @@ public class KeyValueMapGenerator {
         // Increment this key's values by the provided amounts
         // this.values_record_ord_i[index] += record_ord_i;
         for (int i = 0; i < valueVariableNames.length; i++) {
-            associateMethodBody.add(
+            incrementForKeyMethodBody.add(
                     createVariableAdditionAssignmentStm(
                             getLocation(),
                             createArrayElementAccessExpr(
@@ -664,7 +694,7 @@ public class KeyValueMapGenerator {
         // Invoke the putHashEntry method if the records was a new record
         // if (newEntry) {
         //     boolean rehashOnCollision = this.numberOfRecords > (3 * this.hashTable.length) / 4;
-        //     putHashEntry(key, preHash, newIndex, rehashOnCollision);
+        //     putHashEntry(keys ..., preHash, newIndex, rehashOnCollision);
         // }
         Java.Block hashMaintentanceBlock = new Java.Block(getLocation());
 
@@ -696,21 +726,23 @@ public class KeyValueMapGenerator {
                 )
         );
 
+        Java.Rvalue[] putHashEntryArguments = new Java.Rvalue[this.keyVariableNames.length + 3];
+        int currentPutHashEntryArgumentIndex = 0;
+        for (int i = 0; i < this.keyVariableNames.length + 1; i++) // Keys and pre-hash value
+            putHashEntryArguments[currentPutHashEntryArgumentIndex++] = createAmbiguousNameRef(getLocation(), formalParameters[i].name);
+        putHashEntryArguments[currentPutHashEntryArgumentIndex++] = indexAP.read();
+        putHashEntryArguments[currentPutHashEntryArgumentIndex++] = createAmbiguousNameRef(getLocation(), "rehashOnCollision");
+
         hashMaintentanceBlock.addStatement(
                 createMethodInvocationStm(
                         getLocation(),
                         new Java.ThisReference(getLocation()),
                         PUT_HASH_ENTRY_METHOD_NAME,
-                        new Java.Rvalue[] {
-                                createAmbiguousNameRef(getLocation(), formalParameters[0].name),
-                                createAmbiguousNameRef(getLocation(), formalParameters[1].name),
-                                indexAP.read(),
-                                createAmbiguousNameRef(getLocation(), "rehashOnCollision")
-                        }
+                        putHashEntryArguments
                 )
         );
 
-        associateMethodBody.add(
+        incrementForKeyMethodBody.add(
                 createIf(
                         getLocation(),
                         newEntryAP.read(),
@@ -718,8 +750,7 @@ public class KeyValueMapGenerator {
                 )
         );
 
-
-        // public void incrementForKey([keyType] key, long preHash, [values ...])
+        // public void incrementForKey([keys ...], long preHash, [values ...])
         createMethod(
                 getLocation(),
                 this.mapDeclaration,
@@ -727,7 +758,7 @@ public class KeyValueMapGenerator {
                 createPrimitiveType(getLocation(), Java.Primitive.VOID),
                 INCREMENT_FOR_KEY_METHOD_NAME,
                 createFormalParameters(getLocation(), formalParameters),
-                associateMethodBody
+                incrementForKeyMethodBody
         );
     }
 
@@ -738,15 +769,18 @@ public class KeyValueMapGenerator {
     private void generateFindMethod() {
         // Generate the method signature
         Java.FunctionDeclarator.FormalParameter[] formalParameters =
-                new Java.FunctionDeclarator.FormalParameter[2];
+                new Java.FunctionDeclarator.FormalParameter[this.keyTypes.length + 1];
+        int currentFormalParameterIndex = 0;
 
-        formalParameters[0] = createFormalParameter(
-                getLocation(),
-                toJavaType(getLocation(), keyType),
-                "key"
-        );
+        for (int i = 0; i < this.keyTypes.length; i++) {
+            formalParameters[currentFormalParameterIndex++] = createFormalParameter(
+                    getLocation(),
+                    toJavaType(getLocation(), this.keyTypes[i]),
+                    "key_ord_" + i
+            );
+        }
 
-        formalParameters[1] = createFormalParameter(
+        formalParameters[currentFormalParameterIndex++] = createFormalParameter(
                 getLocation(),
                 toJavaType(getLocation(), P_LONG),
                 "preHash"
@@ -805,7 +839,7 @@ public class KeyValueMapGenerator {
 
         // Otherwise follow next-pointers while necessary
         // int currentIndex = initialIndex;
-        // while (this.keys[currentIndex] != key) {
+        // while ($ conjunction of key ords $ this.keys_ord_i[currentIndex] != key_ord_i) {
         //     int potentialNextIndex = this.next[currentIndex];
         //     if (potentialNextIndex == -1)
         //         return -1;
@@ -822,19 +856,37 @@ public class KeyValueMapGenerator {
                 )
         );
 
+        // Generate the conjunction for the while-loop guard
+        Java.Rvalue nextLoopConjunction = neq(
+                getLocation(),
+                createArrayElementAccessExpr(
+                        getLocation(),
+                        createThisFieldAccess(getLocation(), this.keyVariableNames[0]),
+                        currentIndex.read()
+                ),
+                createAmbiguousNameRef(getLocation(), formalParameters[0].name)
+        );
+        for (int i = 1; i < this.keyVariableNames.length; i++) {
+            nextLoopConjunction = and(
+                    getLocation(),
+                    nextLoopConjunction,
+                    neq(
+                            getLocation(),
+                            createArrayElementAccessExpr(
+                                    getLocation(),
+                                    createThisFieldAccess(getLocation(), this.keyVariableNames[i]),
+                                    currentIndex.read()
+                            ),
+                            createAmbiguousNameRef(getLocation(), formalParameters[i].name)
+                    )
+            );
+        }
+
         Java.Block nextPointerLoopBody = new Java.Block(getLocation());
         findMethodBody.add(
                 createWhileLoop(
                         getLocation(),
-                        neq(
-                                getLocation(),
-                                createArrayElementAccessExpr(
-                                        getLocation(),
-                                        createThisFieldAccess(getLocation(), this.keysAP.getVariableName()),
-                                        currentIndex.read()
-                                ),
-                                createAmbiguousNameRef(getLocation(), formalParameters[0].name)
-                        ),
+                        nextLoopConjunction,
                         nextPointerLoopBody
                 )
         );
@@ -865,7 +917,7 @@ public class KeyValueMapGenerator {
         // We found the index: return currentIndex;
         findMethodBody.add(createReturnStm(getLocation(), currentIndex.read()));
 
-        // private int find([keyType key], long preHash)
+        // private int find([keys ...], long preHash)
         createMethod(
                 getLocation(),
                 this.mapDeclaration,
@@ -885,7 +937,7 @@ public class KeyValueMapGenerator {
     private void generateGrowArraysMethod() {
         List<Java.Statement> growArraysMethodBody = new ArrayList<>();
 
-        // int currentSize = this.keys.length;
+        // int currentSize = this.keys_ord_0.length;
         ScalarVariableAccessPath currentSize = new ScalarVariableAccessPath("currentSize", P_INT);
         growArraysMethodBody.add(
                 createLocalVariable(
@@ -894,9 +946,7 @@ public class KeyValueMapGenerator {
                         currentSize.getVariableName(),
                         new Java.FieldAccessExpression(
                                 getLocation(),
-                                createThisFieldAccess(
-                                        getLocation(), keysAP.getVariableName()
-                                ),
+                                createThisFieldAccess(getLocation(), this.keyVariableNames[0]),
                                 "length"
                         )
                 )
@@ -943,66 +993,79 @@ public class KeyValueMapGenerator {
                 )
         );
 
-        // Grow, copy and fill the keys array
-        growArraysMethodBody.add(
-                createLocalVariable(
-                        getLocation(),
-                        toJavaType(getLocation(), primitiveArrayTypeForPrimitive(this.keyType)),
-                        "newKeys",
-                        createNewPrimitiveArray(
-                                getLocation(),
-                                toJavaPrimitive(this.keyType),
-                                newSize.read()
-                        )
-                )
-        );
+        // Grow, copy and fill the key arrays
+        for (int i = 0; i < this.keyVariableNames.length; i++) {
+            String keyVarName = this.keyVariableNames[i];
+            String newKeyVarName = keyVarName + "_new";
+            QueryVariableType keyPrimType = this.keyTypes[i];
 
-        growArraysMethodBody.add(
-                createMethodInvocationStm(
-                        getLocation(),
-                        createAmbiguousNameRef(getLocation(), "System"),
-                        "arraycopy",
-                        new Java.Rvalue[] {
-                                createThisFieldAccess(getLocation(), this.keysAP.getVariableName()),
-                                createIntegerLiteral(getLocation(), 0),
-                                createAmbiguousNameRef(getLocation(), "newKeys"),
-                                createIntegerLiteral(getLocation(), 0),
-                                currentSize.read()
-                        }
-                )
-        );
+            growArraysMethodBody.add(
+                    createLocalVariable(
+                            getLocation(),
+                            toJavaType(getLocation(), primitiveArrayTypeForPrimitive(keyPrimType)),
+                            newKeyVarName,
+                            createNewPrimitiveArray(
+                                    getLocation(),
+                                    toJavaPrimitive(keyPrimType),
+                                    newSize.read()
+                            )
+                    )
+            );
 
-        growArraysMethodBody.add(
-                createMethodInvocationStm(
-                        getLocation(),
-                        createAmbiguousNameRef(getLocation(), "Arrays"),
-                        "fill",
-                        new Java.Rvalue[] {
-                                createAmbiguousNameRef(getLocation(), "newKeys"),
-                                currentSize.read(),
-                                newSize.read(),
-                                createIntegerLiteral(getLocation(), -1)
-                        }
-                )
-        );
+            growArraysMethodBody.add(
+                    createMethodInvocationStm(
+                            getLocation(),
+                            createAmbiguousNameRef(getLocation(), "System"),
+                            "arraycopy",
+                            new Java.Rvalue[]{
+                                    createThisFieldAccess(getLocation(), keyVarName),
+                                    createIntegerLiteral(getLocation(), 0),
+                                    createAmbiguousNameRef(getLocation(), newKeyVarName),
+                                    createIntegerLiteral(getLocation(), 0),
+                                    currentSize.read()
+                            }
+                    )
+            );
 
-        growArraysMethodBody.add(
-                createVariableAssignmentStm(
-                        getLocation(),
-                        createThisFieldAccess(getLocation(), this.keysAP.getVariableName()),
-                        createAmbiguousNameRef(getLocation(), "newKeys")
-                )
-        );
+            Java.Rvalue initialisationLiteral = switch (keyPrimType) {
+                case P_INT -> createIntegerLiteral(getLocation(), -1);
+
+                default -> throw new UnsupportedOperationException(
+                        "KeyValueMapGenerator.generateGrowArraysMethod does not support this key type: " + keyPrimType);
+            };
+
+            growArraysMethodBody.add(
+                    createMethodInvocationStm(
+                            getLocation(),
+                            createAmbiguousNameRef(getLocation(), "Arrays"),
+                            "fill",
+                            new Java.Rvalue[]{
+                                    createAmbiguousNameRef(getLocation(), newKeyVarName),
+                                    currentSize.read(),
+                                    newSize.read(),
+                                    initialisationLiteral
+                            }
+                    )
+            );
+
+            growArraysMethodBody.add(
+                    createVariableAssignmentStm(
+                            getLocation(),
+                            createThisFieldAccess(getLocation(), keyVarName),
+                            createAmbiguousNameRef(getLocation(), newKeyVarName)
+                    )
+            );
+        }
 
         // Grow, copy and fill the next array
         growArraysMethodBody.add(
                 createLocalVariable(
                         getLocation(),
-                        toJavaType(getLocation(), primitiveArrayTypeForPrimitive(this.keyType)),
+                        toJavaType(getLocation(), primitiveArrayTypeForPrimitive(P_INT)),
                         "newNext",
                         createNewPrimitiveArray(
                                 getLocation(),
-                                toJavaPrimitive(this.keyType),
+                                toJavaPrimitive(P_INT),
                                 newSize.read()
                         )
                 )
@@ -1109,27 +1172,33 @@ public class KeyValueMapGenerator {
     private void generatePutHashEntryMethod() {
         // Generate the method signature
         Java.FunctionDeclarator.FormalParameter[] formalParameters =
-                new Java.FunctionDeclarator.FormalParameter[4];
+                new Java.FunctionDeclarator.FormalParameter[this.keyTypes.length + 3];
+        int currentFormalParamIndex = 0;
 
-        formalParameters[0] = createFormalParameter(
-                getLocation(),
-                toJavaType(getLocation(), keyType),
-                "key"
-        );
+        for (int i = 0; i < this.keyTypes.length; i++) {
+            formalParameters[currentFormalParamIndex++] = createFormalParameter(
+                    getLocation(),
+                    toJavaType(getLocation(), this.keyTypes[i]),
+                    "key_ord_" + i
+            );
+        }
 
-        formalParameters[1] = createFormalParameter(
+        int prehashFormalParamIndex = currentFormalParamIndex++;
+        formalParameters[prehashFormalParamIndex] = createFormalParameter(
                 getLocation(),
                 toJavaType(getLocation(), P_LONG),
                 "preHash"
         );
 
-        formalParameters[2] = createFormalParameter(
+        int indexFormalParamIndex = currentFormalParamIndex++;
+        formalParameters[indexFormalParamIndex] = createFormalParameter(
                 getLocation(),
                 toJavaType(getLocation(), P_INT),
                 "index"
         );
 
-        formalParameters[3] = createFormalParameter(
+        int rehashOnCollisionFormalParamIndex = currentFormalParamIndex++;
+        formalParameters[rehashOnCollisionFormalParamIndex] = createFormalParameter(
                 getLocation(),
                 toJavaType(getLocation(), P_BOOLEAN),
                 "rehashOnCollision"
@@ -1146,7 +1215,7 @@ public class KeyValueMapGenerator {
                         toJavaType(getLocation(), htIndex.getType()),
                         htIndex.getVariableName(),
                         this.generatePreHashToHashStatement(
-                                createAmbiguousNameRef(getLocation(), formalParameters[1].name)
+                                createAmbiguousNameRef(getLocation(), formalParameters[prehashFormalParamIndex].name)
                         )
                 )
         );
@@ -1180,7 +1249,7 @@ public class KeyValueMapGenerator {
                                 createThisFieldAccess(getLocation(), hashTableAP.getVariableName()),
                                 htIndex.read()
                         ),
-                        createAmbiguousNameRef(getLocation(), formalParameters[2].name)
+                        createAmbiguousNameRef(getLocation(), formalParameters[indexFormalParamIndex].name)
                 )
         );
 
@@ -1209,7 +1278,7 @@ public class KeyValueMapGenerator {
         putHEMethodBody.add(
                 createIf(
                         getLocation(),
-                        createAmbiguousNameRef(getLocation(), formalParameters[3].name),
+                        createAmbiguousNameRef(getLocation(), formalParameters[rehashOnCollisionFormalParamIndex].name),
                         rehashOnCollisionBody
                 )
         );
@@ -1226,23 +1295,40 @@ public class KeyValueMapGenerator {
                 )
         );
 
-        // while (this.keys[currentIndex] != key && this.next[currentIndex] != -1) {
+        // while ($ conjunction per key ord i $ this.keys_ord_i[currentIndex] != key_ord_i $$ && this.next[currentIndex] != -1) {
         //     currentIndex = this.next[currentIndex];
         // }
+        Java.Rvalue probeWhileLoopConjunction = neq(
+                getLocation(),
+                createArrayElementAccessExpr(
+                        getLocation(),
+                        createThisFieldAccess(getLocation(), this.keyVariableNames[0]),
+                        currentIndex.read()
+                ),
+                createAmbiguousNameRef(getLocation(), formalParameters[0].name)
+        );
+        for (int i = 1; i < this.keyVariableNames.length; i++) {
+            probeWhileLoopConjunction = and(
+                    getLocation(),
+                    probeWhileLoopConjunction,
+                    neq(
+                            getLocation(),
+                            createArrayElementAccessExpr(
+                                    getLocation(),
+                                    createThisFieldAccess(getLocation(), this.keyVariableNames[i]),
+                                    currentIndex.read()
+                            ),
+                            createAmbiguousNameRef(getLocation(), formalParameters[i].name)
+                    )
+            );
+        }
+
         putHEMethodBody.add(
                 createWhileLoop(
                         getLocation(),
                         and(
                                 getLocation(),
-                                neq(
-                                        getLocation(),
-                                        createArrayElementAccessExpr(
-                                                getLocation(),
-                                                createThisFieldAccess(getLocation(), this.keysAP.getVariableName()),
-                                                currentIndex.read()
-                                        ),
-                                        createAmbiguousNameRef(getLocation(), formalParameters[0].name)
-                                ),
+                                probeWhileLoopConjunction,
                                 neq(
                                         getLocation(),
                                         createArrayElementAccessExpr(
@@ -1279,11 +1365,11 @@ public class KeyValueMapGenerator {
                                 ),
                                 currentIndex.read()
                         ),
-                        createAmbiguousNameRef(getLocation(), formalParameters[2].name)
+                        createAmbiguousNameRef(getLocation(), formalParameters[indexFormalParamIndex].name)
                 )
         );
 
-        // private void putHashEntry([keyType key], long preHash, int index, boolean rehashOnCollision)
+        // private void putHashEntry([keys ...], long preHash, int index, boolean rehashOnCollision)
         createMethod(
                 getLocation(),
                 this.mapDeclaration,
@@ -1383,9 +1469,12 @@ public class KeyValueMapGenerator {
 
         // Finally insert all key-value associations in the new hash-table
         // for (int i = 0; i < this.numberOfRecords; i++) {
-        //     [keyType] key = this.keys[i];
-        //     long preHash = [hash_function_container].hash(key);
-        //     this.putHashEntry(key, preHash, i, false);
+        //     $ for each key ord j $
+        //       [keyType] key_ord_j = this.keys_ord_j[i];
+        //     long preHash = [hash_function_container].hash(key_ord_0);
+        //     $ for each remaining key ord j $
+        //       preHash ^= [hash_function_container].hash(key_ord_j);
+        //     this.putHashEntry([keys ...], preHash, i, false);
         // }
         Java.Block hashAssociationLoopBody = new Java.Block(getLocation());
 
@@ -1409,50 +1498,79 @@ public class KeyValueMapGenerator {
                 )
         );
 
-        hashAssociationLoopBody.addStatement(
-                createLocalVariable(
-                        getLocation(),
-                        toJavaType(getLocation(), keyType),
-                        "key",
-                        createArrayElementAccessExpr(
-                                getLocation(),
-                                createThisFieldAccess(getLocation(), this.keysAP.getVariableName()),
-                                indexVar.read()
-                        )
-                )
-        );
+        ScalarVariableAccessPath[] keyVarAPs = new ScalarVariableAccessPath[this.keyVariableNames.length];
+        for (int i = 0; i < this.keyVariableNames.length; i++) {
+            String keyName = "key_ord_" + i;
+            QueryVariableType keyType = this.keyTypes[i];
 
-        hashAssociationLoopBody.addStatement(
-                createLocalVariable(
-                        getLocation(),
-                        createPrimitiveType(getLocation(), Java.Primitive.LONG),
-                        "preHash",
-                        createMethodInvocation(
+            keyVarAPs[i] = new ScalarVariableAccessPath(keyName, keyType);
+            hashAssociationLoopBody.addStatement(
+                    createLocalVariable(
+                            getLocation(),
+                            toJavaType(getLocation(), keyType),
+                            keyName,
+                            createArrayElementAccessExpr(
+                                    getLocation(),
+                                    createThisFieldAccess(getLocation(), this.keyVariableNames[i]),
+                                    indexVar.read()
+                            )
+                    )
+            );
+        }
+
+        for (int i = 0; i < this.keyVariableNames.length; i++) {
+            Java.MethodInvocation hashMethodInvocation = createMethodInvocation(
+                    getLocation(),
+                    switch (this.keyTypes[i]) {
+                        case P_INT -> createAmbiguousNameRef(getLocation(), "Int_Hash_Function");
+
+                        default -> throw new UnsupportedOperationException(
+                                "This key-type is currently not supported by the KeyValueMapGenerator");
+                    },
+                    "preHash",
+                    new Java.Rvalue[]{
+                            keyVarAPs[i].read()
+                    }
+            );
+
+            if (i == 0) {
+                // On the first key ordinal, we need to initialise the preHash variable
+                hashAssociationLoopBody.addStatement(
+                        createLocalVariable(
                                 getLocation(),
-                                switch (keyType) {
-                                    case P_INT -> createAmbiguousNameRef(getLocation(), "Int_Hash_Function");
-                                    default -> throw new UnsupportedOperationException(
-                                            "This key-type is currently not supported by the KeyValueMapGenerator");
-                                },
+                                createPrimitiveType(getLocation(), Java.Primitive.LONG),
                                 "preHash",
-                                new Java.Rvalue[] {
-                                        createAmbiguousNameRef(getLocation(), "key")
-                                }
+                                hashMethodInvocation
                         )
-                )
-        );
+                );
+            } else {
+                // On the remaining key ordinals, we need to "extend" the preHash variable
+                hashAssociationLoopBody.addStatement(
+                        createVariableXorAssignmentStm(
+                                getLocation(),
+                                createAmbiguousNameRef(getLocation(), "preHash"),
+                                hashMethodInvocation
+                        )
+                );
+            }
+        }
+
+        Java.Rvalue[] putHashEntryArguments = new Java.Rvalue[keyVarAPs.length + 3];
+        int currentPutHashEntryArgumentIndex = 0;
+        for (int i = 0; i < keyVarAPs.length; i++)
+            putHashEntryArguments[currentPutHashEntryArgumentIndex++] = keyVarAPs[i].read();
+        putHashEntryArguments[currentPutHashEntryArgumentIndex++] =
+                createAmbiguousNameRef(getLocation(), "preHash");
+        putHashEntryArguments[currentPutHashEntryArgumentIndex++] = indexVar.read();
+        putHashEntryArguments[currentPutHashEntryArgumentIndex++] =
+                new Java.BooleanLiteral(getLocation(), "false");
 
         hashAssociationLoopBody.addStatement(
                 createMethodInvocationStm(
                         getLocation(),
                         new Java.ThisReference(getLocation()),
                         PUT_HASH_ENTRY_METHOD_NAME,
-                        new Java.Rvalue[] {
-                                createAmbiguousNameRef(getLocation(), "key"),
-                                createAmbiguousNameRef(getLocation(), "preHash"),
-                                indexVar.read(),
-                                new Java.BooleanLiteral(getLocation(), "false")
-                        }
+                        putHashEntryArguments
                 )
         );
 
@@ -1488,18 +1606,28 @@ public class KeyValueMapGenerator {
                 )
         );
 
-        // Arrays.fill(this.keys, -1);
-        resetMethodBody.add(
-                createMethodInvocationStm(
-                        getLocation(),
-                        createAmbiguousNameRef(getLocation(), "Arrays"),
-                        "fill",
-                        new Java.Rvalue[] {
-                                createThisFieldAccess(getLocation(), this.keysAP.getVariableName()),
-                                createIntegerLiteral(getLocation(), -1)
-                        }
-                )
-        );
+        // Arrays.fill(this.keys_ord_i, -1);
+        for (int i = 0; i < this.keyVariableNames.length; i++) {
+            QueryVariableType keyType = this.keyTypes[i];
+            Java.Rvalue initialisationLiteral = switch (keyType) {
+                case P_INT -> createIntegerLiteral(getLocation(), -1);
+
+                default -> throw new UnsupportedOperationException(
+                        "KeyValueMapGenerator.generateResetMethod does not support this key type: " + keyType);
+            };
+
+            resetMethodBody.add(
+                    createMethodInvocationStm(
+                            getLocation(),
+                            createAmbiguousNameRef(getLocation(), "Arrays"),
+                            "fill",
+                            new Java.Rvalue[]{
+                                    createThisFieldAccess(getLocation(), this.keyVariableNames[i]),
+                                    initialisationLiteral
+                            }
+                    )
+            );
+        }
 
         // Arrays.fill(this.hashTable, -1);
         resetMethodBody.add(
@@ -1529,6 +1657,15 @@ public class KeyValueMapGenerator {
 
         // Zero the value arrays
         for (int i = 0; i < this.valueVariableNames.length; i++) {
+            QueryVariableType valueType = this.valueTypes[i];
+            Java.Rvalue initialisationLiteral = switch (valueType) {
+                case P_DOUBLE, P_FLOAT -> createFloatingPointLiteral(getLocation(), 0d);
+                case P_INT, P_LONG -> createIntegerLiteral(getLocation(), 0);
+
+                default -> throw new UnsupportedOperationException(
+                        "KeyValueMapGenerator.generateResetMethod does not support this value type: " + valueType);
+            };
+
             resetMethodBody.add(
                     createMethodInvocationStm(
                             getLocation(),
@@ -1536,7 +1673,7 @@ public class KeyValueMapGenerator {
                             "fill",
                             new Java.Rvalue[] {
                                     createThisFieldAccess(getLocation(), this.valueVariableNames[i]),
-                                    createIntegerLiteral(getLocation(), 0)
+                                    initialisationLiteral
                             }
                     )
             );

@@ -764,7 +764,7 @@ public class JoinOperator extends CodeGenOperator<LogicalJoin> {
             ArrowVectorAccessPath buildKeyAVAP = ((ArrowVectorAccessPath) buildKeyAP);
 
             if (!this.useSIMDVec()) {
-                // VectorisedHashOperators.constructPreHashKeyVector([this.preHashVectorAP.read()], [buildKeyAVAP.read()]);
+                // VectorisedHashOperators.constructPreHashKeyVector([this.preHashVectorAP.read()], [buildKeyAVAP.read()], false);
                 codeGenResult.add(
                         createMethodInvocationStm(
                                 getLocation(),
@@ -772,11 +772,12 @@ public class JoinOperator extends CodeGenOperator<LogicalJoin> {
                                 "constructPreHashKeyVector",
                                 new Java.Rvalue[]{
                                         this.preHashVectorAP.read(),
-                                        buildKeyAVAP.read()
+                                        buildKeyAVAP.read(),
+                                        new Java.BooleanLiteral(getLocation(), "false")
                                 }
                         ));
             } else {
-                // VectorisedHashOperators.constructPreHashKeyVectorSIMD([this.preHashVectorAP.read()], [buildKeyAVAP.read()]);
+                // VectorisedHashOperators.constructPreHashKeyVectorSIMD([this.preHashVectorAP.read()], [buildKeyAVAP.read()], false);
                 codeGenResult.add(
                         createMethodInvocationStm(
                                 getLocation(),
@@ -784,7 +785,8 @@ public class JoinOperator extends CodeGenOperator<LogicalJoin> {
                                 "constructPreHashKeyVectorSIMD",
                                 new Java.Rvalue[]{
                                         this.preHashVectorAP.read(),
-                                        buildKeyAVAP.read()
+                                        buildKeyAVAP.read(),
+                                        new Java.BooleanLiteral(getLocation(), "false")
                                 }
                         ));
             }
@@ -889,7 +891,8 @@ public class JoinOperator extends CodeGenOperator<LogicalJoin> {
                 // VectorisedHashOperators.constructPreHashKeyVector(
                 //         [this.preHashVectorAP.read()],
                 //         [buildKeyAVAP.getVectorVariable().read()]
-                //         [buildKeyAVAP.getVectorLengthVariable().read()]);
+                //         [buildKeyAVAP.getVectorLengthVariable().read()],
+                //         false);
                 codeGenResult.add(
                         createMethodInvocationStm(
                                 getLocation(),
@@ -898,14 +901,16 @@ public class JoinOperator extends CodeGenOperator<LogicalJoin> {
                                 new Java.Rvalue[]{
                                         this.preHashVectorAP.read(),
                                         buildKeyAVAP.getVectorVariable().read(),
-                                        buildKeyAVAP.getVectorLengthVariable().read()
+                                        buildKeyAVAP.getVectorLengthVariable().read(),
+                                        new Java.BooleanLiteral(getLocation(), "false")
                                 }
                         ));
             } else {
                 // VectorisedHashOperators.constructPreHashKeyVectorSIMD(
                 //         [this.preHashVectorAP.read()],
                 //         [buildKeyAVAP.getVectorVariable().read()]
-                //         [buildKeyAVAP.getVectorLengthVariable().read()]);
+                //         [buildKeyAVAP.getVectorLengthVariable().read()],
+                //         false);
                 codeGenResult.add(
                         createMethodInvocationStm(
                                 getLocation(),
@@ -914,7 +919,8 @@ public class JoinOperator extends CodeGenOperator<LogicalJoin> {
                                 new Java.Rvalue[]{
                                         this.preHashVectorAP.read(),
                                         buildKeyAVAP.getVectorVariable().read(),
-                                        buildKeyAVAP.getVectorLengthVariable().read()
+                                        buildKeyAVAP.getVectorLengthVariable().read(),
+                                        new Java.BooleanLiteral(getLocation(), "false")
                                 }
                         ));
             }
@@ -1042,7 +1048,7 @@ public class JoinOperator extends CodeGenOperator<LogicalJoin> {
             ArrowVectorAccessPath buildKeyAVAP = ((ArrowVectorAccessPath) buildKeyAP);
 
             if (!this.useSIMDVec()) {
-                // VectorisedHashOperators.constructPreHashKeyVector([this.preHashVectorAP.read()], [buildKeyAVAP.read()]);
+                // VectorisedHashOperators.constructPreHashKeyVector([this.preHashVectorAP.read()], [buildKeyAVAP.read()], false);
                 codeGenResult.add(
                         createMethodInvocationStm(
                                 getLocation(),
@@ -1050,11 +1056,12 @@ public class JoinOperator extends CodeGenOperator<LogicalJoin> {
                                 "constructPreHashKeyVector",
                                 new Java.Rvalue[]{
                                         this.preHashVectorAP.read(),
-                                        buildKeyAVAP.read()
+                                        buildKeyAVAP.read(),
+                                        new Java.BooleanLiteral(getLocation(), "false")
                                 }
                         ));
             } else {
-                // VectorisedHashOperators.constructPreHashKeyVectorSIMD([this.preHashVectorAP.read()], [buildKeyAVAP.read()]);
+                // VectorisedHashOperators.constructPreHashKeyVectorSIMD([this.preHashVectorAP.read()], [buildKeyAVAP.read()], false);
                 codeGenResult.add(
                         createMethodInvocationStm(
                                 getLocation(),
@@ -1062,7 +1069,8 @@ public class JoinOperator extends CodeGenOperator<LogicalJoin> {
                                 "constructPreHashKeyVectorSIMD",
                                 new Java.Rvalue[]{
                                         this.preHashVectorAP.read(),
-                                        buildKeyAVAP.read()
+                                        buildKeyAVAP.read(),
+                                        new Java.BooleanLiteral(getLocation(), "false")
                                 }
                         ));
             }
@@ -1094,7 +1102,8 @@ public class JoinOperator extends CodeGenOperator<LogicalJoin> {
                 // VectorisedHashOperators.constructPreHashKeyVector(
                 //     [this.preHashVectorAP.read()],
                 //     [buildKeyAVAP.getVectorVariable().read()],
-                //     [buildKeyAVAP.getVectorLengthVariable().read()]
+                //     [buildKeyAVAP.getVectorLengthVariable().read(),
+                //     false]
                 // );
                 codeGenResult.add(
                         createMethodInvocationStm(
@@ -1104,14 +1113,16 @@ public class JoinOperator extends CodeGenOperator<LogicalJoin> {
                                 new Java.Rvalue[]{
                                         this.preHashVectorAP.read(),
                                         buildKeyAVAP.getVectorVariable().read(),
-                                        buildKeyAVAP.getVectorLengthVariable().read()
+                                        buildKeyAVAP.getVectorLengthVariable().read(),
+                                        new Java.BooleanLiteral(getLocation(), "false")
                                 }
                         ));
             } else {
                 // VectorisedHashOperators.constructPreHashKeyVectorSIMD(
                 //     [this.preHashVectorAP.read()],
                 //     [buildKeyAVAP.getVectorVariable().read()],
-                //     [buildKeyAVAP.getVectorLengthVariable().read()]
+                //     [buildKeyAVAP.getVectorLengthVariable().read(),
+                //     false]
                 // );
                 codeGenResult.add(
                         createMethodInvocationStm(
@@ -1121,7 +1132,8 @@ public class JoinOperator extends CodeGenOperator<LogicalJoin> {
                                 new Java.Rvalue[]{
                                         this.preHashVectorAP.read(),
                                         buildKeyAVAP.getVectorVariable().read(),
-                                        buildKeyAVAP.getVectorLengthVariable().read()
+                                        buildKeyAVAP.getVectorLengthVariable().read(),
+                                        new Java.BooleanLiteral(getLocation(), "false")
                                 }
                         ));
             }

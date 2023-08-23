@@ -218,7 +218,7 @@ public class VectorisedSimd {
             org.apache.arrow.vector.IntVector aggregation_query_table_vc_1 = ((org.apache.arrow.vector.IntVector) aggregation_query_table.getVector(1));
             org.apache.arrow.vector.IntVector aggregation_query_table_vc_2 = ((org.apache.arrow.vector.IntVector) aggregation_query_table.getVector(2));
             org.apache.arrow.vector.IntVector aggregation_query_table_vc_3 = ((org.apache.arrow.vector.IntVector) aggregation_query_table.getVector(3));
-            VectorisedHashOperators.constructPreHashKeyVectorSIMD(groupKeyPreHashVector, aggregation_query_table_vc_0);
+            VectorisedHashOperators.constructPreHashKeyVectorSIMD(groupKeyPreHashVector, aggregation_query_table_vc_0, false);
             int recordCount = aggregation_query_table_vc_0.getValueCount();
             for (int aviv = 0; aviv < recordCount; aviv++) {
                 aggregation_state_map.incrementForKey(aggregation_query_table_vc_0.get(aviv), groupKeyPreHashVector[aviv], aggregation_query_table_vc_1.get(aviv), aggregation_query_table_vc_2.get(aviv), aggregation_query_table_vc_3.get(aviv));

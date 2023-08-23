@@ -20,22 +20,24 @@ import org.apache.calcite.rel.logical.LogicalAggregate;
 import org.apache.calcite.sql.SqlAggFunction;
 import org.apache.calcite.sql.fun.SqlCountAggFunction;
 import org.apache.calcite.sql.fun.SqlSumEmptyIsZeroAggFunction;
+import org.apache.calcite.util.ImmutableBitSet;
+import org.codehaus.commons.compiler.CompileException;
 import org.codehaus.janino.Java;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
-import static evaluation.codegen.infrastructure.context.QueryVariableType.ARRAY_INT_VECTOR;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.ARRAY_LONG_VECTOR;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_INT_VECTOR;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.MAP_GENERATED;
-import static evaluation.codegen.infrastructure.context.QueryVariableType.P_A_INT;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.P_A_LONG;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.P_INT;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.P_LONG;
 import static evaluation.codegen.infrastructure.context.QueryVariableTypeMethods.primitiveArrayTypeForPrimitive;
 import static evaluation.codegen.infrastructure.context.QueryVariableTypeMethods.primitiveType;
 import static evaluation.codegen.infrastructure.context.QueryVariableTypeMethods.toJavaType;
+import static evaluation.codegen.infrastructure.context.QueryVariableTypeMethods.vectorTypeForPrimitiveArrayType;
 import static evaluation.codegen.infrastructure.janino.JaninoClassGen.createClassInstance;
 import static evaluation.codegen.infrastructure.janino.JaninoControlGen.createForLoop;
 import static evaluation.codegen.infrastructure.janino.JaninoControlGen.createWhileLoop;
@@ -55,6 +57,7 @@ import static evaluation.codegen.infrastructure.janino.JaninoVariableGen.createL
 import static evaluation.codegen.infrastructure.janino.JaninoVariableGen.createPrimitiveLocalVar;
 import static evaluation.codegen.infrastructure.janino.JaninoVariableGen.createVariableAdditionAssignmentStm;
 import static evaluation.codegen.infrastructure.janino.JaninoVariableGen.createVariableAssignmentStm;
+import static evaluation.codegen.infrastructure.janino.JaninoVariableGen.createVariableXorAssignmentStm;
 
 /**
  * A {@link CodeGenOperator} which computes some aggregation function over the records.
@@ -72,10 +75,17 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
     private final boolean groupByAggregation;
 
     /**
-     * The input ordinal of the group-by key column if this operator is a group-by aggregation and
-     * -1 otherwise. Note that this implies that only a single group column is supported like this.
+     * The input ordinals of the columns used as group-by key if this operator is a group-by
+     * aggregation and null otherwise.
      */
-    private final int groupByKeyColumnIndex;
+    private final int[] groupByKeyColumnIndices;
+
+    /**
+     * The primitive scalar types of the group-by key columns if this operator is a group-by
+     * aggregation and null otherwise. Note that this value will only be set after the
+     * {@code declareAggregationState} method has been invoked.
+     */
+    private QueryVariableType[] groupByKeyColumnsPrimitiveScalarTypes;
 
     /**
      * Stores the {@link AccessPath} to the aggregation state variable.
@@ -87,13 +97,6 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
      * for generating the map that contains the aggregation state.
      */
     private KeyValueMapGenerator aggregationMapGenerator;
-
-    /**
-     * The primitive scalar type of the group-by key column if this operator is a group-by aggregation
-     * and null otherwise. Note that this value will only be set after the {@code declareAggregationState}
-     * method has been invoked.
-     */
-    private QueryVariableType groupByKeyColumnPrimitiveScalarType;
 
     /**
      * An enum indicating the internal type of each aggregation function of this operator.
@@ -149,11 +152,13 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
                         "AggregationOperator does not support DISTINCT keyword");
 
         // Classify all aggregation functions
-        this.groupByAggregation = this.getLogicalSubplan().getGroupSet().cardinality() > 0;
+        ImmutableBitSet groupBySet = this.getLogicalSubplan().getGroupSet();
+        int numberOfGroupByKeys = groupBySet.cardinality();
+        this.groupByAggregation = numberOfGroupByKeys > 0;
         if (this.groupByAggregation)
-            this.groupByKeyColumnIndex = this.getLogicalSubplan().getGroupSet().nextSetBit(0);
+            this.groupByKeyColumnIndices = groupBySet.toArray();
         else
-            this.groupByKeyColumnIndex = -1;
+            this.groupByKeyColumnIndices = null;
 
         this.aggregationFunctions = new AggregationFunction[aggregation.getAggCallList().size()];
         this.aggregationFunctionInputOrdinals = new int[this.aggregationFunctions.length][];
@@ -272,32 +277,36 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
             // Currently, this operator only supports exposing the result in a non-SIMD fashion.
             // TODO: consider SIMD-compatible result exposure when required.
 
-            // Property: group-by aggregates first expose the group key and then the aggregate results
-            List<AccessPath> newOrdinalMapping = new ArrayList<>(this.aggregationFunctions.length + 1);
+            // Property: group-by aggregates first expose the group keys and then the aggregate results
+            List<AccessPath> newOrdinalMapping = new ArrayList<>(this.groupByKeyColumnIndices.length + this.aggregationFunctions.length);
             int currentOrdinalIndex = 0;
 
             // Simply expose each record as a set of scalar variables
             // First expose the group-by key values
-            // int [groupKey] = [this.aggregationStateVariable.read()].keys[key_i];
-            ScalarVariableAccessPath groupKeyAP = new ScalarVariableAccessPath(
-                    cCtx.defineVariable("groupKey"), P_INT);
-            forLoopBody.addStatement(
-                    createLocalVariable(
-                            getLocation(),
-                            toJavaType(getLocation(), groupKeyAP.getType()),
-                            groupKeyAP.getVariableName(),
-                            createArrayElementAccessExpr(
-                                    getLocation(),
-                                    new Java.FieldAccessExpression(
-                                            getLocation(),
-                                            ((MapAccessPath) this.aggregationStateVariable).read(),
-                                            "keys"
-                                    ),
-                                    keyIterationIndexVariable.read()
-                            )
-                    )
-            );
-            newOrdinalMapping.add(currentOrdinalIndex++, groupKeyAP);
+            // [groupKey_j] = [this.aggregationStateVariable.read()].[this.agregationMapGenerator.keyVariableNames[j]][key_i];
+            for (int j = 0; j < this.groupByKeyColumnIndices.length; j++) {
+                ScalarVariableAccessPath groupKeyAP = new ScalarVariableAccessPath(
+                        cCtx.defineVariable("groupKey_" + j),
+                        this.groupByKeyColumnsPrimitiveScalarTypes[j]);
+
+                forLoopBody.addStatement(
+                        createLocalVariable(
+                                getLocation(),
+                                toJavaType(getLocation(), groupKeyAP.getType()),
+                                groupKeyAP.getVariableName(),
+                                createArrayElementAccessExpr(
+                                        getLocation(),
+                                        new Java.FieldAccessExpression(
+                                                getLocation(),
+                                                ((MapAccessPath) this.aggregationStateVariable).read(),
+                                                this.aggregationMapGenerator.keyVariableNames[j]
+                                        ),
+                                        keyIterationIndexVariable.read()
+                                )
+                        )
+                );
+                newOrdinalMapping.add(currentOrdinalIndex++, groupKeyAP);
+            }
 
             // Then expose the aggregate results per aggregation function
             int currentMapValueOrdinalIndex = 0;
@@ -405,107 +414,134 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
 
             }
         } else { // Group-by processing
-            // Idea: first perform the hashing of the key-column, then perform the hash map maintenance
-            AccessPath keyColumnAccessPath;
+            // Idea: first perform the hashing of the key-columns, then perform the hash map maintenance
+            AccessPath[] keyColumnAccessPaths;
             ScalarVariableAccessPath keyColumnPreHashAccessPath;
             Java.Rvalue[] aggregationValues = new Java.Rvalue[this.aggregationFunctions.length];
             Java.Block hashMapMaintenanceTarget;
 
-            if (this.groupByKeyColumnPrimitiveScalarType == P_INT) {
-
-                // Hashing of key-column depends on whether we are in SIMD mode or not
-                if (!this.useSIMDNonVec(cCtx)) {
-                    // Ensure we have a "local" access path for the key column value
-                    Java.Rvalue keyColumnRValue = getRValueFromAccessPathNonVec(cCtx, this.groupByKeyColumnIndex, codeGenResult);
-                    keyColumnAccessPath = cCtx.getCurrentOrdinalMapping().get(this.groupByKeyColumnIndex);
-
-                    // Now compute the pre-hash value in a local variable
-                    keyColumnPreHashAccessPath =
-                            new ScalarVariableAccessPath(cCtx.defineVariable("group_key_pre_hash"), P_LONG);
-                    codeGenResult.add(
-                            createLocalVariable(
-                                    getLocation(),
-                                    toJavaType(getLocation(), keyColumnPreHashAccessPath.getType()),
-                                    keyColumnPreHashAccessPath.getVariableName(),
-                                    createMethodInvocation(
-                                            getLocation(),
-                                            createAmbiguousNameRef(getLocation(), "Int_Hash_Function"),
-                                            "preHash",
-                                            new Java.Rvalue[]{ keyColumnRValue }
-                                    )
-                            ));
-
-                    // Also obtain the values to insert into the hash-map later on
-                    for (int i = 0; i < this.aggregationFunctions.length; i++) {
-                        AggregationFunction currentFunction = this.aggregationFunctions[i];
-
-                        if (currentFunction == AggregationFunction.G_SUM) {
-                            aggregationValues[i] = this.getRValueFromAccessPathNonVec(cCtx, this.aggregationFunctionInputOrdinals[i][0], codeGenResult);
-                        }
-
-                        // No other possibilities due to the constructor
-
-                    }
-
-                    // Set the correct hashMapMaintenanceTarget
-                    hashMapMaintenanceTarget = createBlock(getLocation());
-                    codeGenResult.add(hashMapMaintenanceTarget);
-
-                } else { // this.useSIMDNonVec(cCtx)
-
-                    // Perform the SIMD-ed pre-hashing and flattening
-                    var preHashAndFlattenResult = Int_Hash_Function.preHashAndFlattenSIMD(
-                            cCtx,
-                            cCtx.getCurrentOrdinalMapping().get(this.groupByKeyColumnIndex)
-                    );
-                    keyColumnAccessPath = preHashAndFlattenResult.keyColumnAccessPath;
-                    keyColumnPreHashAccessPath = preHashAndFlattenResult.keyColumnPreHashAccessPath;
-                    codeGenResult.addAll(preHashAndFlattenResult.generatedCode);
-
-                    // Obtain the values to insert into the hash-map later on
-                    for (int i = 0; i < this.aggregationFunctions.length; i++) {
-                        AggregationFunction currentFunction = this.aggregationFunctions[i];
-
-                        if (currentFunction == AggregationFunction.G_SUM) {
-
-                            AccessPath valueAP = cCtx.getCurrentOrdinalMapping().get(this.aggregationFunctionInputOrdinals[i][0]);
-                            if (valueAP instanceof SIMDLoopAccessPath valueAP_slap) {
-                                // aggregationValues[i] = [valueAP_slap.readArrowVector()].get([valueAP_slap.readArrowVectorOffset()] + [simd_vector_i]);
-                                aggregationValues[i] = createMethodInvocation(
-                                        getLocation(),
-                                        valueAP_slap.readArrowVector(),
-                                        "get",
-                                        new Java.Rvalue[]{
-                                                plus(
-                                                        getLocation(),
-                                                        valueAP_slap.readArrowVectorOffset(),
-                                                        preHashAndFlattenResult.simdVectorIAp.read()
-                                                )
-                                        }
-                                );
-
-                            } else {
-                                throw new UnsupportedOperationException(
-                                        "AggregationOperator.consumeNonVec does not support this valueAP for hash-map maintenance");
-                            }
-                        }
-                    }
-
-                    // And set the correct hashMapMaintenanceTarget
-                    hashMapMaintenanceTarget = preHashAndFlattenResult.flattenedForLoopBody;
+            // Hashing of key-columns depends on whether we are in SIMD mode or not
+            if (!this.useSIMDNonVec(cCtx)) {
+                // Ensure we have "local" access paths for the key column values
+                Java.Rvalue[] keyColumnRValues = new Java.Rvalue[this.groupByKeyColumnIndices.length];
+                keyColumnAccessPaths = new AccessPath[keyColumnRValues.length];
+                for (int i = 0; i < keyColumnRValues.length; i++) {
+                    keyColumnRValues[i] = getRValueFromAccessPathNonVec(cCtx, this.groupByKeyColumnIndices[i], codeGenResult);
+                    keyColumnAccessPaths[i] = cCtx.getCurrentOrdinalMapping().get(this.groupByKeyColumnIndices[i]);
                 }
 
-            } else {
-                throw new UnsupportedOperationException(
-                        "AggregationOperator.consumeNonVec does not support group-by key column type " + this.groupByKeyColumnPrimitiveScalarType);
+                // Now compute the pre-hash value in a local variable
+                keyColumnPreHashAccessPath =
+                        new ScalarVariableAccessPath(cCtx.defineVariable("group_key_pre_hash"), P_LONG);
+                for (int i = 0; i < keyColumnRValues.length; i++) {
+
+                    Java.AmbiguousName hashFunctionContainer = switch (this.groupByKeyColumnsPrimitiveScalarTypes[i]) {
+                        case P_INT -> createAmbiguousNameRef(getLocation(), "Int_Hash_Function");
+
+                        default -> throw new UnsupportedOperationException("AggregationOperator.consumeNonVec does not support this group-by key type");
+                    };
+
+                    Java.MethodInvocation currentPreHashInvocation = createMethodInvocation(
+                            getLocation(),
+                            hashFunctionContainer,
+                            "preHash",
+                            new Java.Rvalue[]{ keyColumnRValues[i] }
+                    );
+
+                    if (i == 0) {
+                        // On the first key column, need to declare and initialise the variable
+                        codeGenResult.add(
+                                createLocalVariable(
+                                        getLocation(),
+                                        toJavaType(getLocation(), keyColumnPreHashAccessPath.getType()),
+                                        keyColumnPreHashAccessPath.getVariableName(),
+                                        currentPreHashInvocation
+                                ));
+
+                    } else {
+                        // On all others, we "extend" the pre-hash using the XOR operator
+                        codeGenResult.add(
+                            createVariableXorAssignmentStm(
+                                    getLocation(),
+                                    keyColumnPreHashAccessPath.write(),
+                                    currentPreHashInvocation
+                            ));
+                    }
+
+                }
+
+                // Also obtain the values to insert into the hash-map later on
+                for (int i = 0; i < this.aggregationFunctions.length; i++) {
+                    AggregationFunction currentFunction = this.aggregationFunctions[i];
+
+                    if (currentFunction == AggregationFunction.G_SUM) {
+                        aggregationValues[i] = this.getRValueFromAccessPathNonVec(cCtx, this.aggregationFunctionInputOrdinals[i][0], codeGenResult);
+                    }
+
+                    // No other possibilities due to the constructor
+
+                }
+
+                // Set the correct hashMapMaintenanceTarget
+                hashMapMaintenanceTarget = createBlock(getLocation());
+                codeGenResult.add(hashMapMaintenanceTarget);
+
+            } else { // this.useSIMDNonVec(cCtx)
+
+                // TODO: extend to multiple key version later on
+                if (this.groupByKeyColumnIndices.length > 1)
+                    throw new UnsupportedOperationException("AggregationOperator.consumeNonVec only supports a single key column in SIMD operation");
+
+                // Perform the SIMD-ed pre-hashing and flattening
+                var preHashAndFlattenResult = Int_Hash_Function.preHashAndFlattenSIMD(
+                        cCtx,
+                        cCtx.getCurrentOrdinalMapping().get(this.groupByKeyColumnIndices[0])
+                );
+                keyColumnAccessPaths = new AccessPath[] { preHashAndFlattenResult.keyColumnAccessPath };
+                keyColumnPreHashAccessPath = preHashAndFlattenResult.keyColumnPreHashAccessPath;
+                codeGenResult.addAll(preHashAndFlattenResult.generatedCode);
+
+                // Obtain the values to insert into the hash-map later on
+                for (int i = 0; i < this.aggregationFunctions.length; i++) {
+                    AggregationFunction currentFunction = this.aggregationFunctions[i];
+
+                    if (currentFunction == AggregationFunction.G_SUM) {
+
+                        AccessPath valueAP = cCtx.getCurrentOrdinalMapping().get(this.aggregationFunctionInputOrdinals[i][0]);
+                        if (valueAP instanceof SIMDLoopAccessPath valueAP_slap) {
+                            // aggregationValues[i] = [valueAP_slap.readArrowVector()].get([valueAP_slap.readArrowVectorOffset()] + [simd_vector_i]);
+                            aggregationValues[i] = createMethodInvocation(
+                                    getLocation(),
+                                    valueAP_slap.readArrowVector(),
+                                    "get",
+                                    new Java.Rvalue[]{
+                                            plus(
+                                                    getLocation(),
+                                                    valueAP_slap.readArrowVectorOffset(),
+                                                    preHashAndFlattenResult.simdVectorIAp.read()
+                                            )
+                                    }
+                            );
+
+                        } else {
+                            throw new UnsupportedOperationException(
+                                    "AggregationOperator.consumeNonVec does not support this valueAP for hash-map maintenance");
+                        }
+                    }
+                }
+
+                // And set the correct hashMapMaintenanceTarget
+                hashMapMaintenanceTarget = preHashAndFlattenResult.flattenedForLoopBody;
             }
 
             // Now perform hash-table maintenance by collecting the correct arguments for the
             // incrementForKey method of the hash-table based on the aggregation functions
-            Java.Rvalue[] incrementForKeyArgs = new Java.Rvalue[aggregationValues.length + 2];
-            incrementForKeyArgs[0] = ((ScalarVariableAccessPath) keyColumnAccessPath).read();               // Key
-            incrementForKeyArgs[1] = keyColumnPreHashAccessPath.read();                                     // Prehash
-            System.arraycopy(aggregationValues, 0, incrementForKeyArgs, 2, aggregationValues.length); // Values to increment by
+            Java.Rvalue[] incrementForKeyArgs = new Java.Rvalue[keyColumnAccessPaths.length + aggregationValues.length + 1];
+            int currentArgumentIndex = 0;
+            for (int i = 0; i < keyColumnAccessPaths.length; i++)
+                incrementForKeyArgs[currentArgumentIndex++] = ((ScalarVariableAccessPath) keyColumnAccessPaths[i]).read();  // Key
+            incrementForKeyArgs[currentArgumentIndex++] = keyColumnPreHashAccessPath.read();                                // Prehash
+            System.arraycopy(aggregationValues, 0, incrementForKeyArgs, currentArgumentIndex, aggregationValues.length); // Values to increment by
 
             hashMapMaintenanceTarget.addStatement(
                     createMethodInvocationStm(
@@ -583,7 +619,8 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
             // since the vectorised operators will create SIMD vectors themselves.
 
             // First gather and allocate the types of vectors that will be exposed in the result while updating the ordinal mapping
-            List<AccessPath> updatedOrdinalMapping = new ArrayList<>(this.aggregationFunctions.length + 1);
+            List<AccessPath> updatedOrdinalMapping = new ArrayList<>(this.groupByKeyColumnIndices.length + this.aggregationFunctions.length);
+            int currentUpdatedOrdinalMappingIndex = 0;
 
             // Since there is only one group-by variable, we can simply use the order in its state variables over the different columns
             // as it is shared. We first allocate a variable to store the length of result vectors that are exposed to the parent operator.
@@ -595,12 +632,22 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
             );
             codeGenResult.add(createPrimitiveLocalVar(getLocation(), Java.Primitive.INT, aggregationResultVectorLengthAP.getVariableName()));
 
-            // Next, we need to allocate the correct key vector type
-            ArrayVectorAccessPath groupKeyVectorAP;
-            if (this.groupByKeyColumnPrimitiveScalarType == P_INT) {
-                // We have an integer key type, so allocate an integer key vector
-                // int[] groupKeyVector = cCtx.getAllocationManager().getIntVector();
-                ArrayAccessPath groupKeyVectorArrayAP = new ArrayAccessPath(cCtx.defineVariable("groupKeyVector"), P_A_INT);
+            // Next, we need to allocate the correct key vector types
+            ArrayVectorAccessPath[] groupKeyVectorsAPs = new ArrayVectorAccessPath[this.groupByKeyColumnIndices.length];
+            for (int i = 0; i < groupKeyVectorsAPs.length; i++) {
+                QueryVariableType currentKeyPrimitiveType = this.groupByKeyColumnsPrimitiveScalarTypes[i];
+
+                // primitiveType[] groupKeyVector_i = cCtx.getAllocationManager().get[primitiveType]Vector();
+                ArrayAccessPath groupKeyVectorArrayAP = new ArrayAccessPath(
+                        cCtx.defineVariable("groupKeyVector_" + i),
+                        primitiveArrayTypeForPrimitive(currentKeyPrimitiveType));
+
+                String initMethodName = switch (currentKeyPrimitiveType) {
+                    case P_INT -> "getIntVector";
+
+                    default -> throw new UnsupportedOperationException("AggregationOperator.produceVec does not support key type " + currentKeyPrimitiveType);
+                };
+
                 codeGenResult.add(createLocalVariable(
                         getLocation(),
                         toJavaType(getLocation(), groupKeyVectorArrayAP.getType()),
@@ -608,15 +655,15 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
                         createMethodInvocation(
                                 getLocation(),
                                 createMethodInvocation(getLocation(), createAmbiguousNameRef(getLocation(), "cCtx"),"getAllocationManager"),
-                                "getIntVector"
+                                initMethodName
                         )
                 ));
-                groupKeyVectorAP = new ArrayVectorAccessPath(groupKeyVectorArrayAP, aggregationResultVectorLengthAP, ARRAY_INT_VECTOR);
-                updatedOrdinalMapping.add(0, groupKeyVectorAP);
 
-            } else {
-                throw new UnsupportedOperationException("AggregationOperator.produceVec does not currently support" +
-                        "the provided key type: " + this.groupByKeyColumnPrimitiveScalarType);
+                groupKeyVectorsAPs[i] = new ArrayVectorAccessPath(
+                        groupKeyVectorArrayAP,
+                        aggregationResultVectorLengthAP,
+                        vectorTypeForPrimitiveArrayType(groupKeyVectorArrayAP.getType()));
+                updatedOrdinalMapping.add(currentUpdatedOrdinalMappingIndex++, groupKeyVectorsAPs[i]);
             }
 
             // Allocate the vectors for the aggregation functions based on the aggregation function type
@@ -660,7 +707,7 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
 
                 }
 
-                updatedOrdinalMapping.add(i + 1, aggregationResultAPs[i]);
+                updatedOrdinalMapping.add(currentUpdatedOrdinalMappingIndex++, aggregationResultAPs[i]);
             }
 
             // Set the updated ordinal mapping
@@ -671,8 +718,12 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
             // int current_key_offset = 0;
             // int number_of_records = [this.aggregationStateVariable).read()].numberOfRecords;
             // while (current_key_offset < number_of_records) {
+            //     $ for first key vector $
             //     [aggregationResultVectorLength] = VectorisedAggregationOperators.constructVector(
-            //             [groupKeyVector], [this.aggregationStateVariable.read()].keys, number_of_records, current_key_offset);
+            //             [groupKeyVector_0], [this.aggregationStateVariable.read()].keys_0, number_of_records, current_key_offset);
+            //     $ for each remaining key vector $
+            //         VectorisedAggregationOperators.constructVector(
+            //             [groupKeyVector_i], [this.aggregationStateVariable.read()].keys_[keyIndex], number_of_records, current_key_offset);
             //     $ for each aggregationResult $
             //         VectorisedAggregationOperators.constructVector(
             //             [aggCall_$i$_vector], [this.aggregationStateVariable.read()].values_ord_[currentMapValueOrdinalIndex], number_of_records, current_key_offset);
@@ -714,28 +765,46 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
                     )
             );
 
-            // Construct the key vector
-            whileLoopBody.addStatement(
-                    createVariableAssignmentStm(
-                            getLocation(),
-                            aggregationResultVectorLengthAP.write(),
-                            createMethodInvocation(
+            // Construct the key vectors
+            for (int i = 0; i < this.groupByKeyColumnIndices.length; i++) {
+                Java.MethodInvocation vectorConstructionMethodInvocation = createMethodInvocation(
+                        getLocation(),
+                        createAmbiguousNameRef(getLocation(), "VectorisedAggregationOperators"),
+                        "constructVector",
+                        new Java.Rvalue[] {
+                                groupKeyVectorsAPs[i].getVectorVariable().read(),
+                                new Java.FieldAccessExpression(
+                                        getLocation(),
+                                        ((MapAccessPath) this.aggregationStateVariable).read(),
+                                        this.aggregationMapGenerator.keyVariableNames[i]
+                                ),
+                                numberOfRecordsAP.read(),
+                                currentKeyOffsetVariable.read()
+                        }
+                );
+
+                if (i == 0) {
+                    // On the first key vector, we need to initialise the aggregation result vector length
+                    whileLoopBody.addStatement(
+                            createVariableAssignmentStm(
                                     getLocation(),
-                                    createAmbiguousNameRef(getLocation(), "VectorisedAggregationOperators"),
-                                    "constructVector",
-                                    new Java.Rvalue[] {
-                                            groupKeyVectorAP.getVectorVariable().read(),
-                                            new Java.FieldAccessExpression(
-                                                    getLocation(),
-                                                    ((MapAccessPath) this.aggregationStateVariable).read(),
-                                                    "keys"
-                                            ),
-                                            numberOfRecordsAP.read(),
-                                            currentKeyOffsetVariable.read()
-                                    }
+                                    aggregationResultVectorLengthAP.write(),
+                                    vectorConstructionMethodInvocation
                             )
-                    )
-            );
+                    );
+
+                } else {
+                    // On the remaining key vectors, we only care that the method is invoked
+                    try {
+                        whileLoopBody.addStatement(
+                                new Java.ExpressionStatement(vectorConstructionMethodInvocation));
+
+                    } catch (CompileException e) {
+                        throw new RuntimeException(
+                                "AggregationOperator.produceVec: exception occurred while wrapping method invocation in statement", e);
+                    }
+                }
+            }
 
             // Create each value vector based on the aggregation type
             currentMapValueOrdinalIndex = 0;
@@ -876,56 +945,40 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
                 }
             }
         } else { // this.groupByAggregation
-            // Idea: first perform the hashing of the key-column, then perform the hash-table maintenance
-            AccessPath keyColumnAccessPath = cCtx.getCurrentOrdinalMapping().get(this.groupByKeyColumnIndex);
-            QueryVariableType keyColumnAccessPathType = keyColumnAccessPath.getType();
+            // Idea: first perform the hashing of the key-columns, then perform the hash-table maintenance
+            AccessPath[] keyColumnsAccessPaths = new AccessPath[this.groupByKeyColumnIndices.length];
+            QueryVariableType[] keyColumnsAccessPathTypes = new QueryVariableType[keyColumnsAccessPaths.length];
+            for (int i = 0; i < keyColumnsAccessPaths.length; i++) {
+                keyColumnsAccessPaths[i] = cCtx.getCurrentOrdinalMapping().get(this.groupByKeyColumnIndices[i]);
+                keyColumnsAccessPathTypes[i] = keyColumnsAccessPaths[i].getType();
+            }
 
-            if (this.groupByKeyColumnPrimitiveScalarType == P_INT) {
-
+            for (int i = 0; i < keyColumnsAccessPaths.length; i++) {
                 // Hashing of the key-column depends on whether we are in SIMD mode or not
-                if (!this.useSIMDVec()) {
-                    if (keyColumnAccessPathType == ARROW_INT_VECTOR) {
-                        // VectorisedHashOperators.constructPreHashKeyVector([this.groupKeyPreHashVector], [keyColumn]);
-                        codeGenResult.add(
-                                createMethodInvocationStm(
-                                        getLocation(),
-                                        createAmbiguousNameRef(getLocation(), "VectorisedHashOperators"),
-                                        "constructPreHashKeyVector",
-                                        new Java.Rvalue[]{
-                                                this.groupKeyPreHashVector.read(),
-                                                ((ArrowVectorAccessPath) keyColumnAccessPath).read()
-                                        }
-                                ));
+                String methodInvocationName = "constructPreHashKeyVector";
+                if (this.useSIMDVec())
+                    methodInvocationName += "SIMD";
 
-                    } else {
-                        throw new UnsupportedOperationException(
-                                "AggregationOperator.consumeVec does not support his key column access path type for pre-hashing: " + keyColumnAccessPathType);
-                    }
+                // Determine the arguments
+                Java.Rvalue[] methodInvocationArguments = new Java.Rvalue[3];
+                methodInvocationArguments[0] = this.groupKeyPreHashVector.read();
+                methodInvocationArguments[1] = switch (keyColumnsAccessPathTypes[i]) {
+                    case ARROW_INT_VECTOR ->  ((ArrowVectorAccessPath) keyColumnsAccessPaths[i]).read();
 
-                } else { // this.useSIMDVec()
-                    if (keyColumnAccessPathType == ARROW_INT_VECTOR) {
-                        // VectorisedHashOperators.constructPreHashKeyVectorSIMD([this.groupKeyPreHashVector], [keyColumn]);
-                        codeGenResult.add(
-                                createMethodInvocationStm(
-                                        getLocation(),
-                                        createAmbiguousNameRef(getLocation(), "VectorisedHashOperators"),
-                                        "constructPreHashKeyVectorSIMD",
-                                        new Java.Rvalue[]{
-                                                this.groupKeyPreHashVector.read(),
-                                                ((ArrowVectorAccessPath) keyColumnAccessPath).read()
-                                        }
-                                ));
+                    default -> throw new UnsupportedOperationException("AggregationOperator.consumeVec does not support this key column access path type");
+                };
+                methodInvocationArguments[2] = new Java.BooleanLiteral(getLocation(), (i == 0) ? "false" : "true");
 
-                    } else {
-                        throw new UnsupportedOperationException(
-                                "AggregationOperator.consumeVec does not support his key column access path type for pre-hashing: " + keyColumnAccessPathType);
-                    }
+                // Perform the actual hashing
+                codeGenResult.add(
+                        createMethodInvocationStm(
+                                getLocation(),
+                                createAmbiguousNameRef(getLocation(), "VectorisedHashOperators"),
+                                methodInvocationName,
+                                methodInvocationArguments
+                        )
+                );
 
-                }
-
-            } else {
-                throw new UnsupportedOperationException(
-                        "AggregationOperator.consumeVec does not support group-by key column type " + this.groupByKeyColumnPrimitiveScalarType);
             }
 
             // Flatten the vectorisation to perform the combined hash-table maintenance
@@ -943,7 +996,7 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
                     new ScalarVariableAccessPath(cCtx.defineVariable("aviv"), P_INT);
 
             Java.Rvalue[] incrementForKeyArguments =
-                    new Java.Rvalue[2 + this.aggregationMapGenerator.valueVariableNames.length];
+                    new Java.Rvalue[this.groupByKeyColumnIndices.length + 1 + this.aggregationMapGenerator.valueVariableNames.length];
             int currentArgumentIndex = 0;
 
             // Now initialise type specific structures
@@ -952,13 +1005,15 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
                 // int recordCount = [avap.read()].getValueCount();
                 recordCountInitValue = createMethodInvocation(getLocation(), avap.read(), "getValueCount");
 
-                // Obtain the key argument
-                incrementForKeyArguments[currentArgumentIndex++] = createMethodInvocation(
-                        getLocation(),
-                        ((ArrowVectorAccessPath) currentOrdinalMapping.get(this.groupByKeyColumnIndex)).read(),
-                        "get",
-                        new Java.Rvalue[] { aviv.read() }
-                );
+                // Obtain the key arguments
+                for (int i = 0; i < this.groupByKeyColumnIndices.length; i++) {
+                    incrementForKeyArguments[currentArgumentIndex++] = createMethodInvocation(
+                            getLocation(),
+                            ((ArrowVectorAccessPath) currentOrdinalMapping.get(this.groupByKeyColumnIndices[i])).read(),
+                            "get",
+                            new Java.Rvalue[]{ aviv.read() }
+                    );
+                }
 
                 // Obtain the pre-hash argument
                 incrementForKeyArguments[currentArgumentIndex++] = createArrayElementAccessExpr(
@@ -997,7 +1052,7 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
 
             } else {
                 throw new UnsupportedOperationException(
-                        "AggregationOperator.ConsumeVec does not support hash-table mainenance using the provided access path");
+                        "AggregationOperator.ConsumeVec does not support hash-table maintenance using the provided access path");
             }
 
             // Add the actual record count variable
@@ -1063,8 +1118,10 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
         }
 
         // Otherwise, we have a group-by aggregation
-        // Obtain the type of the group-by column
-        this.groupByKeyColumnPrimitiveScalarType = primitiveType(om.get(this.groupByKeyColumnIndex).getType());
+        // Obtain the type of the group-by columns
+        this.groupByKeyColumnsPrimitiveScalarTypes = new QueryVariableType[this.groupByKeyColumnIndices.length];
+        for (int i = 0; i < this.groupByKeyColumnsPrimitiveScalarTypes.length; i++)
+                this.groupByKeyColumnsPrimitiveScalarTypes[i] = primitiveType(om.get(this.groupByKeyColumnIndices[i]).getType());
 
         // Initialise the map generator
         List<QueryVariableType> mapValueTypes = new ArrayList<>();
@@ -1080,8 +1137,8 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
 
                 } else {
                     throw new UnsupportedOperationException(
-                            "AggregationOperator.declareAggregationState: group-by sum aggregation does not key-value type combination: "
-                                    + groupByKeyColumnPrimitiveScalarType + "-" + valueType);
+                            "AggregationOperator.declareAggregationState: group-by sum aggregation does not support key-value type combination: "
+                                    + Arrays.toString(this.groupByKeyColumnIndices) + "-" + valueType);
                 }
             }
 
@@ -1090,7 +1147,7 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
         QueryVariableType[] mapValueTypesArray = new QueryVariableType[mapValueTypes.size()];
         mapValueTypes.toArray(mapValueTypesArray);
         this.aggregationMapGenerator = new KeyValueMapGenerator(
-                this.groupByKeyColumnPrimitiveScalarType,
+                this.groupByKeyColumnsPrimitiveScalarTypes,
                 mapValueTypesArray
         );
 

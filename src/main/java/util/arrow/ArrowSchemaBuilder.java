@@ -118,6 +118,12 @@ public class ArrowSchemaBuilder {
         if (arrowType instanceof ArrowType.Int)
             return typeFactory.createSqlType(SqlTypeName.INTEGER);
 
+        else if (arrowType instanceof ArrowType.FixedSizeBinary arrowFixedSizeBinaryType)
+            return typeFactory.createSqlType(SqlTypeName.CHAR, arrowFixedSizeBinaryType.getByteWidth());
+
+        else if (arrowType instanceof ArrowType.Utf8)
+            return typeFactory.createSqlType(SqlTypeName.VARCHAR);
+
         else if (arrowType instanceof ArrowType.LargeUtf8)
             return typeFactory.createSqlType(SqlTypeName.VARCHAR);
 

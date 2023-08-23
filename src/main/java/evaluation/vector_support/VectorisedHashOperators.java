@@ -13,6 +13,11 @@ import java.nio.ByteOrder;
 public class VectorisedHashOperators extends VectorisedOperators  {
 
     /**
+     * Vector for temporarily storing longs if required by some method contained in this class.
+     */
+    private static long[] tempVector = new long[VECTOR_LENGTH];
+
+    /**
      * Prevent instantiating this class.
      */
     private VectorisedHashOperators() {
@@ -23,23 +28,32 @@ public class VectorisedHashOperators extends VectorisedOperators  {
      * Method to construct a pre-hash vector for an integer key vector.
      * @param preHashKeyVector The pre-hash vector to construct.
      * @param keyVector The key vector for which to construct the pre-hash vector.
+     * @param extend Whether the operation is extending an existing vector or not.
      */
     public static void constructPreHashKeyVector(
             long[] preHashKeyVector,
-            org.apache.arrow.vector.IntVector keyVector
+            org.apache.arrow.vector.IntVector keyVector,
+            boolean extend
     ) {
-        for (int i = 0; i < keyVector.getValueCount(); i++)
-            preHashKeyVector[i] = Int_Hash_Function.preHash(keyVector.get(i));
+        if (!extend) {
+            for (int i = 0; i < keyVector.getValueCount(); i++)
+                preHashKeyVector[i] = Int_Hash_Function.preHash(keyVector.get(i));
+        } else {
+            for (int i = 0; i < keyVector.getValueCount(); i++)
+                preHashKeyVector[i] ^= Int_Hash_Function.preHash(keyVector.get(i));
+        }
     }
 
     /**
      * Method to construct a pre-hash vector for an integer key vector using SIMD acceleration.
      * @param preHashKeyVector The pre-hash vector to construct.
      * @param keyVector The key vector from which to construct the pre-hash vector.
+     * @param extend Whether the operation is extending an existing vector or not.
      */
     public static void constructPreHashKeyVectorSIMD(
             long[] preHashKeyVector,
-            org.apache.arrow.vector.IntVector keyVector
+            org.apache.arrow.vector.IntVector keyVector,
+            boolean extend
     ) {
         // Compute the required vector species for the processing
         VectorSpecies<Long> LONG_SPECIES = jdk.incubator.vector.LongVector.SPECIES_PREFERRED;
@@ -83,16 +97,29 @@ public class VectorisedHashOperators extends VectorisedOperators  {
             var long_key_mul_a_plus_b_simd_vector = long_key_mul_a_simd_vector.add(Int_Hash_Function.hashConstantB);
 
             // Store the partial computation of the pre-hash value (still need to take it mod p)
-            long_key_mul_a_plus_b_simd_vector.intoArray(preHashKeyVector, currentIndex);
+            if (!extend)
+                long_key_mul_a_plus_b_simd_vector.intoArray(preHashKeyVector, currentIndex);
+            else
+                long_key_mul_a_plus_b_simd_vector.intoArray(tempVector, currentIndex);
         }
 
         // Execute the mod p part for the vectorised indices
-        for (int i = 0; i < currentIndex; i++)
-            preHashKeyVector[i] %= Int_Hash_Function.hashConstantP;
+        if (!extend) {
+            for (int i = 0; i < currentIndex; i++)
+                preHashKeyVector[i] %= Int_Hash_Function.hashConstantP;
+        } else {
+            for (int i = 0; i < currentIndex; i++)
+                preHashKeyVector[i] ^= (tempVector[i] % Int_Hash_Function.hashConstantP);
+        }
 
         // Perform the tail processing
-        for (; currentIndex < vectorLength; currentIndex++)
-            preHashKeyVector[currentIndex] = Int_Hash_Function.preHash(keyVector.get(currentIndex));
+        if (!extend) {
+            for (; currentIndex < vectorLength; currentIndex++)
+                preHashKeyVector[currentIndex] = Int_Hash_Function.preHash(keyVector.get(currentIndex));
+        } else {
+            for (; currentIndex < vectorLength; currentIndex++)
+                preHashKeyVector[currentIndex] ^= Int_Hash_Function.preHash(keyVector.get(currentIndex));
+        }
     }
 
     /**
@@ -100,26 +127,35 @@ public class VectorisedHashOperators extends VectorisedOperators  {
      * @param preHashKeyVector The pre-hash vector to construct.
      * @param keyVector The key vector for which to construct the value vector.
      * @param keyVectorLength The length of the valid poriton of {@code keyVector}.
+     * @param extend Whether the operation is extending an existing vector or not.
      */
     public static void constructPreHashKeyVector(
             long[] preHashKeyVector,
             int[] keyVector,
-            int keyVectorLength
+            int keyVectorLength,
+            boolean extend
     ) {
-        for (int i = 0; i < keyVectorLength; i++)
-            preHashKeyVector[i] = Int_Hash_Function.preHash(keyVector[i]);
+        if (!extend) {
+            for (int i = 0; i < keyVectorLength; i++)
+                preHashKeyVector[i] = Int_Hash_Function.preHash(keyVector[i]);
+        } else {
+            for (int i = 0; i < keyVectorLength; i++)
+                preHashKeyVector[i] ^= Int_Hash_Function.preHash(keyVector[i]);
+        }
     }
 
     /**
      * Method to construct a pre-hash vector for an integer key vector using SIMD accelleration.
      * @param preHashKeyVector The pre-hash vector to construct.
      * @param keyVector The key vector for which to construct the value vector.
-     * @param keyVectorLength The length of the valid poriton of {@code keyVector}.
+     * @param keyVectorLength The length of the valid portion of {@code keyVector}.
+     * @param extend Whether the operation is extending an existing vector or not.
      */
     public static void constructPreHashKeyVectorSIMD(
             long[] preHashKeyVector,
             int[] keyVector,
-            int keyVectorLength
+            int keyVectorLength,
+            boolean extend
     ) {
         // Compute the required vector species for the processing
         VectorSpecies<Long> LONG_SPECIES = jdk.incubator.vector.LongVector.SPECIES_PREFERRED;
@@ -157,16 +193,30 @@ public class VectorisedHashOperators extends VectorisedOperators  {
             var long_key_mul_a_plus_b_simd_vector = long_key_mul_a_simd_vector.add(Int_Hash_Function.hashConstantB);
 
             // Store the partial computation of the pre-hash value (still need to take it mod p)
-            long_key_mul_a_plus_b_simd_vector.intoArray(preHashKeyVector, currentIndex);
+            if (!extend) {
+                long_key_mul_a_plus_b_simd_vector.intoArray(preHashKeyVector, currentIndex);
+            } else {
+                long_key_mul_a_plus_b_simd_vector.intoArray(tempVector, currentIndex);
+            }
         }
 
         // Execute the mod p part for the vectorised indices
-        for (int i = 0; i < currentIndex; i++)
-            preHashKeyVector[i] %= Int_Hash_Function.hashConstantP;
+        if (!extend) {
+            for (int i = 0; i < currentIndex; i++)
+                preHashKeyVector[i] %= Int_Hash_Function.hashConstantP;
+        } else {
+            for (int i = 0; i < currentIndex; i++)
+                preHashKeyVector[i] ^= (tempVector[i] % Int_Hash_Function.hashConstantP);
+        }
 
         // Perform the tail processing
-        for (; currentIndex < keyVectorLength; currentIndex++)
-            preHashKeyVector[currentIndex] = Int_Hash_Function.preHash(keyVector[currentIndex]);
+        if (!extend) {
+            for (; currentIndex < keyVectorLength; currentIndex++)
+                preHashKeyVector[currentIndex] = Int_Hash_Function.preHash(keyVector[currentIndex]);
+        } else {
+            for (; currentIndex < keyVectorLength; currentIndex++)
+                preHashKeyVector[currentIndex] ^= Int_Hash_Function.preHash(keyVector[currentIndex]);
+        }
     }
 
 }

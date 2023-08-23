@@ -187,7 +187,7 @@ public class VectorisedSimd {
             org.apache.arrow.vector.IntVector table_C_vc_0 = ((org.apache.arrow.vector.IntVector) table_C.getVector(0));
             org.apache.arrow.vector.IntVector table_C_vc_1 = ((org.apache.arrow.vector.IntVector) table_C.getVector(1));
             org.apache.arrow.vector.IntVector table_C_vc_2 = ((org.apache.arrow.vector.IntVector) table_C.getVector(2));
-            VectorisedHashOperators.constructPreHashKeyVectorSIMD(pre_hash_vector, table_C_vc_0);
+            VectorisedHashOperators.constructPreHashKeyVectorSIMD(pre_hash_vector, table_C_vc_0, false);
             int recordCount = table_C_vc_0.getValueCount();
             for (int i = 0; i < recordCount; i++) {
                 int left_join_record_key = table_C_vc_0.get(i);
@@ -210,7 +210,7 @@ public class VectorisedSimd {
             org.apache.arrow.vector.IntVector table_A_vc_0 = ((org.apache.arrow.vector.IntVector) table_A.getVector(0));
             org.apache.arrow.vector.IntVector table_A_vc_1 = ((org.apache.arrow.vector.IntVector) table_A.getVector(1));
             org.apache.arrow.vector.IntVector table_A_vc_2 = ((org.apache.arrow.vector.IntVector) table_A.getVector(2));
-            VectorisedHashOperators.constructPreHashKeyVectorSIMD(pre_hash_vector_0, table_A_vc_0);
+            VectorisedHashOperators.constructPreHashKeyVectorSIMD(pre_hash_vector_0, table_A_vc_0, false);
             int recordCount = table_A_vc_0.getValueCount();
             for (int i = 0; i < recordCount; i++) {
                 int left_join_record_key = table_A_vc_0.get(i);
@@ -228,7 +228,7 @@ public class VectorisedSimd {
             org.apache.arrow.vector.IntVector table_B_vc_0 = ((org.apache.arrow.vector.IntVector) table_B.getVector(0));
             org.apache.arrow.vector.IntVector table_B_vc_1 = ((org.apache.arrow.vector.IntVector) table_B.getVector(1));
             org.apache.arrow.vector.IntVector table_B_vc_2 = ((org.apache.arrow.vector.IntVector) table_B.getVector(2));
-            VectorisedHashOperators.constructPreHashKeyVectorSIMD(pre_hash_vector_0, table_B_vc_0);
+            VectorisedHashOperators.constructPreHashKeyVectorSIMD(pre_hash_vector_0, table_B_vc_0, false);
             int recordCount = table_B_vc_0.getValueCount();
             int currentRecordIndex = 0;
             while (currentRecordIndex < recordCount) {
@@ -258,7 +258,7 @@ public class VectorisedSimd {
                     }
                     currentRecordIndex++;
                 }
-                VectorisedHashOperators.constructPreHashKeyVectorSIMD(pre_hash_vector, join_result_vector_ord_1_0, currentResultIndex);
+                VectorisedHashOperators.constructPreHashKeyVectorSIMD(pre_hash_vector, join_result_vector_ord_1_0, currentResultIndex, false);
                 int recordCount_0 = currentResultIndex;
                 int currentRecordIndex_0 = 0;
                 while (currentRecordIndex_0 < recordCount_0) {

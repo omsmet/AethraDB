@@ -168,4 +168,35 @@ public class JaninoVariableGen {
         );
     }
 
+    /**
+     * Method to generate a statement that performs an XOR assignment to a variable.
+     * @param location The location from which the XOR assignment statement is requested for generation.
+     * @param lhs The variable to which the XOR assignment should be done.
+     * @param rhs The value to XOR to the variable assign.
+     * @return The XOR assignment statement.
+     */
+    public static Java.ExpressionStatement createVariableXorAssignmentStm(Location location, Java.Lvalue lhs, Java.Rvalue rhs) {
+        try {
+            return new Java.ExpressionStatement(createVariableXorAssignment(location, lhs, rhs));
+        } catch (CompileException e) {
+            throw new RuntimeException("Exception occurred while creating a variable XOR assignment statement", e);
+        }
+    }
+
+    /**
+     * Method to generate a variable XOR assignment (^=).
+     * @param location The location from which the XOR assignment expression is requested for generation.
+     * @param lhs The variable to which the XOR assignment should be done.
+     * @param rhs The value to XOR to the variable.
+     * @return The variable XOR assignment.
+     */
+    public static Java.Assignment createVariableXorAssignment(Location location, Java.Lvalue lhs, Java.Rvalue rhs) {
+        return new Java.Assignment(
+                location,
+                lhs,
+                "^=",
+                rhs
+        );
+    }
+
 }
