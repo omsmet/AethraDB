@@ -74,6 +74,18 @@ public abstract class AllocationManager {
     public abstract void release(double[] vector);
 
     /**
+     * Method for obtaining a nested byte vector to use in query processing.
+     * @return A nested byte vector of length {@code evaluation.vector_support.VectorisedOperators.VECTOR_LENGTH}.
+     */
+    public abstract byte[][] getNestedByteVector();
+
+    /**
+     * Method to mark a nested byte vector used in query processing as unused. ("free a vector")
+     * @param vector The vector to mark as unused.
+     */
+    public abstract void release(byte[][] vector);
+
+    /**
      * Method for obtaining a {@link Simple_Int_Long_Map} instance for use in query processing.
      * @return An empty {@link Simple_Int_Long_Map} instance.
      */

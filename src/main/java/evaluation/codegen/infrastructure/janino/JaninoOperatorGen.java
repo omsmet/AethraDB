@@ -139,6 +139,17 @@ public class JaninoOperatorGen {
     }
 
     /**
+     * Generate an or operator.
+     * @param location The location at which the operator is requested for generation.
+     * @param lhs The left-hand side of the or.
+     * @param rhs The right-hand side of the or.
+     * @return The comparison operator.
+     */
+    public static Java.BinaryOperation or(Location location, Java.Rvalue lhs, Java.Rvalue rhs) {
+        return new Java.BinaryOperation(location, lhs, "||", rhs);
+    }
+
+    /**
      * Generate an equality comparison operator.
      * @param location The location at which the operator is requested for generation.
      * @param lhs The left-hand side of the comparison.

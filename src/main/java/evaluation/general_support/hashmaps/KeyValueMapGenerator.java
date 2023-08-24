@@ -14,6 +14,7 @@ import static evaluation.codegen.infrastructure.context.QueryVariableType.P_A_IN
 import static evaluation.codegen.infrastructure.context.QueryVariableType.P_BOOLEAN;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.P_INT;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.P_LONG;
+import static evaluation.codegen.infrastructure.context.QueryVariableType.S_FL_BIN;
 import static evaluation.codegen.infrastructure.context.QueryVariableTypeMethods.isPrimitive;
 import static evaluation.codegen.infrastructure.context.QueryVariableTypeMethods.primitiveArrayTypeForPrimitive;
 import static evaluation.codegen.infrastructure.context.QueryVariableTypeMethods.primitiveMemberTypeForArray;
@@ -31,6 +32,8 @@ import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createAr
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createCast;
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createFloatingPointLiteral;
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createIntegerLiteral;
+import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createNestedPrimitiveArrayType;
+import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createNew2DPrimitiveArray;
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createNewPrimitiveArray;
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createPrimitiveArrayType;
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createPrimitiveType;
@@ -56,6 +59,7 @@ import static evaluation.codegen.infrastructure.janino.JaninoOperatorGen.lt;
 import static evaluation.codegen.infrastructure.janino.JaninoOperatorGen.mul;
 import static evaluation.codegen.infrastructure.janino.JaninoOperatorGen.neq;
 import static evaluation.codegen.infrastructure.janino.JaninoOperatorGen.not;
+import static evaluation.codegen.infrastructure.janino.JaninoOperatorGen.or;
 import static evaluation.codegen.infrastructure.janino.JaninoOperatorGen.postIncrement;
 import static evaluation.codegen.infrastructure.janino.JaninoOperatorGen.sub;
 import static evaluation.codegen.infrastructure.janino.JaninoVariableGen.createLocalVariable;
@@ -140,7 +144,7 @@ public class KeyValueMapGenerator {
      */
     public KeyValueMapGenerator(QueryVariableType[] keyTypes, QueryVariableType[] valueTypes) {
         for (QueryVariableType keyType : keyTypes) {
-            if (!isPrimitive(keyType))
+            if (!isPrimitive(keyType) && keyType != S_FL_BIN)
                 throw new IllegalArgumentException("KeyValueMapGenerator expects a primitive key type, not " + keyType);
         }
 
@@ -216,13 +220,16 @@ public class KeyValueMapGenerator {
 
         // For each field of the key types, create an array
         for (int i = 0; i < this.keyVariableNames.length; i++) {
+            Java.Type arrayType;
+            if (this.keyTypes[i] == S_FL_BIN)
+                arrayType = createNestedPrimitiveArrayType(getLocation(), Java.Primitive.BYTE);
+            else
+                arrayType = createPrimitiveArrayType(getLocation(), toJavaPrimitive(this.keyTypes[i]));
+
             this.mapDeclaration.addFieldDeclaration(
                     createPublicFieldDeclaration(
                             getLocation(),
-                            createPrimitiveArrayType(
-                                    getLocation(),
-                                    toJavaPrimitive(this.keyTypes[i])
-                            ),
+                            arrayType,
                             createSimpleVariableDeclaration(
                                     getLocation(),
                                     this.keyVariableNames[i]
@@ -364,6 +371,12 @@ public class KeyValueMapGenerator {
             String keyVarName = this.keyVariableNames[i];
             QueryVariableType keyVarPrimType = this.keyTypes[i];
 
+            Java.NewArray theArray;
+            if (this.keyTypes[i] == S_FL_BIN)
+                theArray = createNew2DPrimitiveArray(getLocation(), Java.Primitive.BYTE, capacityParameterAP.read());
+            else
+                theArray = createNewPrimitiveArray(getLocation(), toJavaPrimitive(keyVarPrimType), capacityParameterAP.read());
+
             constructorBody.add(
                     createVariableAssignmentStm(
                             getLocation(),
@@ -372,16 +385,13 @@ public class KeyValueMapGenerator {
                                     new Java.ThisReference(getLocation()),
                                     keyVarName
                             ),
-                            createNewPrimitiveArray(
-                                    getLocation(),
-                                    toJavaPrimitive(keyVarPrimType),
-                                    capacityParameterAP.read()
-                            )
+                            theArray
                     )
             );
 
             Java.Rvalue initialisationLiteral = switch (keyVarPrimType) {
                 case P_INT -> createIntegerLiteral(getLocation(), -1);
+                case S_FL_BIN -> new Java.NullLiteral(getLocation());
 
                 default -> throw new UnsupportedOperationException(
                         "KeyValueMapGenerator.generateConstructors does not support this key type: " + keyVarPrimType);
@@ -533,11 +543,12 @@ public class KeyValueMapGenerator {
                 "preHash"
         );
 
+        int valueOrdsFormalParametersBaseIndex = currentFormalParamIndex;
         for (int i = 0; i < this.valueTypes.length; i++) {
             formalParameters[currentFormalParamIndex++] = createFormalParameter(
                     getLocation(),
                     toJavaType(getLocation(), this.valueTypes[i]),
-                    "record_ord_" + i
+                    "value_ord_" + i
             );
         }
 
@@ -546,14 +557,25 @@ public class KeyValueMapGenerator {
 
         // Create the non-negative keys check
         for (int i = 0; i < this.keyVariableNames.length; i++) {
-            incrementForKeyMethodBody.add(
-                    generateNonNegativeCheck(
-                            createAmbiguousNameRef(
-                                    getLocation(),
-                                    formalParameters[i].name
-                            )
-                    )
-            );
+            if (this.keyTypes[i] == S_FL_BIN) {
+                incrementForKeyMethodBody.add(
+                        generateNonNullCheck(
+                                createAmbiguousNameRef(
+                                        getLocation(),
+                                        formalParameters[i].name
+                                )
+                        )
+                );
+            } else {
+                incrementForKeyMethodBody.add(
+                        generateNonNegativeCheck(
+                                createAmbiguousNameRef(
+                                        getLocation(),
+                                        formalParameters[i].name
+                                )
+                        )
+                );
+            }
         }
 
         // Declare the index variable and check whether the key is already contained in the map
@@ -676,7 +698,7 @@ public class KeyValueMapGenerator {
         );
 
         // Increment this key's values by the provided amounts
-        // this.values_record_ord_i[index] += record_ord_i;
+        // this.values_ord_i[index] += value_ord_i;
         for (int i = 0; i < valueVariableNames.length; i++) {
             incrementForKeyMethodBody.add(
                     createVariableAdditionAssignmentStm(
@@ -686,7 +708,7 @@ public class KeyValueMapGenerator {
                                     createThisFieldAccess(getLocation(), valueVariableNames[i]),
                                     indexAP.read()
                             ),
-                            createAmbiguousNameRef(getLocation(), formalParameters[i + 2].name)
+                            createAmbiguousNameRef(getLocation(), formalParameters[valueOrdsFormalParametersBaseIndex + i].name)
                     )
             );
         }
@@ -780,7 +802,8 @@ public class KeyValueMapGenerator {
             );
         }
 
-        formalParameters[currentFormalParameterIndex++] = createFormalParameter(
+        int preHashFormalParamIndex = currentFormalParameterIndex++;
+        formalParameters[preHashFormalParamIndex] = createFormalParameter(
                 getLocation(),
                 toJavaType(getLocation(), P_LONG),
                 "preHash"
@@ -797,7 +820,7 @@ public class KeyValueMapGenerator {
                         toJavaType(getLocation(), htIndex.getType()),
                         htIndex.getVariableName(),
                         generatePreHashToHashStatement(
-                                createAmbiguousNameRef(getLocation(), formalParameters[1].name))
+                                createAmbiguousNameRef(getLocation(), formalParameters[preHashFormalParamIndex].name))
                 )
         );
 
@@ -839,7 +862,7 @@ public class KeyValueMapGenerator {
 
         // Otherwise follow next-pointers while necessary
         // int currentIndex = initialIndex;
-        // while ($ conjunction of key ords $ this.keys_ord_i[currentIndex] != key_ord_i) {
+        // while ($ disjunction of key ords $ this.keys_ord_i[currentIndex] != key_ord_i) {
         //     int potentialNextIndex = this.next[currentIndex];
         //     if (potentialNextIndex == -1)
         //         return -1;
@@ -856,29 +879,76 @@ public class KeyValueMapGenerator {
                 )
         );
 
-        // Generate the conjunction for the while-loop guard
-        Java.Rvalue nextLoopConjunction = neq(
-                getLocation(),
-                createArrayElementAccessExpr(
-                        getLocation(),
-                        createThisFieldAccess(getLocation(), this.keyVariableNames[0]),
-                        currentIndex.read()
-                ),
-                createAmbiguousNameRef(getLocation(), formalParameters[0].name)
-        );
-        for (int i = 1; i < this.keyVariableNames.length; i++) {
-            nextLoopConjunction = and(
+        // Generate the disjunction for the while-loop guard
+        Java.Rvalue nextLoopDisjunction;
+        if (this.keyTypes[0] == S_FL_BIN) {
+            nextLoopDisjunction = not(
                     getLocation(),
-                    nextLoopConjunction,
-                    neq(
+                    createMethodInvocation(
                             getLocation(),
-                            createArrayElementAccessExpr(
-                                    getLocation(),
-                                    createThisFieldAccess(getLocation(), this.keyVariableNames[i]),
-                                    currentIndex.read()
-                            ),
-                            createAmbiguousNameRef(getLocation(), formalParameters[i].name)
+                            createAmbiguousNameRef(getLocation(), "Arrays"),
+                            "equals",
+                            new Java.Rvalue[] {
+                                    createArrayElementAccessExpr(
+                                            getLocation(),
+                                            createThisFieldAccess(getLocation(), this.keyVariableNames[0]),
+                                            currentIndex.read()
+                                    ),
+                                    createAmbiguousNameRef(getLocation(), formalParameters[0].name)
+                            }
                     )
+            );
+
+        } else {
+            nextLoopDisjunction = neq(
+                    getLocation(),
+                    createArrayElementAccessExpr(
+                            getLocation(),
+                            createThisFieldAccess(getLocation(), this.keyVariableNames[0]),
+                            currentIndex.read()
+                    ),
+                    createAmbiguousNameRef(getLocation(), formalParameters[0].name)
+            );
+
+        }
+
+        for (int i = 1; i < this.keyVariableNames.length; i++) {
+            Java.Rvalue conditionCheck;
+            if (this.keyTypes[i] == S_FL_BIN) {
+                conditionCheck = not(
+                        getLocation(),
+                        createMethodInvocation(
+                                getLocation(),
+                                createAmbiguousNameRef(getLocation(), "Arrays"),
+                                "equals",
+                                new Java.Rvalue[] {
+                                        createArrayElementAccessExpr(
+                                                getLocation(),
+                                                createThisFieldAccess(getLocation(), this.keyVariableNames[i]),
+                                                currentIndex.read()
+                                        ),
+                                        createAmbiguousNameRef(getLocation(), formalParameters[i].name)
+                                }
+                        )
+                );
+
+            } else {
+                conditionCheck = neq(
+                        getLocation(),
+                        createArrayElementAccessExpr(
+                                getLocation(),
+                                createThisFieldAccess(getLocation(), this.keyVariableNames[i]),
+                                currentIndex.read()
+                        ),
+                        createAmbiguousNameRef(getLocation(), formalParameters[i].name)
+                );
+
+            }
+
+            nextLoopDisjunction = or(
+                    getLocation(),
+                    nextLoopDisjunction,
+                    conditionCheck
             );
         }
 
@@ -886,7 +956,7 @@ public class KeyValueMapGenerator {
         findMethodBody.add(
                 createWhileLoop(
                         getLocation(),
-                        nextLoopConjunction,
+                        nextLoopDisjunction,
                         nextPointerLoopBody
                 )
         );
@@ -999,16 +1069,23 @@ public class KeyValueMapGenerator {
             String newKeyVarName = keyVarName + "_new";
             QueryVariableType keyPrimType = this.keyTypes[i];
 
+            Java.Type arrayType;
+            Java.NewArray theArray;
+            if (keyPrimType == S_FL_BIN) {
+                arrayType = createNestedPrimitiveArrayType(getLocation(), Java.Primitive.BYTE);
+                theArray = createNew2DPrimitiveArray(getLocation(), Java.Primitive.BYTE, newSize.read());
+            }
+            else {
+                arrayType = createPrimitiveArrayType(getLocation(), toJavaPrimitive(keyPrimType));
+                theArray = createNewPrimitiveArray(getLocation(), toJavaPrimitive(keyPrimType), newSize.read());
+            }
+
             growArraysMethodBody.add(
                     createLocalVariable(
                             getLocation(),
-                            toJavaType(getLocation(), primitiveArrayTypeForPrimitive(keyPrimType)),
+                            arrayType,
                             newKeyVarName,
-                            createNewPrimitiveArray(
-                                    getLocation(),
-                                    toJavaPrimitive(keyPrimType),
-                                    newSize.read()
-                            )
+                            theArray
                     )
             );
 
@@ -1029,6 +1106,7 @@ public class KeyValueMapGenerator {
 
             Java.Rvalue initialisationLiteral = switch (keyPrimType) {
                 case P_INT -> createIntegerLiteral(getLocation(), -1);
+                case S_FL_BIN -> new Java.NullLiteral(getLocation());
 
                 default -> throw new UnsupportedOperationException(
                         "KeyValueMapGenerator.generateGrowArraysMethod does not support this key type: " + keyPrimType);
@@ -1295,31 +1373,78 @@ public class KeyValueMapGenerator {
                 )
         );
 
-        // while ($ conjunction per key ord i $ this.keys_ord_i[currentIndex] != key_ord_i $$ && this.next[currentIndex] != -1) {
+        // while ($ disjunction per key ord i $ this.keys_ord_i[currentIndex] != key_ord_i $$ && this.next[currentIndex] != -1) {
         //     currentIndex = this.next[currentIndex];
         // }
-        Java.Rvalue probeWhileLoopConjunction = neq(
-                getLocation(),
-                createArrayElementAccessExpr(
-                        getLocation(),
-                        createThisFieldAccess(getLocation(), this.keyVariableNames[0]),
-                        currentIndex.read()
-                ),
-                createAmbiguousNameRef(getLocation(), formalParameters[0].name)
-        );
-        for (int i = 1; i < this.keyVariableNames.length; i++) {
-            probeWhileLoopConjunction = and(
+        Java.Rvalue probeWhileLoopDisjunction;
+        if (this.keyTypes[0] == S_FL_BIN) {
+            probeWhileLoopDisjunction = not(
                     getLocation(),
-                    probeWhileLoopConjunction,
-                    neq(
+                    createMethodInvocation(
                             getLocation(),
-                            createArrayElementAccessExpr(
-                                    getLocation(),
-                                    createThisFieldAccess(getLocation(), this.keyVariableNames[i]),
-                                    currentIndex.read()
-                            ),
-                            createAmbiguousNameRef(getLocation(), formalParameters[i].name)
+                            createAmbiguousNameRef(getLocation(), "Arrays"),
+                            "equals",
+                            new Java.Rvalue[] {
+                                    createArrayElementAccessExpr(
+                                            getLocation(),
+                                            createThisFieldAccess(getLocation(), this.keyVariableNames[0]),
+                                            currentIndex.read()
+                                    ),
+                                    createAmbiguousNameRef(getLocation(), formalParameters[0].name)
+                            }
                     )
+            );
+
+        } else {
+            probeWhileLoopDisjunction = neq(
+                    getLocation(),
+                    createArrayElementAccessExpr(
+                            getLocation(),
+                            createThisFieldAccess(getLocation(), this.keyVariableNames[0]),
+                            currentIndex.read()
+                    ),
+                    createAmbiguousNameRef(getLocation(), formalParameters[0].name)
+            );
+
+        }
+
+        for (int i = 1; i < this.keyVariableNames.length; i++) {
+            Java.Rvalue condition;
+            if (this.keyTypes[i] == S_FL_BIN) {
+                condition = not(
+                        getLocation(),
+                        createMethodInvocation(
+                                getLocation(),
+                                createAmbiguousNameRef(getLocation(), "Arrays"),
+                                "equals",
+                                new Java.Rvalue[] {
+                                        createArrayElementAccessExpr(
+                                                getLocation(),
+                                                createThisFieldAccess(getLocation(), this.keyVariableNames[i]),
+                                                currentIndex.read()
+                                        ),
+                                        createAmbiguousNameRef(getLocation(), formalParameters[i].name)
+                                }
+                        )
+                );
+
+            } else {
+                condition = neq(
+                        getLocation(),
+                        createArrayElementAccessExpr(
+                                getLocation(),
+                                createThisFieldAccess(getLocation(), this.keyVariableNames[i]),
+                                currentIndex.read()
+                        ),
+                        createAmbiguousNameRef(getLocation(), formalParameters[i].name)
+                );
+
+            }
+
+            probeWhileLoopDisjunction = or(
+                    getLocation(),
+                    probeWhileLoopDisjunction,
+                    condition
             );
         }
 
@@ -1328,7 +1453,7 @@ public class KeyValueMapGenerator {
                         getLocation(),
                         and(
                                 getLocation(),
-                                probeWhileLoopConjunction,
+                                probeWhileLoopDisjunction,
                                 neq(
                                         getLocation(),
                                         createArrayElementAccessExpr(
@@ -1523,6 +1648,7 @@ public class KeyValueMapGenerator {
                     getLocation(),
                     switch (this.keyTypes[i]) {
                         case P_INT -> createAmbiguousNameRef(getLocation(), "Int_Hash_Function");
+                        case S_FL_BIN -> createAmbiguousNameRef(getLocation(), "Char_Arr_Hash_Function");
 
                         default -> throw new UnsupportedOperationException(
                                 "This key-type is currently not supported by the KeyValueMapGenerator");
@@ -1611,6 +1737,7 @@ public class KeyValueMapGenerator {
             QueryVariableType keyType = this.keyTypes[i];
             Java.Rvalue initialisationLiteral = switch (keyType) {
                 case P_INT -> createIntegerLiteral(getLocation(), -1);
+                case S_FL_BIN -> new Java.NullLiteral(getLocation());
 
                 default -> throw new UnsupportedOperationException(
                         "KeyValueMapGenerator.generateResetMethod does not support this key type: " + keyType);
@@ -1717,6 +1844,38 @@ public class KeyValueMapGenerator {
                                 ),
                                 new Java.Rvalue[] {
                                         createStringLiteral(getLocation(), "\"The map expects non-negative keys\"")
+                                }
+                        )
+                )
+        );
+    }
+
+    /**
+     * Method to generate statements that check that a given {@link Java.Rvalue}
+     * is non-null.
+     * @param rValueToCheck The {@link Java.Rvalue} to check for non-null-ity.
+     * @return The generated check, which throws an exception on a null key.
+     */
+    private Java.Statement generateNonNullCheck(Java.Rvalue rValueToCheck) {
+        // if ([rvalueToCheck] == null)
+        //     throw new IllegalArgumentException("The map expects non-null keys");
+        return createIf(
+                getLocation(),
+                eq(
+                        getLocation(),
+                        rValueToCheck,
+                        new Java.NullLiteral(getLocation())
+                ),
+                new Java.ThrowStatement(
+                        getLocation(),
+                        createClassInstance(
+                                getLocation(),
+                                createReferenceType(
+                                        getLocation(),
+                                        "java.lang.IllegalArgumentException"
+                                ),
+                                new Java.Rvalue[] {
+                                        createStringLiteral(getLocation(), "\"The map expects non-null keys\"")
                                 }
                         )
                 )

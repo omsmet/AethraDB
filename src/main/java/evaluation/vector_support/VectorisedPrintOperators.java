@@ -15,6 +15,18 @@ public class VectorisedPrintOperators extends VectorisedOperators {
     }
 
     /**
+     * Primitive for printing a {@link org.apache.arrow.vector.FixedSizeBinaryVector} to the standard output.
+     * @param vector The vector to output.
+     */
+    public static void print(org.apache.arrow.vector.FixedSizeBinaryVector vector) {
+        System.out.print("[");
+        int lastVectorIndex = vector.getValueCount() - 1;
+        for (int i = 0; i < lastVectorIndex; i++)
+            System.out.print(new String(vector.get(i)) + ", ");
+        System.out.println(new String(vector.get(lastVectorIndex)) + "]");
+    }
+
+    /**
      * Primitive for printing a {@link org.apache.arrow.vector.IntVector} to the standard output
      * when only some entries are valid as specified by a selection vector.
      * @param vector The vector to output.
@@ -102,6 +114,19 @@ public class VectorisedPrintOperators extends VectorisedOperators {
         for (int i = 0; i < lastVectorIndex; i++)
             System.out.print(vector[i] + ", ");
         System.out.println(vector[lastVectorIndex] + "]");
+    }
+
+    /**
+     * Primitive for printing a nested byte array representing a vector to the standard output.
+     * @param vector The vector to output.
+     * @param vectorLength The length of the valid portion of {@code vector} to print.
+     */
+    public static void print(byte[][] vector, int vectorLength) {
+        System.out.print("[");
+        int lastVectorIndex = vectorLength - 1;
+        for (int i = 0; i < lastVectorIndex; i++)
+            System.out.print(new String(vector[i]) + ", ");
+        System.out.println(new String(vector[lastVectorIndex]) + "]");
     }
 
 }

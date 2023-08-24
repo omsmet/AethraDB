@@ -5,10 +5,12 @@ import org.codehaus.commons.compiler.Location;
 import org.codehaus.janino.Java;
 
 import static evaluation.codegen.infrastructure.context.QueryVariableType.ARRAY_DOUBLE_VECTOR;
+import static evaluation.codegen.infrastructure.context.QueryVariableType.ARRAY_FIXED_LENGTH_BINARY_VECTOR;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.ARRAY_FLOAT_VECTOR;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.ARRAY_INT_VECTOR;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.ARRAY_LONG_VECTOR;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_DOUBLE_VECTOR;
+import static evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_FIXED_LENGTH_BINARY_VECTOR;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_FLOAT_VECTOR;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_INT_VECTOR;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_INT_VECTOR_W_SELECTION_VECTOR;
@@ -26,9 +28,12 @@ import static evaluation.codegen.infrastructure.context.QueryVariableType.P_DOUB
 import static evaluation.codegen.infrastructure.context.QueryVariableType.P_FLOAT;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.P_INT;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.P_LONG;
+import static evaluation.codegen.infrastructure.context.QueryVariableType.S_FL_BIN;
+import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createNestedPrimitiveArrayType;
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createPrimitiveArrayType;
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createPrimitiveType;
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createReferenceType;
+import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.getLocation;
 
 /**
  * Class containing helper methods to operate on {@link QueryVariableType} values.
@@ -132,6 +137,7 @@ public final class QueryVariableTypeMethods {
             case P_A_FLOAT -> ARRAY_FLOAT_VECTOR;
             case P_A_INT -> ARRAY_INT_VECTOR;
             case P_A_LONG -> ARRAY_LONG_VECTOR;
+            case S_A_FL_BIN -> ARRAY_FIXED_LENGTH_BINARY_VECTOR;
             default ->
                 throw new IllegalArgumentException("vectorTypeForPrimitiveArrayType expects a primitive array type");
         };
@@ -142,6 +148,7 @@ public final class QueryVariableTypeMethods {
      */
     public static QueryVariableType sqlTypeToArrowVectorType(SqlTypeName sqlType) {
         return switch (sqlType) {
+            case CHAR -> ARROW_FIXED_LENGTH_BINARY_VECTOR;
             case DOUBLE -> ARROW_DOUBLE_VECTOR;
             case FLOAT -> ARROW_FLOAT_VECTOR;
             case INTEGER -> ARROW_INT_VECTOR;
@@ -152,16 +159,17 @@ public final class QueryVariableTypeMethods {
     }
 
     /**
-     * Method to get the primitive member type of Arrow vector.
+     * Method to get the member type of Arrow vector.
      */
-    public static QueryVariableType primitiveMemberTypeForArrowVector(QueryVariableType arrowType) {
+    public static QueryVariableType memberTypeForArrowVector(QueryVariableType arrowType) {
         return switch (arrowType) {
             case ARROW_DOUBLE_VECTOR -> P_DOUBLE;
+            case ARROW_FIXED_LENGTH_BINARY_VECTOR -> S_FL_BIN;
             case ARROW_FLOAT_VECTOR -> P_FLOAT;
             case ARROW_INT_VECTOR -> P_INT;
             case ARROW_LONG_VECTOR -> P_LONG;
             default ->
-                    throw new IllegalArgumentException("primitiveMemberForArrow expects an arrow type");
+                    throw new IllegalArgumentException("memberTypeForArrowVector expects an arrow type");
         };
     }
 
@@ -241,7 +249,12 @@ public final class QueryVariableTypeMethods {
             case P_A_INT -> createPrimitiveArrayType(location, Java.Primitive.INT);
             case P_A_LONG -> createPrimitiveArrayType(location, Java.Primitive.LONG);
 
+            case S_FL_BIN -> createPrimitiveArrayType(location, Java.Primitive.BYTE);
+
+            case S_A_FL_BIN -> createNestedPrimitiveArrayType(location, Java.Primitive.BYTE);
+
             case ARROW_DOUBLE_VECTOR -> createReferenceType(location, "org.apache.arrow.vector.Float8Vector");
+            case ARROW_FIXED_LENGTH_BINARY_VECTOR -> createReferenceType(getLocation(), "org.apache.arrow.vector.FixedSizeBinaryVector");
             case ARROW_FLOAT_VECTOR -> createReferenceType(location, "org.apache.arrow.vector.Float4Vector");
             case ARROW_INT_VECTOR -> createReferenceType(location, "org.apache.arrow.vector.IntVector");
             case ARROW_LONG_VECTOR -> createReferenceType(location, "org.apache.arrow.vector.BigIntVector");

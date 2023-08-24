@@ -301,6 +301,26 @@ public class JaninoGeneralGen {
      * @param location The location where the new array is requested for generation.
      * @param primitiveType The primitive type that the array should get.
      * @param lengthD1 The length to initialise the first array dimension with.
+     * @return A {@link Java.NewArray} corresponding to the provided parameters.
+     */
+    public static Java.NewArray createNew2DPrimitiveArray(
+            Location location,
+            Java.Primitive primitiveType,
+            Java.Rvalue lengthD1
+    ) {
+        return new Java.NewArray(
+                location,
+                createPrimitiveType(getLocation(), primitiveType),
+                new Java.Rvalue[] { lengthD1 },
+                1
+        );
+    }
+
+    /**
+     * Method to create a new 2 dimensional array of a primitive java type.
+     * @param location The location where the new array is requested for generation.
+     * @param primitiveType The primitive type that the array should get.
+     * @param lengthD1 The length to initialise the first array dimension with.
      * @param lengthD2 The length to initialise the second array dimension with.
      * @return A {@link Java.NewArray} corresponding to the provided parameters.
      */

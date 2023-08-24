@@ -33,8 +33,8 @@ import static evaluation.codegen.infrastructure.context.QueryVariableType.VECTOR
 import static evaluation.codegen.infrastructure.context.QueryVariableType.VECTOR_MASK_INT;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.VECTOR_SPECIES_DOUBLE;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.VECTOR_SPECIES_INT;
+import static evaluation.codegen.infrastructure.context.QueryVariableTypeMethods.memberTypeForArrowVector;
 import static evaluation.codegen.infrastructure.context.QueryVariableTypeMethods.memorySegmentTypeForArrowVector;
-import static evaluation.codegen.infrastructure.context.QueryVariableTypeMethods.primitiveMemberTypeForArrowVector;
 import static evaluation.codegen.infrastructure.context.QueryVariableTypeMethods.sqlTypeToArrowVectorType;
 import static evaluation.codegen.infrastructure.context.QueryVariableTypeMethods.toJavaType;
 import static evaluation.codegen.infrastructure.janino.JaninoControlGen.createForLoop;
@@ -149,7 +149,7 @@ public class ArrowTableScanOperator extends CodeGenOperator<LogicalArrowTableSca
                         return (AccessPath) new IndexedArrowVectorElementAccessPath(
                                 avap,
                                 avivAccessPath,
-                                primitiveMemberTypeForArrowVector(avap.getType())
+                                memberTypeForArrowVector(avap.getType())
                         );
                     }).toList();
             cCtx.setCurrentOrdinalMapping(updatedOrdinalMapping);
@@ -318,7 +318,7 @@ public class ArrowTableScanOperator extends CodeGenOperator<LogicalArrowTableSca
                 QueryVariableType maskedSvsapType;
 
                 if (currentOrdinal.getType() == ARROW_DOUBLE_VECTOR) {
-                    QueryVariableType vectorElementType = primitiveMemberTypeForArrowVector(currentOrdinal.getType()); // P_DOUBLE
+                    QueryVariableType vectorElementType = memberTypeForArrowVector(currentOrdinal.getType()); // P_DOUBLE
 
                     if (!definedVectorSpecies.containsKey(vectorElementType)) {
                         // Need to define the vector species first
@@ -343,7 +343,7 @@ public class ArrowTableScanOperator extends CodeGenOperator<LogicalArrowTableSca
                     maskedSvsapType = VECTOR_DOUBLE_MASKED;
 
                 } else if (currentOrdinal.getType() == ARROW_INT_VECTOR) {
-                    QueryVariableType vectorElementType = primitiveMemberTypeForArrowVector(currentOrdinal.getType()); // P_INT
+                    QueryVariableType vectorElementType = memberTypeForArrowVector(currentOrdinal.getType()); // P_INT
 
                     if (!definedVectorSpecies.containsKey(vectorElementType)) {
                         // Need to define the vector species first

@@ -8,6 +8,7 @@ import org.apache.arrow.vector.FixedSizeBinaryVector;
 import org.apache.arrow.vector.Float8Vector;
 import org.apache.arrow.vector.IntVector;
 import org.apache.arrow.vector.LargeVarCharVector;
+import org.apache.arrow.vector.VarCharVector;
 import org.apache.arrow.vector.VectorSchemaRoot;
 import org.apache.arrow.vector.ipc.ArrowFileReader;
 
@@ -109,6 +110,10 @@ public class CachingArrowTableReader extends ArrowTableReader {
                 } else if (fv_cvi_i instanceof DecimalVector dd_fv_cvi_i) {
                     this.fieldVectors[cvi][i] = new DecimalVector(dd_fv_cvi_i.getField(), this.tableAllocator);
                     dd_fv_cvi_i.transferTo((DecimalVector) this.fieldVectors[cvi][i]);
+
+                } else if (fv_cvi_i instanceof VarCharVector vc_fv_cvi_i) {
+                    this.fieldVectors[cvi][i] = new VarCharVector(vc_fv_cvi_i.getField(), this.tableAllocator);
+                    vc_fv_cvi_i.transferTo((VarCharVector) this.fieldVectors[cvi][i]);
 
                 } else {
                     throw new UnsupportedOperationException(

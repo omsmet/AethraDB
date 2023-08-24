@@ -44,7 +44,7 @@ public class QueryCodePrinter {
             printCode(block.statements, indentationLevel);
 
         } else if (code instanceof Java.WhileStatement whileStatement) {
-            String whileGuardLine = "while (" + whileStatement.condition.toString() + ") {";
+            String whileGuardLine = "while " + printRvalue(whileStatement.condition) + " {";
             System.out.print(whileGuardLine.indent(indentationLevel));
             printCode(whileStatement.body, indentationLevel + 4);
             System.out.print("}".indent(indentationLevel));
@@ -186,6 +186,8 @@ public class QueryCodePrinter {
             for (Java.Rvalue dim : newArray.dimExprs) {
                 newExpr += "[" + printRvalue(dim) + "]";
             }
+            for (int i = 0; i < newArray.dims; i++)
+                newExpr += "[]";
             return newExpr;
         } else if (rValue instanceof Java.Cast cast) {
             return "((" + cast.targetType.toString() + ") " + printRvalue(cast.value) + ')';

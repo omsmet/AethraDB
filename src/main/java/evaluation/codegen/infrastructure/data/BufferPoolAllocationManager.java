@@ -52,6 +52,16 @@ public class BufferPoolAllocationManager extends AllocationManager {
     private int nextDoubleVectorIndex;
 
     /**
+     * Buffer of nested byte vectors.
+     */
+    private byte[][][] nestedByteVectors;
+
+    /**
+     * The index of the next nested byte vector to return on request.
+     */
+    private int nextNestedByteVectorIndex;
+
+    /**
      * Buffer of {@link Simple_Int_Long_Map} instances.
      */
     private Simple_Int_Long_Map[] intLongMaps;
@@ -81,6 +91,10 @@ public class BufferPoolAllocationManager extends AllocationManager {
         // Setup double vectors
         this.doubleVectors = new double[initialBufferCapacity][];
         this.nextDoubleVectorIndex = 0;
+
+        // Setup nested byte vectors
+        this.nestedByteVectors = new byte[initialBufferCapacity][][];
+        this.nextNestedByteVectorIndex = 0;
 
         // Setup the Simple_Int_Long_Map instances
         this.intLongMaps = new Simple_Int_Long_Map[initialBufferCapacity];
@@ -115,6 +129,12 @@ public class BufferPoolAllocationManager extends AllocationManager {
             this.doubleVectors[i] = new double[VectorisedOperators.VECTOR_LENGTH];
         }
         this.nextDoubleVectorIndex = 0;
+
+        // Maintain nested byte vectors
+        for (int i = 0; i < this.nestedByteVectors.length; i++) {
+            this.nestedByteVectors[i] = new byte[VectorisedOperators.VECTOR_LENGTH][];
+        }
+        this.nextNestedByteVectorIndex = 0;
 
         // Maintain the int -> long maps
         for (int i = 0; i < this.intLongMaps.length; i++) {
@@ -201,6 +221,26 @@ public class BufferPoolAllocationManager extends AllocationManager {
     public void release(double[] vector) {
         // Do nothing as all double vectors will be cleaned at the end of the query via the call to
         // performMaintenance()
+    }
+
+    @Override
+    public byte[][] getNestedByteVector() {
+        // Check if we need to grow the buffer of boolean vectors
+        if (this.nextNestedByteVectorIndex >= this.nestedByteVectors.length) {
+            byte[][][] newNestedByteVectors = new byte[this.nestedByteVectors.length * 2][][];
+            System.arraycopy(this.nestedByteVectors, 0, newNestedByteVectors, 0, this.nestedByteVectors.length);
+            for (int i = this.nestedByteVectors.length; i < newNestedByteVectors.length; i++)
+                newNestedByteVectors[i] = new byte[VectorisedOperators.VECTOR_LENGTH][];
+            this.nestedByteVectors = newNestedByteVectors;
+        }
+
+        return this.nestedByteVectors[this.nextDoubleVectorIndex++];
+    }
+
+    @Override
+    public void release(byte[][] vector) {
+        // Do nothing as all nested byte vectors will be cleaned at the end of the query via the call
+        // to performMaintenance()
     }
 
     @Override

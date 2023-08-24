@@ -2,6 +2,7 @@ package evaluation.codegen.operators;
 
 import evaluation.codegen.infrastructure.context.CodeGenContext;
 import evaluation.codegen.infrastructure.context.OptimisationContext;
+import evaluation.codegen.infrastructure.context.QueryVariableType;
 import evaluation.codegen.infrastructure.context.access_path.AccessPath;
 import evaluation.codegen.infrastructure.context.access_path.ArrayVectorAccessPath;
 import evaluation.codegen.infrastructure.context.access_path.ArrowVectorAccessPath;
@@ -15,7 +16,9 @@ import org.codehaus.janino.Java;
 import java.util.ArrayList;
 import java.util.List;
 
+import static evaluation.codegen.infrastructure.janino.JaninoClassGen.createClassInstance;
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createAmbiguousNameRef;
+import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createReferenceType;
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createStringLiteral;
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.getLocation;
 import static evaluation.codegen.infrastructure.janino.JaninoMethodGen.createMethodInvocationStm;
@@ -78,6 +81,15 @@ public class QueryResultPrinterOperator extends CodeGenOperator<RelNode> {
             boolean lastElement = (i == currentOrdinalMapping.size() - 1);
             String methodName = lastElement ? "println" : "print";
             Java.Rvalue printValue = getRValueFromAccessPathNonVec(cCtx, i, codegenResult);
+
+            // Convert fixed length strings
+            QueryVariableType ordinalType = cCtx.getCurrentOrdinalMapping().get(i).getType();
+            if (ordinalType == QueryVariableType.S_FL_BIN)
+                printValue = createClassInstance(
+                        getLocation(),
+                        createReferenceType(getLocation(), "java.lang.String"),
+                        new Java.Rvalue[] { printValue });
+
             if (!lastElement)
                 printValue = plus(
                         getLocation(),

@@ -29,11 +29,16 @@ import java.util.Arrays;
 import java.util.List;
 
 import static evaluation.codegen.infrastructure.context.QueryVariableType.ARRAY_LONG_VECTOR;
+import static evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_DOUBLE_VECTOR;
+import static evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_FIXED_LENGTH_BINARY_VECTOR;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_INT_VECTOR;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.MAP_GENERATED;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.P_A_LONG;
+import static evaluation.codegen.infrastructure.context.QueryVariableType.P_DOUBLE;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.P_INT;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.P_LONG;
+import static evaluation.codegen.infrastructure.context.QueryVariableType.S_A_FL_BIN;
+import static evaluation.codegen.infrastructure.context.QueryVariableType.S_FL_BIN;
 import static evaluation.codegen.infrastructure.context.QueryVariableTypeMethods.primitiveArrayTypeForPrimitive;
 import static evaluation.codegen.infrastructure.context.QueryVariableTypeMethods.primitiveType;
 import static evaluation.codegen.infrastructure.context.QueryVariableTypeMethods.toJavaType;
@@ -81,11 +86,11 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
     private final int[] groupByKeyColumnIndices;
 
     /**
-     * The primitive scalar types of the group-by key columns if this operator is a group-by
-     * aggregation and null otherwise. Note that this value will only be set after the
-     * {@code declareAggregationState} method has been invoked.
+     * The types of the group-by key columns if this operator is a group-by aggregation and null
+     * otherwise. Note that this value will only be set after the {@code declareAggregationState}
+     * method has been invoked.
      */
-    private QueryVariableType[] groupByKeyColumnsPrimitiveScalarTypes;
+    private QueryVariableType[] groupByKeyColumnsTypes;
 
     /**
      * Stores the {@link AccessPath} to the aggregation state variable.
@@ -287,7 +292,7 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
             for (int j = 0; j < this.groupByKeyColumnIndices.length; j++) {
                 ScalarVariableAccessPath groupKeyAP = new ScalarVariableAccessPath(
                         cCtx.defineVariable("groupKey_" + j),
-                        this.groupByKeyColumnsPrimitiveScalarTypes[j]);
+                        this.groupByKeyColumnsTypes[j]);
 
                 forLoopBody.addStatement(
                         createLocalVariable(
@@ -435,8 +440,9 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
                         new ScalarVariableAccessPath(cCtx.defineVariable("group_key_pre_hash"), P_LONG);
                 for (int i = 0; i < keyColumnRValues.length; i++) {
 
-                    Java.AmbiguousName hashFunctionContainer = switch (this.groupByKeyColumnsPrimitiveScalarTypes[i]) {
+                    Java.AmbiguousName hashFunctionContainer = switch (this.groupByKeyColumnsTypes[i]) {
                         case P_INT -> createAmbiguousNameRef(getLocation(), "Int_Hash_Function");
+                        case S_FL_BIN -> createAmbiguousNameRef(getLocation(), "Char_Arr_Hash_Function");
 
                         default -> throw new UnsupportedOperationException("AggregationOperator.consumeNonVec does not support this group-by key type");
                     };
@@ -635,15 +641,16 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
             // Next, we need to allocate the correct key vector types
             ArrayVectorAccessPath[] groupKeyVectorsAPs = new ArrayVectorAccessPath[this.groupByKeyColumnIndices.length];
             for (int i = 0; i < groupKeyVectorsAPs.length; i++) {
-                QueryVariableType currentKeyPrimitiveType = this.groupByKeyColumnsPrimitiveScalarTypes[i];
+                QueryVariableType currentKeyPrimitiveType = this.groupByKeyColumnsTypes[i];
 
                 // primitiveType[] groupKeyVector_i = cCtx.getAllocationManager().get[primitiveType]Vector();
                 ArrayAccessPath groupKeyVectorArrayAP = new ArrayAccessPath(
                         cCtx.defineVariable("groupKeyVector_" + i),
-                        primitiveArrayTypeForPrimitive(currentKeyPrimitiveType));
+                        (currentKeyPrimitiveType == S_FL_BIN) ? S_A_FL_BIN : primitiveArrayTypeForPrimitive(currentKeyPrimitiveType));
 
                 String initMethodName = switch (currentKeyPrimitiveType) {
                     case P_INT -> "getIntVector";
+                    case S_FL_BIN -> "getNestedByteVector";
 
                     default -> throw new UnsupportedOperationException("AggregationOperator.produceVec does not support key type " + currentKeyPrimitiveType);
                 };
@@ -680,30 +687,32 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
                     // The vector type simply corresponds to the value type stored in the hash-map
                     QueryVariableType resultType
                             = primitiveArrayTypeForPrimitive(this.aggregationMapGenerator.valueTypes[currentMapValueOrdinalIndex]);
+                    ArrayAccessPath aggregationResultVectorAP = new ArrayAccessPath(aggregationResultVectorName, resultType);
 
-                    switch (resultType) {
-                        case P_A_LONG -> {
-                            ArrayAccessPath aggregationResultVectorAP = new ArrayAccessPath(aggregationResultVectorName, P_A_LONG);
-                            codeGenResult.add(createLocalVariable(
+                    String allocationManagerMethodName = switch (resultType) {
+                        case P_A_LONG -> "getLongVector";
+                        case P_A_DOUBLE -> "getDoubleVector";
+
+                        default -> throw new UnsupportedOperationException(
+                                "AggregationOperator.produceVec cannot allocate a vector for the aggregation result of type " + resultType);
+                    };
+
+                    codeGenResult.add(createLocalVariable(
+                            getLocation(),
+                            toJavaType(getLocation(), aggregationResultVectorAP.getType()),
+                            aggregationResultVectorAP.getVariableName(),
+                            createMethodInvocation(
                                     getLocation(),
-                                    toJavaType(getLocation(), aggregationResultVectorAP.getType()),
-                                    aggregationResultVectorAP.getVariableName(),
-                                    createMethodInvocation(
-                                            getLocation(),
-                                            createMethodInvocation(getLocation(), createAmbiguousNameRef(getLocation(), "cCtx"), "getAllocationManager"),
-                                            "getLongVector"
-                                    )
-                            ));
+                                    createMethodInvocation(getLocation(), createAmbiguousNameRef(getLocation(), "cCtx"), "getAllocationManager"),
+                                    allocationManagerMethodName
+                            )
+                    ));
 
-                            aggregationResultAPs[i] = new ArrayVectorAccessPath(aggregationResultVectorAP, aggregationResultVectorLengthAP, ARRAY_LONG_VECTOR);
-                            currentMapValueOrdinalIndex++;
-                        }
-
-                        default -> {
-                            throw new UnsupportedOperationException(
-                                    "AggregationOperator.produceVec cannot allocate a vector for the aggregation result of type " + resultType);
-                        }
-                    }
+                    aggregationResultAPs[i] = new ArrayVectorAccessPath(
+                            aggregationResultVectorAP,
+                            aggregationResultVectorLengthAP,
+                            vectorTypeForPrimitiveArrayType(resultType));
+                    currentMapValueOrdinalIndex++;
 
                 }
 
@@ -963,7 +972,7 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
                 Java.Rvalue[] methodInvocationArguments = new Java.Rvalue[3];
                 methodInvocationArguments[0] = this.groupKeyPreHashVector.read();
                 methodInvocationArguments[1] = switch (keyColumnsAccessPathTypes[i]) {
-                    case ARROW_INT_VECTOR ->  ((ArrowVectorAccessPath) keyColumnsAccessPaths[i]).read();
+                    case ARROW_FIXED_LENGTH_BINARY_VECTOR, ARROW_INT_VECTOR ->  ((ArrowVectorAccessPath) keyColumnsAccessPaths[i]).read();
 
                     default -> throw new UnsupportedOperationException("AggregationOperator.consumeVec does not support this key column access path type");
                 };
@@ -1030,8 +1039,9 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
                         // We simply need to maintain the sum based on the input ordinal type
                         ArrowVectorAccessPath inputOrdinal =
                                 (ArrowVectorAccessPath) cCtx.getCurrentOrdinalMapping().get(this.aggregationFunctionInputOrdinals[i][0]);
+                        QueryVariableType inputOrdinalType = inputOrdinal.getType();
 
-                        if (inputOrdinal.getType() == ARROW_INT_VECTOR) {
+                        if (inputOrdinalType == ARROW_DOUBLE_VECTOR || inputOrdinalType == ARROW_INT_VECTOR) {
                             // Simply take the value indicated by the access path
                             incrementForKeyArguments[currentArgumentIndex++] = createMethodInvocation(
                                     getLocation(),
@@ -1119,9 +1129,15 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
 
         // Otherwise, we have a group-by aggregation
         // Obtain the type of the group-by columns
-        this.groupByKeyColumnsPrimitiveScalarTypes = new QueryVariableType[this.groupByKeyColumnIndices.length];
-        for (int i = 0; i < this.groupByKeyColumnsPrimitiveScalarTypes.length; i++)
-                this.groupByKeyColumnsPrimitiveScalarTypes[i] = primitiveType(om.get(this.groupByKeyColumnIndices[i]).getType());
+        this.groupByKeyColumnsTypes = new QueryVariableType[this.groupByKeyColumnIndices.length];
+        for (int i = 0; i < this.groupByKeyColumnsTypes.length; i++) {
+            QueryVariableType ordinalType = om.get(this.groupByKeyColumnIndices[i]).getType();
+            if (ordinalType == S_FL_BIN || ordinalType == ARROW_FIXED_LENGTH_BINARY_VECTOR)
+                ordinalType = S_FL_BIN;
+            else
+                ordinalType = primitiveType(ordinalType);
+            this.groupByKeyColumnsTypes[i] = ordinalType;
+        }
 
         // Initialise the map generator
         List<QueryVariableType> mapValueTypes = new ArrayList<>();
@@ -1135,10 +1151,13 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
                     // We need to upgrade the value to long
                     mapValueTypes.add(P_LONG);
 
+                } else if (valueType == P_DOUBLE) {
+                    mapValueTypes.add(P_DOUBLE);
+
                 } else {
                     throw new UnsupportedOperationException(
                             "AggregationOperator.declareAggregationState: group-by sum aggregation does not support key-value type combination: "
-                                    + Arrays.toString(this.groupByKeyColumnIndices) + "-" + valueType);
+                                    + Arrays.toString(this.groupByKeyColumnsTypes) + "-" + valueType);
                 }
             }
 
@@ -1147,7 +1166,7 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
         QueryVariableType[] mapValueTypesArray = new QueryVariableType[mapValueTypes.size()];
         mapValueTypes.toArray(mapValueTypesArray);
         this.aggregationMapGenerator = new KeyValueMapGenerator(
-                this.groupByKeyColumnsPrimitiveScalarTypes,
+                this.groupByKeyColumnsTypes,
                 mapValueTypesArray
         );
 

@@ -1,5 +1,6 @@
 package evaluation.vector_support;
 
+import evaluation.general_support.hashmaps.Char_Arr_Hash_Function;
 import evaluation.general_support.hashmaps.Int_Hash_Function;
 import jdk.incubator.vector.VectorSpecies;
 import org.apache.arrow.vector.IntVector;
@@ -216,6 +217,48 @@ public class VectorisedHashOperators extends VectorisedOperators  {
         } else {
             for (; currentIndex < keyVectorLength; currentIndex++)
                 preHashKeyVector[currentIndex] ^= Int_Hash_Function.preHash(keyVector[currentIndex]);
+        }
+    }
+
+    /**
+     * Method to construct a pre-hash vector for a fixed size binary key vector.
+     * @param preHashKeyVector The pre-hash vector to construct.
+     * @param keyVector The key vector for which to construct the pre-hash vector.
+     * @param extend Whether the operation is extending an existing vector or not.
+     */
+    public static void constructPreHashKeyVector(
+            long[] preHashKeyVector,
+            org.apache.arrow.vector.FixedSizeBinaryVector keyVector,
+            boolean extend
+    ) {
+        if (!extend) {
+            for (int i = 0; i < keyVector.getValueCount(); i++)
+                preHashKeyVector[i] = Char_Arr_Hash_Function.preHash(keyVector.get(i));
+        } else {
+            for (int i = 0; i < keyVector.getValueCount(); i++)
+                preHashKeyVector[i] ^= Char_Arr_Hash_Function.preHash(keyVector.get(i));
+        }
+    }
+
+    /**
+     * Method to construct a pre-hash vector for a fixed size binary key vector.
+     * @param preHashKeyVector The pre-hash vector to construct.
+     * @param keyVector The key vector for which to construct the value vector.
+     * @param keyVectorLength The length of the valid portion of {@code keyVector}.
+     * @param extend Whether the operation is extending an existing vector or not.
+     */
+    public static void constructPreHashKeyVector(
+            long[] preHashKeyVector,
+            byte[][] keyVector,
+            int keyVectorLength,
+            boolean extend
+    ) {
+        if (!extend) {
+            for (int i = 0; i < keyVectorLength; i++)
+                preHashKeyVector[i] = Char_Arr_Hash_Function.preHash(keyVector[i]);
+        } else {
+            for (int i = 0; i < keyVectorLength; i++)
+                preHashKeyVector[i] ^= Char_Arr_Hash_Function.preHash(keyVector[i]);
         }
     }
 

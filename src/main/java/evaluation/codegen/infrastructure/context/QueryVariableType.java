@@ -21,8 +21,15 @@ public enum QueryVariableType {
     P_A_INT,
     P_A_LONG,
 
+    // Special types
+    S_FL_BIN,
+
+    // Special array types
+    S_A_FL_BIN,
+
     // Arrow vector types
     ARROW_DOUBLE_VECTOR,
+    ARROW_FIXED_LENGTH_BINARY_VECTOR,
     ARROW_FLOAT_VECTOR,
     ARROW_INT_VECTOR,
     ARROW_LONG_VECTOR,
@@ -33,6 +40,7 @@ public enum QueryVariableType {
 
     // Array vector types,
     ARRAY_DOUBLE_VECTOR,
+    ARRAY_FIXED_LENGTH_BINARY_VECTOR,
     ARRAY_FLOAT_VECTOR,
     ARRAY_INT_VECTOR,
     ARRAY_LONG_VECTOR,
