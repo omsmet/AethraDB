@@ -146,7 +146,7 @@ public class VectorisedHashOperators extends VectorisedOperators  {
     }
 
     /**
-     * Method to construct a pre-hash vector for an integer key vector using SIMD accelleration.
+     * Method to construct a pre-hash vector for an integer key vector using SIMD acceleration.
      * @param preHashKeyVector The pre-hash vector to construct.
      * @param keyVector The key vector for which to construct the value vector.
      * @param keyVectorLength The length of the valid portion of {@code keyVector}.
@@ -241,6 +241,21 @@ public class VectorisedHashOperators extends VectorisedOperators  {
     }
 
     /**
+     * Method to construct a pre-hash vector for a fixed size binary key vector using SIMD acceleration.
+     * TODO: currently not using SIMD
+     * @param preHashKeyVector The pre-hash vector to construct.
+     * @param keyVector The key vector for which to construct the pre-hash vector.
+     * @param extend Whether the operation is extending an existing vector or not.
+     */
+    public static void constructPreHashKeyVectorSIMD(
+            long[] preHashKeyVector,
+            org.apache.arrow.vector.FixedSizeBinaryVector keyVector,
+            boolean extend
+    ) {
+        constructPreHashKeyVector(preHashKeyVector, keyVector, extend);
+    }
+
+    /**
      * Method to construct a pre-hash vector for a fixed size binary key vector.
      * @param preHashKeyVector The pre-hash vector to construct.
      * @param keyVector The key vector for which to construct the value vector.
@@ -260,6 +275,23 @@ public class VectorisedHashOperators extends VectorisedOperators  {
             for (int i = 0; i < keyVectorLength; i++)
                 preHashKeyVector[i] ^= Char_Arr_Hash_Function.preHash(keyVector[i]);
         }
+    }
+
+    /**
+     * Method to construct a pre-hash vector for a fixed size binary key vector using SIMD acceleration.
+     * TODO: not currently using SIMD
+     * @param preHashKeyVector The pre-hash vector to construct.
+     * @param keyVector The key vector for which to construct the value vector.
+     * @param keyVectorLength The length of the valid portion of {@code keyVector}.
+     * @param extend Whether the operation is extending an existing vector or not.
+     */
+    public static void constructPreHashKeyVectorSIMD(
+            long[] preHashKeyVector,
+            byte[][] keyVector,
+            int keyVectorLength,
+            boolean extend
+    ) {
+        constructPreHashKeyVector(preHashKeyVector, keyVector, keyVectorLength, extend);
     }
 
 }

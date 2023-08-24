@@ -28,6 +28,8 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
+import static evaluation.codegen.infrastructure.context.QueryVariableType.ARRAY_DOUBLE_VECTOR;
+import static evaluation.codegen.infrastructure.context.QueryVariableType.ARRAY_INT_VECTOR;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.ARRAY_LONG_VECTOR;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_DOUBLE_VECTOR;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_FIXED_LENGTH_BINARY_VECTOR;
@@ -111,6 +113,7 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
         NG_COUNT,
 
         // Group-by functions
+        G_COUNT,
         G_SUM
     }
 
@@ -188,6 +191,10 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
 
                     this.aggregationFunctions[i] = AggregationFunction.G_SUM;
                     this.aggregationFunctionInputOrdinals[i] = new int[] { call.getArgList().get((0)) };
+
+                } else if (aggregationFunction instanceof SqlCountAggFunction) {
+                    this.aggregationFunctions[i] = AggregationFunction.G_COUNT;
+                    this.aggregationFunctionInputOrdinals[i] = new int[0];
 
                 } else {
                     throw new UnsupportedOperationException(
@@ -318,7 +325,7 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
             for (int i = 0; i < this.aggregationFunctions.length; i++) {
                 AggregationFunction currentFunction = this.aggregationFunctions[i];
 
-                if (currentFunction == AggregationFunction.G_SUM) {
+                if (currentFunction == AggregationFunction.G_COUNT || currentFunction == AggregationFunction.G_SUM) {
                     // Simply need to return the value stored for the current function in the map
                     // [valueType] aggregation_[i]_value =
                     //         [this.aggregationStateVariable.read()].values_ord_[currentMapValueOrdinalIndex][key_i]
@@ -480,7 +487,9 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
                 for (int i = 0; i < this.aggregationFunctions.length; i++) {
                     AggregationFunction currentFunction = this.aggregationFunctions[i];
 
-                    if (currentFunction == AggregationFunction.G_SUM) {
+                    if (currentFunction == AggregationFunction.G_COUNT) {
+                        aggregationValues[i] = createIntegerLiteral(getLocation(), 1);
+                    } else if (currentFunction == AggregationFunction.G_SUM) {
                         aggregationValues[i] = this.getRValueFromAccessPathNonVec(cCtx, this.aggregationFunctionInputOrdinals[i][0], codeGenResult);
                     }
 
@@ -511,7 +520,10 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
                 for (int i = 0; i < this.aggregationFunctions.length; i++) {
                     AggregationFunction currentFunction = this.aggregationFunctions[i];
 
-                    if (currentFunction == AggregationFunction.G_SUM) {
+                    if (currentFunction == AggregationFunction.G_COUNT) {
+                        aggregationValues[i] = createIntegerLiteral(getLocation(), 1);
+
+                    } else if (currentFunction == AggregationFunction.G_SUM) {
 
                         AccessPath valueAP = cCtx.getCurrentOrdinalMapping().get(this.aggregationFunctionInputOrdinals[i][0]);
                         if (valueAP instanceof SIMDLoopAccessPath valueAP_slap) {
@@ -683,15 +695,16 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
                 String aggregationResultVectorName = cCtx.defineVariable("agg_" + currentFunction + "_" + i + "_vector");
 
                 // Expose the result based on the function type
-                if (currentFunction == AggregationFunction.G_SUM) {
+                if (currentFunction == AggregationFunction.G_COUNT ||currentFunction == AggregationFunction.G_SUM) {
                     // The vector type simply corresponds to the value type stored in the hash-map
                     QueryVariableType resultType
                             = primitiveArrayTypeForPrimitive(this.aggregationMapGenerator.valueTypes[currentMapValueOrdinalIndex]);
                     ArrayAccessPath aggregationResultVectorAP = new ArrayAccessPath(aggregationResultVectorName, resultType);
 
                     String allocationManagerMethodName = switch (resultType) {
-                        case P_A_LONG -> "getLongVector";
                         case P_A_DOUBLE -> "getDoubleVector";
+                        case P_A_INT -> "getIntVector";
+                        case P_A_LONG -> "getLongVector";
 
                         default -> throw new UnsupportedOperationException(
                                 "AggregationOperator.produceVec cannot allocate a vector for the aggregation result of type " + resultType);
@@ -820,7 +833,7 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
             for (int i = 0; i < this.aggregationFunctions.length; i++) {
                 AggregationFunction currentFunction = this.aggregationFunctions[i];
 
-                if (currentFunction == AggregationFunction.G_SUM) {
+                if (currentFunction == AggregationFunction.G_COUNT || currentFunction == AggregationFunction.G_SUM) {
                     // The value vector can simply be constructed by obtaining values from the aggregation state map
                     whileLoopBody.addStatement(
                             createMethodInvocationStm(
@@ -1008,61 +1021,87 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
                     new Java.Rvalue[this.groupByKeyColumnIndices.length + 1 + this.aggregationMapGenerator.valueVariableNames.length];
             int currentArgumentIndex = 0;
 
-            // Now initialise type specific structures
+            // Initialise the record count and note down which vector type is in use
+            boolean usingArrowVectors;
             if (currentOrdinalMapping.get(0) instanceof ArrowVectorAccessPath avap) {
-
                 // int recordCount = [avap.read()].getValueCount();
                 recordCountInitValue = createMethodInvocation(getLocation(), avap.read(), "getValueCount");
-
-                // Obtain the key arguments
-                for (int i = 0; i < this.groupByKeyColumnIndices.length; i++) {
-                    incrementForKeyArguments[currentArgumentIndex++] = createMethodInvocation(
-                            getLocation(),
-                            ((ArrowVectorAccessPath) currentOrdinalMapping.get(this.groupByKeyColumnIndices[i])).read(),
-                            "get",
-                            new Java.Rvalue[]{ aviv.read() }
-                    );
-                }
-
-                // Obtain the pre-hash argument
-                incrementForKeyArguments[currentArgumentIndex++] = createArrayElementAccessExpr(
-                        getLocation(),
-                        this.groupKeyPreHashVector.read(),
-                        aviv.read()
-                );
-
-                // Now get the value to insert based on the aggregation functions
-                for (int i = 0; i < this.aggregationFunctions.length; i++) {
-                    AggregationFunction currentFunction = this.aggregationFunctions[i];
-
-                    if (currentFunction == AggregationFunction.G_SUM) {
-                        // We simply need to maintain the sum based on the input ordinal type
-                        ArrowVectorAccessPath inputOrdinal =
-                                (ArrowVectorAccessPath) cCtx.getCurrentOrdinalMapping().get(this.aggregationFunctionInputOrdinals[i][0]);
-                        QueryVariableType inputOrdinalType = inputOrdinal.getType();
-
-                        if (inputOrdinalType == ARROW_DOUBLE_VECTOR || inputOrdinalType == ARROW_INT_VECTOR) {
-                            // Simply take the value indicated by the access path
-                            incrementForKeyArguments[currentArgumentIndex++] = createMethodInvocation(
-                                    getLocation(),
-                                    inputOrdinal.read(),
-                                    "get",
-                                    new Java.Rvalue[] { aviv.read() }
-                            );
-
-                        } else {
-                            throw new UnsupportedOperationException(
-                                    "AggregationOperator.consumeVec does not support this input ordinal type for the group-by SUM aggregation: " + inputOrdinal.getType());
-                        }
-
-                    }
-
-                    // No other possibilities due to constructor
-                }
-
+                usingArrowVectors = true;
+            } else if (currentOrdinalMapping.get(0) instanceof ArrayVectorAccessPath avap) {
+                recordCountInitValue = avap.getVectorLengthVariable().read();
+                usingArrowVectors = false;
             } else {
                 throw new UnsupportedOperationException(
                         "AggregationOperator.ConsumeVec does not support hash-table maintenance using the provided access path");
+            }
+
+            // Obtain the key arguments
+            for (int i = 0; i < this.groupByKeyColumnIndices.length; i++) {
+                AccessPath currentKeyOrdinal = currentOrdinalMapping.get(this.groupByKeyColumnIndices[i]);
+                if (usingArrowVectors) {
+                    incrementForKeyArguments[currentArgumentIndex++] = createMethodInvocation(
+                            getLocation(),
+                            ((ArrowVectorAccessPath) currentKeyOrdinal).read(),
+                            "get",
+                            new Java.Rvalue[] { aviv.read() }
+                    );
+                } else { // using array vectors
+                    incrementForKeyArguments[currentArgumentIndex++] = createArrayElementAccessExpr(
+                            getLocation(),
+                            ((ArrayVectorAccessPath) currentKeyOrdinal).getVectorVariable().read(),
+                            aviv.read()
+                    );
+                }
+            }
+
+            // Obtain the pre-hash argument
+            incrementForKeyArguments[currentArgumentIndex++] = createArrayElementAccessExpr(
+                    getLocation(),
+                    this.groupKeyPreHashVector.read(),
+                    aviv.read()
+            );
+
+            // Now get the value to insert based on the aggregation functions
+            for (int i = 0; i < this.aggregationFunctions.length; i++) {
+                AggregationFunction currentFunction = this.aggregationFunctions[i];
+
+                if (currentFunction == AggregationFunction.G_COUNT) {
+                    incrementForKeyArguments[currentArgumentIndex++] = createIntegerLiteral(getLocation(), 1);
+
+                } else if (currentFunction == AggregationFunction.G_SUM) {
+                    // We simply need to maintain the sum based on the input ordinal type
+                    AccessPath inputOrdinal = cCtx.getCurrentOrdinalMapping().get(this.aggregationFunctionInputOrdinals[i][0]);
+                    QueryVariableType inputOrdinalType = inputOrdinal.getType();
+
+                    if (inputOrdinalType == ARROW_DOUBLE_VECTOR || inputOrdinalType == ARROW_INT_VECTOR) {
+                        ArrowVectorAccessPath castInputOrdinal = (ArrowVectorAccessPath) inputOrdinal;
+
+                        // Simply take the value indicated by the access path
+                        incrementForKeyArguments[currentArgumentIndex++] = createMethodInvocation(
+                                getLocation(),
+                                castInputOrdinal.read(),
+                                "get",
+                                new Java.Rvalue[] { aviv.read() }
+                        );
+
+                    } else if (inputOrdinalType == ARRAY_DOUBLE_VECTOR || inputOrdinalType == ARRAY_INT_VECTOR) {
+                        ArrayVectorAccessPath castInputOrdinal = (ArrayVectorAccessPath) inputOrdinal;
+
+                        // Simply take the value indicated by the access path
+                        incrementForKeyArguments[currentArgumentIndex++] = createArrayElementAccessExpr(
+                                getLocation(),
+                                castInputOrdinal.getVectorVariable().read(),
+                                aviv.read()
+                        );
+
+                    } else {
+                        throw new UnsupportedOperationException(
+                                "AggregationOperator.consumeVec does not support this input ordinal type for the group-by SUM aggregation: " + inputOrdinal.getType());
+                    }
+
+                }
+
+                // No other possibilities due to constructor
             }
 
             // Add the actual record count variable
@@ -1144,7 +1183,10 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
         for (int i = 0; i < this.aggregationFunctions.length; i++) {
             AggregationFunction currentFunction = this.aggregationFunctions[i];
 
-            if (currentFunction == AggregationFunction.G_SUM) {
+            if (currentFunction == AggregationFunction.G_COUNT) {
+                mapValueTypes.add(P_INT);
+
+            } else if (currentFunction == AggregationFunction.G_SUM) {
                 QueryVariableType valueType = primitiveType(om.get(this.aggregationFunctionInputOrdinals[i][0]).getType());
 
                 if (valueType == P_INT) {
