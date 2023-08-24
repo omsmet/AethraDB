@@ -37,21 +37,20 @@ public class CodeGenContext implements AutoCloseable {
     private Set<String> currentDefinedVariables;
 
     /**
-     * List for keeping track of the names of variable to allocate before the innermost scan operator.
+     * List for keeping track of the names of variable which are global to the entire query.
      */
-    private List<String> scanSurroundingVariableNames;
+    private List<String> queryGlobalVariables;
 
     /**
-     * List for keeping track of the statements to perform the actual allocations of the variables
-     * that need to be allocated before the innermost scan operator.
+     * List for keeping track of the statements to perform the actual allocations of the query global variables.
      */
-    private List<Java.Statement> scanSurroundingVariableDeclarations;
+    private List<Java.Statement> queryGlobalVariableDeclarations;
 
     /**
-     * List of names of {@code scanSurroundingVariables} that need to be deallocated by the
+     * List of names of {@code queryGlobalVariables} that need to be deallocated by the
      * {@link AllocationManager}.
      */
-    private List<String> scanSurroundingVariablesToDeallocate;
+    private List<String> queryGlobalVariablesToDeallocate;
 
     /**
      * Stack for keeping track of the ordinal to access path mapping at different stages of the code generation process.
@@ -93,9 +92,9 @@ public class CodeGenContext implements AutoCloseable {
         this.defineVariable("cCtx");
         this.defineVariable("oCtx");
 
-        this.scanSurroundingVariableNames = new ArrayList<>();
-        this.scanSurroundingVariableDeclarations = new ArrayList<>();
-        this.scanSurroundingVariablesToDeallocate = new ArrayList<>();
+        this.queryGlobalVariables = new ArrayList<>();
+        this.queryGlobalVariableDeclarations = new ArrayList<>();
+        this.queryGlobalVariablesToDeallocate = new ArrayList<>();
 
         this.ordinalMapping = new Stack<>();
         this.currentOrdinalMapping = new ArrayList<>();
@@ -141,16 +140,15 @@ public class CodeGenContext implements AutoCloseable {
     }
 
     /**
-     * Method to define a scan-surrounding variable that will be allocated just before the innermost
-     * scan operator and released after it.
-     * This method temporarily registers the name of the variable globally to ease bookkeeping.
+     * Method to define a query-global variable that will be allocated at the start of the query and
+     * released after it.
      * @param preferredName The preferred name of the variable to allocate.
      * @param typeToAllocate The type that the variable should get.
      * @param initialisationStatement The statement to initialise the scan surrounding variable.
      * @param deallocate Whether the {@link AllocationManager} should deallocate the variable too.
      * @return The actual name of the allocated variable.
      */
-    public String defineScanSurroundingVariable(
+    public String defineQueryGlobalVariable(
             String preferredName,
             Java.Type typeToAllocate,
             Java.ArrayInitializerOrRvalue initialisationStatement,
@@ -182,8 +180,8 @@ public class CodeGenContext implements AutoCloseable {
         this.currentDefinedVariables.add(actualName);
 
         // Schedule the variable for allocation
-        this.scanSurroundingVariableNames.add(actualName);
-        this.scanSurroundingVariableDeclarations.add(
+        this.queryGlobalVariables.add(actualName);
+        this.queryGlobalVariableDeclarations.add(
                 createLocalVariable(
                         getLocation(),
                         typeToAllocate,
@@ -194,30 +192,23 @@ public class CodeGenContext implements AutoCloseable {
 
         // Schedule the variable for dealloation if necessary
         if (deallocate)
-            this.scanSurroundingVariablesToDeallocate.add(actualName);
+            this.queryGlobalVariablesToDeallocate.add(actualName);
 
         // Return the allocated variable's name
         return actualName;
     }
 
     /**
-     * Method for obtaining the list of scan-surrounding variable to allocate through the given
-     * statements and the list of scan-surrounding variables to deallocate through the allocation
-     * manager. The caller of the method assumes the responsibility for making sure the
-     * variables are allocated and also discarded via the allocation manager.
-     * The context is also cleaned again of the remaining global names.
-     * @return The list of statements to allocate the scan surrounding variables and the list of the
+     * Method for obtaining the list of query-global variables to allocate through the given
+     * statements and the list of query-global variables to deallocate through the allocation
+     * manager.
+     * @return The list of statements to allocate the query-global variables and the list of the
      * variable names that need to be deallocated.
      */
-    public Pair<List<Java.Statement>, List<String>> getScanSurroundingVariables() {
+    public Pair<List<Java.Statement>, List<String>> getQueryGlobalVariables() {
         // Obtain the allocation statements and deallocation list
-        List<Java.Statement> allocationStatements = this.scanSurroundingVariableDeclarations;
-        List<String> deallocationVariables = this.scanSurroundingVariablesToDeallocate;
-
-        // Reset the scan surrounding variables variables
-        this.scanSurroundingVariableNames = new ArrayList<>();
-        this.scanSurroundingVariableDeclarations = new ArrayList<>();
-        this.scanSurroundingVariablesToDeallocate = new ArrayList<>();
+        List<Java.Statement> allocationStatements = this.queryGlobalVariableDeclarations;
+        List<String> deallocationVariables = this.queryGlobalVariablesToDeallocate;
 
         // Return the allocation statements
         return new Pair<>(allocationStatements, deallocationVariables);

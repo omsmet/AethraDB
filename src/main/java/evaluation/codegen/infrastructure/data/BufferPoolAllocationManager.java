@@ -234,7 +234,7 @@ public class BufferPoolAllocationManager extends AllocationManager {
             this.nestedByteVectors = newNestedByteVectors;
         }
 
-        return this.nestedByteVectors[this.nextDoubleVectorIndex++];
+        return this.nestedByteVectors[this.nextNestedByteVectorIndex++];
     }
 
     @Override

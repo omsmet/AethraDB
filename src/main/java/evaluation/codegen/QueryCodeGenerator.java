@@ -25,6 +25,8 @@ import static evaluation.codegen.infrastructure.janino.JaninoMethodGen.createCon
 import static evaluation.codegen.infrastructure.janino.JaninoMethodGen.createFormalParameter;
 import static evaluation.codegen.infrastructure.janino.JaninoMethodGen.createFormalParameters;
 import static evaluation.codegen.infrastructure.janino.JaninoMethodGen.createMethod;
+import static evaluation.codegen.infrastructure.janino.JaninoMethodGen.createMethodInvocation;
+import static evaluation.codegen.infrastructure.janino.JaninoMethodGen.createMethodInvocationStm;
 import static evaluation.general_support.QueryCodePrinter.printCode;
 
 /**
@@ -188,6 +190,27 @@ public class QueryCodeGenerator extends SimpleCompiler {
         else
             throw new UnsupportedOperationException("Attempting to invoke a CodeGenOperator produce method that is not supported");
 
+        // Introduce the query-global variable declarations
+        var queryGlobalVariableDeclarations = this.cCtx.getQueryGlobalVariables();
+        List<Java.Statement> completedExecuteMethodBody = new ArrayList<>(queryGlobalVariableDeclarations.left);
+        completedExecuteMethodBody.addAll(executeMethodBody);
+        for (String varToDallocate : queryGlobalVariableDeclarations.right) {
+            completedExecuteMethodBody.add(
+                    createMethodInvocationStm(
+                            getLocation(),
+                            createMethodInvocation(
+                                    getLocation(),
+                                    createAmbiguousNameRef(getLocation(), "cCtx"),
+                                    "getAllocationManager"
+                            ),
+                            "release",
+                            new Java.Rvalue[] {
+                                    createAmbiguousNameRef(getLocation(), varToDallocate)
+                            }
+                    )
+            );
+        }
+
         // Generate the execute method
         // @Override public void execute() throws IOException
         createMethod(
@@ -201,13 +224,13 @@ public class QueryCodeGenerator extends SimpleCompiler {
                         new Java.FunctionDeclarator.FormalParameter[0]
                 ),
                 new Java.Type[] { this.classToType(getLocation(), IOException.class) },
-                executeMethodBody
+                completedExecuteMethodBody
         );
 
         // Print the generated method body if requested
         if (printCode) {
             System.out.println("[Generated query code]");
-            printCode(executeMethodBody);
+            printCode(completedExecuteMethodBody);
             System.out.println();
         }
 

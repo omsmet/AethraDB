@@ -14,13 +14,16 @@ import org.apache.calcite.rex.RexCall;
 import org.apache.calcite.rex.RexInputRef;
 import org.apache.calcite.rex.RexLiteral;
 import org.apache.calcite.rex.RexNode;
+import org.apache.calcite.sql.SqlBinaryOperator;
 import org.apache.calcite.sql.SqlKind;
+import org.apache.calcite.sql.SqlOperator;
 import org.apache.calcite.sql.fun.SqlMonotonicBinaryOperator;
 import org.codehaus.janino.Java;
 
 import java.util.ArrayList;
 import java.util.List;
 
+import static evaluation.codegen.infrastructure.context.QueryVariableType.P_DOUBLE;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.P_INT;
 import static evaluation.codegen.infrastructure.context.QueryVariableTypeMethods.primitiveArrayTypeForPrimitive;
 import static evaluation.codegen.infrastructure.context.QueryVariableTypeMethods.primitiveType;
@@ -29,11 +32,13 @@ import static evaluation.codegen.infrastructure.context.QueryVariableTypeMethods
 import static evaluation.codegen.infrastructure.context.QueryVariableTypeMethods.toJavaType;
 import static evaluation.codegen.infrastructure.context.QueryVariableTypeMethods.vectorTypeForPrimitiveArrayType;
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createAmbiguousNameRef;
+import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createCast;
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createFloatingPointLiteral;
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createIntegerLiteral;
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createPrimitiveArrayType;
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.getLocation;
 import static evaluation.codegen.infrastructure.janino.JaninoMethodGen.createMethodInvocation;
+import static evaluation.codegen.infrastructure.janino.JaninoOperatorGen.div;
 import static evaluation.codegen.infrastructure.janino.JaninoOperatorGen.mul;
 import static evaluation.codegen.infrastructure.janino.JaninoOperatorGen.plus;
 import static evaluation.codegen.infrastructure.janino.JaninoOperatorGen.sub;
@@ -170,7 +175,8 @@ public class ProjectOperator extends CodeGenOperator<LogicalProject> {
             RexCall computationExpression,
             List<Java.Statement> codeGenResult
     ) {
-        if (computationExpression.getOperator() instanceof SqlMonotonicBinaryOperator sqlMonBinOp) {
+        SqlOperator computationOperator = computationExpression.getOperator();
+        if (computationOperator instanceof SqlBinaryOperator sqlBinaryOperator) {
             // Deal with recursive "projections" first
             List<RexNode> computationOperands = computationExpression.getOperands();
             if (computationOperands.size() != 2)
@@ -184,7 +190,9 @@ public class ProjectOperator extends CodeGenOperator<LogicalProject> {
 
             // Compute the result type first
             QueryVariableType primitiveReturnType;
-            if (primLhsResType == QueryVariableType.P_DOUBLE && primRhsResType == QueryVariableType.P_DOUBLE)
+            if (computationOperator.getKind() == SqlKind.DIVIDE)
+                primitiveReturnType = QueryVariableType.P_DOUBLE;
+            else if (primLhsResType == QueryVariableType.P_DOUBLE && primRhsResType == QueryVariableType.P_DOUBLE)
                 primitiveReturnType = QueryVariableType.P_DOUBLE;
             else if (primLhsResType == P_INT && primRhsResType == QueryVariableType.P_DOUBLE)
                 primitiveReturnType = QueryVariableType.P_DOUBLE;
@@ -220,7 +228,7 @@ public class ProjectOperator extends CodeGenOperator<LogicalProject> {
                 );
 
                 // Generate the code for the actual computation
-                Java.Rvalue operatorComputation = switch (sqlMonBinOp.getKind()) {
+                Java.Rvalue operatorComputation = switch (sqlBinaryOperator.getKind()) {
                     case TIMES ->
                             mul(
                                     getLocation(),
@@ -237,6 +245,14 @@ public class ProjectOperator extends CodeGenOperator<LogicalProject> {
                             sub(
                                     getLocation(),
                                     lhsRValue,
+                                    rhsRValue
+                            );
+                    case DIVIDE ->
+                            div(
+                                    getLocation(),
+                                    (primLhsResType != P_DOUBLE)
+                                            ? createCast(getLocation(), toJavaType(getLocation(), P_DOUBLE), lhsRValue)
+                                            : lhsRValue,
                                     rhsRValue
                             );
                     default -> throw new UnsupportedOperationException(
@@ -306,7 +322,7 @@ public class ProjectOperator extends CodeGenOperator<LogicalProject> {
             RexCall computationExpression,
             List<Java.Statement> codeGenResult
     ) {
-        if (computationExpression.getOperator() instanceof SqlMonotonicBinaryOperator sqlMonBinOp) {
+        if (computationExpression.getOperator() instanceof SqlBinaryOperator sqlBinaryOperator) {
             // Deal with recursive "projections" first
             List<RexNode> computationOperands = computationExpression.getOperands();
             if (computationOperands.size() != 2)
@@ -320,7 +336,9 @@ public class ProjectOperator extends CodeGenOperator<LogicalProject> {
 
             // Compute the result type first
             QueryVariableType primitiveReturnType;
-            if (primLhsResType == QueryVariableType.P_DOUBLE && primRhsResType == QueryVariableType.P_DOUBLE)
+            if (sqlBinaryOperator.getKind() == SqlKind.DIVIDE) {
+                primitiveReturnType = QueryVariableType.P_DOUBLE;
+            } else if (primLhsResType == QueryVariableType.P_DOUBLE && primRhsResType == QueryVariableType.P_DOUBLE)
                 primitiveReturnType = QueryVariableType.P_DOUBLE;
             else if (primLhsResType == P_INT && primRhsResType == QueryVariableType.P_DOUBLE)
                 primitiveReturnType = QueryVariableType.P_DOUBLE;
@@ -330,7 +348,7 @@ public class ProjectOperator extends CodeGenOperator<LogicalProject> {
             // Allocate a variable for the result using scan-surrounding allocation
             QueryVariableType returnVectorType = primitiveArrayTypeForPrimitive(primitiveReturnType);
             // returnVectorType[] projection_computation_result = cCtx.getAllocationManager().get[returnVectorType]Vector();
-            String projectionComputationResultVariableName = cCtx.defineScanSurroundingVariable(
+            String projectionComputationResultVariableName = cCtx.defineQueryGlobalVariable(
                     "projection_computation_result",
                     createPrimitiveArrayType(getLocation(), toJavaPrimitive(primitiveReturnType)),
                     createMethodInvocation(
@@ -368,7 +386,7 @@ public class ProjectOperator extends CodeGenOperator<LogicalProject> {
 
             // Now "combine" the results from the operands depending on the operator, the SIMD processing mode and the result access paths
             // First we obtain the name of the correct vectorised primitive for the operator
-            SqlKind computationOperator = sqlMonBinOp.getKind();
+            SqlKind computationOperator = sqlBinaryOperator.getKind();
             String operatorMethodName;
             if (computationOperator == SqlKind.TIMES) {
                 operatorMethodName = "multiply";
@@ -376,6 +394,8 @@ public class ProjectOperator extends CodeGenOperator<LogicalProject> {
                 operatorMethodName = "add";
             } else if (computationOperator == SqlKind.MINUS) {
                 operatorMethodName = "subtract";
+            } else if (computationOperator == SqlKind.DIVIDE) {
+                operatorMethodName = "divide";
             } else {
                 throw new UnsupportedOperationException("ProjectOperator.createVecComputationOperator does not support the required operator");
             }

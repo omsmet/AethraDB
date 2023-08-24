@@ -156,7 +156,7 @@ public class ArrowTableScanOperator extends CodeGenOperator<LogicalArrowTableSca
         } else { // this.SIMDProductionAllowed
             // int commonSIMDVectorLength = ...; (allocated as scan surrounding variable for reuse)
             int commonSIMDVectorLength = OptimisationContext.getVectorSpeciesLong().length();
-            String commonSIMDVectorLengthName = cCtx.defineScanSurroundingVariable(
+            String commonSIMDVectorLengthName = cCtx.defineQueryGlobalVariable(
                     "commonSIMDVectorLength",
                     createPrimitiveType(getLocation(), Java.Primitive.INT),
                     createIntegerLiteral(getLocation(), commonSIMDVectorLength),
@@ -268,7 +268,7 @@ public class ArrowTableScanOperator extends CodeGenOperator<LogicalArrowTableSca
 
             // Define integer vector species outside the scan
             // VectorSpecies<Integer> [intVectorSpeciesVarName] = oCtx.getVectorSpeciesInt();
-            String intVectorSpeciesVarName = cCtx.defineScanSurroundingVariable(
+            String intVectorSpeciesVarName = cCtx.defineQueryGlobalVariable(
                 "IntVectorSpecies",
                     toJavaType(getLocation(), VECTOR_SPECIES_INT),
                     createMethodInvocation(
@@ -322,7 +322,7 @@ public class ArrowTableScanOperator extends CodeGenOperator<LogicalArrowTableSca
 
                     if (!definedVectorSpecies.containsKey(vectorElementType)) {
                         // Need to define the vector species first
-                        String vectorSpeciesVarName = cCtx.defineScanSurroundingVariable(
+                        String vectorSpeciesVarName = cCtx.defineQueryGlobalVariable(
                                 "DoubleVectorSpecies",
                                 toJavaType(getLocation(), VECTOR_SPECIES_DOUBLE),
                                 createMethodInvocation(
@@ -347,7 +347,7 @@ public class ArrowTableScanOperator extends CodeGenOperator<LogicalArrowTableSca
 
                     if (!definedVectorSpecies.containsKey(vectorElementType)) {
                         // Need to define the vector species first
-                        String vectorSpeciesVarName = cCtx.defineScanSurroundingVariable(
+                        String vectorSpeciesVarName = cCtx.defineQueryGlobalVariable(
                                 "IntVectorSpecies",
                                 toJavaType(getLocation(), VECTOR_SPECIES_INT),
                                 createMethodInvocation(
@@ -393,7 +393,7 @@ public class ArrowTableScanOperator extends CodeGenOperator<LogicalArrowTableSca
         forLoopBody.addStatements(nonVecParentConsume(cCtx, oCtx));
 
         // Return the generated code after wrapping it in the scan surrounding variables
-        return wrapInScanSurroundingVariables(cCtx, oCtx, codegenResult);
+        return codegenResult;
     }
 
     @Override
@@ -416,7 +416,7 @@ public class ArrowTableScanOperator extends CodeGenOperator<LogicalArrowTableSca
         whileLoopBody.addStatements(vecParentConsume(cCtx, oCtx));
 
         // Return the generated code after wrapping it in the scan surrounding variables
-        return wrapInScanSurroundingVariables(cCtx, oCtx, codegenResult);
+        return codegenResult;
     }
 
     @Override
@@ -543,46 +543,5 @@ public class ArrowTableScanOperator extends CodeGenOperator<LogicalArrowTableSca
         cCtx.setCurrentOrdinalMapping(projectedColumnAccessPaths);
 
         return codegenResult;
-    }
-
-    /**
-     * Method for handling the allocation of scan-surrounding variables.
-     * @param cCtx The {@link CodeGenContext} to use during the generation.
-     * @param oCtx The {@link OptimisationContext} to use during the generation and execution.
-     * @param scanCodeToWrap The code of the generated scan operator to wrap.
-     */
-    public List<Java.Statement> wrapInScanSurroundingVariables(
-            CodeGenContext cCtx,
-            OptimisationContext oCtx,
-            List<Java.Statement> scanCodeToWrap
-    ) {
-        List<Java.Statement> result = new ArrayList<>();
-
-        // Allocate the variables
-        var scanSurroundingAllocations = cCtx.getScanSurroundingVariables();
-        result.addAll(scanSurroundingAllocations.left);
-
-        // Add the code of the scan operator
-        result.addAll(scanCodeToWrap);
-
-        // Deallocate the scan variables
-        for (String varToDallocate : scanSurroundingAllocations.right) {
-            result.add(
-                    createMethodInvocationStm(
-                            getLocation(),
-                            createMethodInvocation(
-                                    getLocation(),
-                                    createAmbiguousNameRef(getLocation(), "cCtx"),
-                                    "getAllocationManager"
-                            ),
-                            "release",
-                            new Java.Rvalue[] {
-                                    createAmbiguousNameRef(getLocation(), varToDallocate)
-                            }
-                    )
-            );
-        }
-
-        return result;
     }
 }

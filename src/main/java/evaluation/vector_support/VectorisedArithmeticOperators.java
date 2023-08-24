@@ -12,10 +12,27 @@ import java.nio.ByteOrder;
 public class VectorisedArithmeticOperators extends VectorisedOperators {
 
     /**
-     * The {@link VectorSpecies} to use for the SIMD-ed primitives in this class.
+     * The {@link VectorSpecies<Double>} to use for the SIMD-ed primitives in this class.
      */
     private static final VectorSpecies<Double> DOUBLE_SPECIES_PREFERRED =
             jdk.incubator.vector.DoubleVector.SPECIES_PREFERRED;
+
+    /**
+     * The {@link VectorSpecies<Integer>} to use for the SIMD-ed primitives in this class.
+     */
+    private static final VectorSpecies<Integer> INTEGER_SPECIES_PREFERRED =
+            jdk.incubator.vector.IntVector.SPECIES_PREFERRED;
+
+    /**
+     * The {@link VectorSpecies<Integer>} to use for SIMD-ed primitives in this class when in
+     * combined operation with doubles.
+     */
+    private static final VectorSpecies<Integer> INTEGER_SPECIES_DOUBLE_PREFERRED =
+            (jdk.incubator.vector.IntVector.SPECIES_512.length() == DOUBLE_SPECIES_PREFERRED.length()) ? jdk.incubator.vector.IntVector.SPECIES_512
+          : (jdk.incubator.vector.IntVector.SPECIES_256.length() == DOUBLE_SPECIES_PREFERRED.length()) ? jdk.incubator.vector.IntVector.SPECIES_256
+          : (jdk.incubator.vector.IntVector.SPECIES_128.length() == DOUBLE_SPECIES_PREFERRED.length()) ? jdk.incubator.vector.IntVector.SPECIES_128
+          : (jdk.incubator.vector.IntVector.SPECIES_64.length()  == DOUBLE_SPECIES_PREFERRED.length()) ? jdk.incubator.vector.IntVector.SPECIES_64
+          : null; // should not happen
 
     /**
      * Method to multiply two double vectors.
@@ -244,6 +261,63 @@ public class VectorisedArithmeticOperators extends VectorisedOperators {
         }
 
         return vectorLength;
+    }
+
+    /**
+     * Method to divide two vectors.
+     * @param lhsArrayVector The left-hand side double vector, represented as an array vector.
+     * @param lhsArrayVectorLength The length of the valid portion of {@code lhsArrayVector}.
+     * @param rhsArrayVector The right-hand side integer vector, represented as an array.
+     * @param rhsArrayVectorLength The length of the valid portion of {@code rhsArrayVector}.
+     * @param result The array to which the result should be written.
+     * @return The length of the valid portion of {@code result}.
+     */
+    public static int divide(double[] lhsArrayVector, int lhsArrayVectorLength, int[] rhsArrayVector, int rhsArrayVectorLength, double[] result) {
+        assert lhsArrayVectorLength == rhsArrayVectorLength;
+
+        for (int i = 0; i < lhsArrayVectorLength; i++) {
+            result[i] = lhsArrayVector[i] / rhsArrayVector[i];
+        }
+
+        return lhsArrayVectorLength;
+    }
+
+    /**
+     * Method to divide two vectors using SIMD acceleration.
+     * @param lhsArrayVector The left-hand side double vector, represented as an array vector.
+     * @param lhsArrayVectorLength The length of the valid portion of {@code lhsArrayVector}.
+     * @param rhsArrayVector The right-hand side integer vector, represented as an array.
+     * @param rhsArrayVectorLength The length of the valid portion of {@code rhsArrayVector}.
+     * @param result The array to which the result should be written.
+     * @return The length of the valid portion of {@code result}.
+     */
+    public static int divideSIMD(double[] lhsArrayVector, int lhsArrayVectorLength, int[] rhsArrayVector, int rhsArrayVectorLength, double[] result) {
+        assert lhsArrayVectorLength == rhsArrayVectorLength;
+
+        // Perform vectorised processing
+        int currentIndex = 0;
+        for(; currentIndex < DOUBLE_SPECIES_PREFERRED.loopBound(lhsArrayVectorLength); currentIndex += DOUBLE_SPECIES_PREFERRED.length()) {
+            var lhsSIMDVector = jdk.incubator.vector.DoubleVector.fromArray(
+                    DOUBLE_SPECIES_PREFERRED,
+                    lhsArrayVector,
+                    currentIndex);
+
+            var rhsSIMDVectorInt = jdk.incubator.vector.IntVector.fromArray(
+                    INTEGER_SPECIES_DOUBLE_PREFERRED,
+                    rhsArrayVector,
+                    currentIndex);
+            var rhsSIMDVectorDouble = rhsSIMDVectorInt.castShape(DOUBLE_SPECIES_PREFERRED, 0);
+
+            var resultSIMDVector = lhsSIMDVector.div(rhsSIMDVectorDouble);
+            resultSIMDVector.intoArray(result, currentIndex);
+        }
+
+        // Process the tail
+        for (; currentIndex < lhsArrayVectorLength; currentIndex++) {
+            result[currentIndex] = lhsArrayVector[currentIndex] / rhsArrayVector[currentIndex];
+        }
+
+        return lhsArrayVectorLength;
     }
 
 }
