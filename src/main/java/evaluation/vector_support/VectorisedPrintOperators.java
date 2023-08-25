@@ -86,8 +86,8 @@ public class VectorisedPrintOperators extends VectorisedOperators {
         System.out.print("[");
         int lastVectorIndex = vectorLength - 1;
         for (int i = 0; i < lastVectorIndex; i++)
-            System.out.print(vector[i] + ", ");
-        System.out.println(vector[lastVectorIndex] + "]");
+            System.out.print(String.format("%.2f",vector[i]) + ", ");
+        System.out.println(String.format("%.2f",vector[lastVectorIndex]) + "]");
     }
 
     /**

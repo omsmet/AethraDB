@@ -47,7 +47,6 @@ import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createRe
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.getLocation;
 import static evaluation.codegen.infrastructure.janino.JaninoMethodGen.createBlock;
 import static evaluation.codegen.infrastructure.janino.JaninoMethodGen.createMethodInvocation;
-import static evaluation.codegen.infrastructure.janino.JaninoMethodGen.createMethodInvocationStm;
 import static evaluation.codegen.infrastructure.janino.JaninoOperatorGen.lt;
 import static evaluation.codegen.infrastructure.janino.JaninoOperatorGen.mul;
 import static evaluation.codegen.infrastructure.janino.JaninoVariableGen.createLocalVariable;

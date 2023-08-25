@@ -4,31 +4,7 @@ import org.apache.calcite.sql.type.SqlTypeName;
 import org.codehaus.commons.compiler.Location;
 import org.codehaus.janino.Java;
 
-import static evaluation.codegen.infrastructure.context.QueryVariableType.ARRAY_DOUBLE_VECTOR;
-import static evaluation.codegen.infrastructure.context.QueryVariableType.ARRAY_FIXED_LENGTH_BINARY_VECTOR;
-import static evaluation.codegen.infrastructure.context.QueryVariableType.ARRAY_FLOAT_VECTOR;
-import static evaluation.codegen.infrastructure.context.QueryVariableType.ARRAY_INT_VECTOR;
-import static evaluation.codegen.infrastructure.context.QueryVariableType.ARRAY_LONG_VECTOR;
-import static evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_DOUBLE_VECTOR;
-import static evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_FIXED_LENGTH_BINARY_VECTOR;
-import static evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_FLOAT_VECTOR;
-import static evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_INT_VECTOR;
-import static evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_INT_VECTOR_W_SELECTION_VECTOR;
-import static evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_INT_VECTOR_W_VALIDITY_MASK;
-import static evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_LONG_VECTOR;
-import static evaluation.codegen.infrastructure.context.QueryVariableType.MEMORY_SEGMENT_DOUBLE;
-import static evaluation.codegen.infrastructure.context.QueryVariableType.MEMORY_SEGMENT_INT;
-import static evaluation.codegen.infrastructure.context.QueryVariableType.P_A_BOOLEAN;
-import static evaluation.codegen.infrastructure.context.QueryVariableType.P_A_DOUBLE;
-import static evaluation.codegen.infrastructure.context.QueryVariableType.P_A_FLOAT;
-import static evaluation.codegen.infrastructure.context.QueryVariableType.P_A_INT;
-import static evaluation.codegen.infrastructure.context.QueryVariableType.P_A_LONG;
-import static evaluation.codegen.infrastructure.context.QueryVariableType.P_BOOLEAN;
-import static evaluation.codegen.infrastructure.context.QueryVariableType.P_DOUBLE;
-import static evaluation.codegen.infrastructure.context.QueryVariableType.P_FLOAT;
-import static evaluation.codegen.infrastructure.context.QueryVariableType.P_INT;
-import static evaluation.codegen.infrastructure.context.QueryVariableType.P_LONG;
-import static evaluation.codegen.infrastructure.context.QueryVariableType.S_FL_BIN;
+import static evaluation.codegen.infrastructure.context.QueryVariableType.*;
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createNestedPrimitiveArrayType;
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createPrimitiveArrayType;
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createPrimitiveType;
@@ -85,6 +61,12 @@ public final class QueryVariableTypeMethods {
             case ARROW_FLOAT_VECTOR -> P_FLOAT;
             case ARROW_INT_VECTOR -> P_INT;
             case ARROW_LONG_VECTOR -> P_LONG;
+
+            case ARROW_DOUBLE_VECTOR_W_SELECTION_VECTOR -> P_DOUBLE;
+            case ARROW_DOUBLE_VECTOR_W_VALIDITY_MASK -> P_DOUBLE;
+
+            case ARRAY_DOUBLE_VECTOR_W_SELECTION_VECTOR -> P_DOUBLE;
+            case ARRAY_DOUBLE_VECTOR_W_VALIDITY_MASK -> P_DOUBLE;
 
             case ARRAY_DOUBLE_VECTOR -> P_DOUBLE;
             case ARRAY_FLOAT_VECTOR -> P_FLOAT;
@@ -149,6 +131,7 @@ public final class QueryVariableTypeMethods {
     public static QueryVariableType sqlTypeToArrowVectorType(SqlTypeName sqlType) {
         return switch (sqlType) {
             case CHAR -> ARROW_FIXED_LENGTH_BINARY_VECTOR;
+            case DATE -> ARROW_DATE_VECTOR;
             case DOUBLE -> ARROW_DOUBLE_VECTOR;
             case FLOAT -> ARROW_FLOAT_VECTOR;
             case INTEGER -> ARROW_INT_VECTOR;
@@ -163,6 +146,7 @@ public final class QueryVariableTypeMethods {
      */
     public static QueryVariableType memberTypeForArrowVector(QueryVariableType arrowType) {
         return switch (arrowType) {
+            case ARROW_DATE_VECTOR -> P_INT_DATE;
             case ARROW_DOUBLE_VECTOR -> P_DOUBLE;
             case ARROW_FIXED_LENGTH_BINARY_VECTOR -> S_FL_BIN;
             case ARROW_FLOAT_VECTOR -> P_FLOAT;
@@ -190,7 +174,14 @@ public final class QueryVariableTypeMethods {
      */
     public static QueryVariableType arrowVectorWithSelectionVectorType(QueryVariableType arrowType) {
         return switch (arrowType) {
-            case ARROW_INT_VECTOR, ARROW_INT_VECTOR_W_SELECTION_VECTOR -> ARROW_INT_VECTOR_W_SELECTION_VECTOR;
+            case ARROW_DATE_VECTOR, ARROW_DATE_VECTOR_W_SELECTION_VECTOR
+                    -> ARROW_DATE_VECTOR_W_SELECTION_VECTOR;
+            case ARROW_DOUBLE_VECTOR, ARROW_DOUBLE_VECTOR_W_SELECTION_VECTOR
+                    -> ARROW_DOUBLE_VECTOR_W_SELECTION_VECTOR;
+            case ARROW_FIXED_LENGTH_BINARY_VECTOR, ARROW_FIXED_LENGTH_BINARY_VECTOR_W_SELECTION_VECTOR
+                    -> ARROW_FIXED_LENGTH_BINARY_VECTOR_W_SELECTION_VECTOR;
+            case ARROW_INT_VECTOR, ARROW_INT_VECTOR_W_SELECTION_VECTOR
+                    -> ARROW_INT_VECTOR_W_SELECTION_VECTOR;
             default ->
                     throw new IllegalArgumentException("arrowVectorWithSelectionVectorType cannot handle this type" + arrowType);
         };
@@ -201,9 +192,38 @@ public final class QueryVariableTypeMethods {
      */
     public static QueryVariableType arrowVectorWithValidityMaskType(QueryVariableType arrowType) {
         return switch (arrowType) {
-            case ARROW_INT_VECTOR, ARROW_INT_VECTOR_W_VALIDITY_MASK -> ARROW_INT_VECTOR_W_VALIDITY_MASK;
+            case ARROW_DATE_VECTOR, ARROW_DATE_VECTOR_W_VALIDITY_MASK
+                    -> ARROW_DATE_VECTOR_W_VALIDITY_MASK;
+            case ARROW_DOUBLE_VECTOR, ARROW_DOUBLE_VECTOR_W_VALIDITY_MASK
+                    -> ARROW_DOUBLE_VECTOR_W_VALIDITY_MASK;
+            case ARROW_FIXED_LENGTH_BINARY_VECTOR, ARROW_FIXED_LENGTH_BINARY_VECTOR_W_VALIDITY_MASK
+                    -> ARROW_FIXED_LENGTH_BINARY_VECTOR_W_VALIDITY_MASK;
+            case ARROW_INT_VECTOR, ARROW_INT_VECTOR_W_VALIDITY_MASK
+                    -> ARROW_INT_VECTOR_W_VALIDITY_MASK;
             default ->
                     throw new IllegalArgumentException("arrowVectorWithValidityMaskType cannot handle this type" + arrowType);
+        };
+    }
+
+    /**
+     * Method to get the {@link QueryVariableType} with a selection vector for an array vector type.
+     */
+    public static QueryVariableType arrayVectorWithSelectionVectorType(QueryVariableType arrowType) {
+        return switch (arrowType) {
+            case ARRAY_DOUBLE_VECTOR, ARRAY_DOUBLE_VECTOR_W_SELECTION_VECTOR -> ARRAY_DOUBLE_VECTOR_W_SELECTION_VECTOR;
+            default ->
+                    throw new IllegalArgumentException("arrayVectorWithSelectionVectorType cannot handle this type" + arrowType);
+        };
+    }
+
+    /**
+     * Method to get the {@link QueryVariableType} with a validity mask for an array vector type.
+     */
+    public static QueryVariableType arrayVectorWithValidityMaskType(QueryVariableType arrowType) {
+        return switch (arrowType) {
+            case ARRAY_DOUBLE_VECTOR, ARRAY_DOUBLE_VECTOR_W_VALIDITY_MASK -> ARRAY_DOUBLE_VECTOR_W_VALIDITY_MASK;
+            default ->
+                    throw new IllegalArgumentException("arrayVectorWithValidityMaskType cannot handle this type" + arrowType);
         };
     }
 
@@ -240,7 +260,7 @@ public final class QueryVariableTypeMethods {
             case P_BOOLEAN -> createPrimitiveType(location, Java.Primitive.BOOLEAN);
             case P_DOUBLE -> createPrimitiveType(location, Java.Primitive.DOUBLE);
             case P_FLOAT -> createPrimitiveType(location, Java.Primitive.FLOAT);
-            case P_INT -> createPrimitiveType(location, Java.Primitive.INT);
+            case P_INT, P_INT_DATE -> createPrimitiveType(location, Java.Primitive.INT);
             case P_LONG -> createPrimitiveType(location, Java.Primitive.LONG);
 
             case P_A_BOOLEAN -> createPrimitiveArrayType(location, Java.Primitive.BOOLEAN);
@@ -253,6 +273,7 @@ public final class QueryVariableTypeMethods {
 
             case S_A_FL_BIN -> createNestedPrimitiveArrayType(location, Java.Primitive.BYTE);
 
+            case ARROW_DATE_VECTOR -> createReferenceType(getLocation(), "org.apache.arrow.vector.DateDayVector");
             case ARROW_DOUBLE_VECTOR -> createReferenceType(location, "org.apache.arrow.vector.Float8Vector");
             case ARROW_FIXED_LENGTH_BINARY_VECTOR -> createReferenceType(getLocation(), "org.apache.arrow.vector.FixedSizeBinaryVector");
             case ARROW_FLOAT_VECTOR -> createReferenceType(location, "org.apache.arrow.vector.Float4Vector");

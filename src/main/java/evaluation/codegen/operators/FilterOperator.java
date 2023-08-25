@@ -16,27 +16,35 @@ import org.apache.calcite.rex.RexCall;
 import org.apache.calcite.rex.RexInputRef;
 import org.apache.calcite.rex.RexLiteral;
 import org.apache.calcite.rex.RexNode;
+import org.apache.calcite.sql.SqlKind;
+import org.apache.calcite.sql.fun.SqlDatetimeSubtractionOperator;
+import org.apache.calcite.sql.fun.SqlMonotonicBinaryOperator;
 import org.apache.calcite.sql.type.SqlTypeName;
+import org.apache.calcite.util.DateString;
 import org.codehaus.janino.Java;
 
 import java.util.ArrayList;
 import java.util.List;
 
+import static evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_DATE_VECTOR;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_INT_VECTOR;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_INT_VECTOR_W_SELECTION_VECTOR;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_INT_VECTOR_W_VALIDITY_MASK;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.P_A_BOOLEAN;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.P_A_INT;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.P_INT;
+import static evaluation.codegen.infrastructure.context.QueryVariableType.P_INT_DATE;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.VECTOR_INT_MASKED;
 import static evaluation.codegen.infrastructure.context.QueryVariableTypeMethods.arrowVectorWithSelectionVectorType;
 import static evaluation.codegen.infrastructure.context.QueryVariableTypeMethods.arrowVectorWithValidityMaskType;
 import static evaluation.codegen.infrastructure.context.QueryVariableTypeMethods.toJavaType;
 import static evaluation.codegen.infrastructure.janino.JaninoControlGen.createIfNotContinue;
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createAmbiguousNameRef;
+import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createIntegerLiteral;
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createPrimitiveArrayType;
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.getLocation;
 import static evaluation.codegen.infrastructure.janino.JaninoMethodGen.createMethodInvocation;
+import static evaluation.codegen.infrastructure.janino.JaninoOperatorGen.le;
 import static evaluation.codegen.infrastructure.janino.JaninoOperatorGen.lt;
 import static evaluation.codegen.infrastructure.janino.JaninoOperatorGen.mul;
 import static evaluation.codegen.infrastructure.janino.JaninoVariableGen.createLocalVariable;
@@ -114,7 +122,8 @@ public class FilterOperator extends CodeGenOperator<LogicalFilter> {
         // Forward the generation obligation to the correct method based on the operator type.
         return switch (castFilterOperator.getKind()) {
             case AND -> consumeNonVecAndOperator(cCtx, oCtx, castFilterOperator, callParentConsumeOnMatch);
-            case LESS_THAN -> consumeNonVecLtOperator(cCtx, oCtx, castFilterOperator, callParentConsumeOnMatch);
+            case LESS_THAN -> consumeNonVecLteOperator(cCtx, oCtx, castFilterOperator, false, callParentConsumeOnMatch);
+            case LESS_THAN_OR_EQUAL -> consumeNonVecLteOperator(cCtx, oCtx, castFilterOperator, true, callParentConsumeOnMatch);
             default -> throw new UnsupportedOperationException(
                     "FilterOperator.consumeNonVecOperator does not support this operator type");
         };
@@ -156,19 +165,21 @@ public class FilterOperator extends CodeGenOperator<LogicalFilter> {
 
     /**
      * Method to generate the required non-vectorised code on the backward code generation pass for
-     * a < operator.
+     * a </<= operator.
      * @param cCtx The {@link CodeGenContext} to use during the generation.
      * @param oCtx The {@link OptimisationContext} to use during the generation and execution.
      * @param filterOperator The < operator to generate code for.
+     * @param allowEqual {@code true} for executing <=, {@code false} for executing <
      * @param callParentConsumeOnMatch Whether the parent operator consume method should be invoked
      *                                 if this {@code filterOperator} matches. Necessary to allow
      *                                 recursive code generation.
      * @return The generated query code.
      */
-    private List<Java.Statement> consumeNonVecLtOperator(
+    private List<Java.Statement> consumeNonVecLteOperator(
             CodeGenContext cCtx,
             OptimisationContext oCtx,
             RexCall filterOperator,
+            boolean allowEqual,
             boolean callParentConsumeOnMatch
     ) {
         // Initialise the result
@@ -236,7 +247,9 @@ public class FilterOperator extends CodeGenOperator<LogicalFilter> {
                                         createAmbiguousNameRef(getLocation(), SIMDVectorName),
                                         "compare",
                                         new Java.Rvalue[] {
-                                                createAmbiguousNameRef(getLocation(), "jdk.incubator.vector.VectorOperators.LT"),
+                                                createAmbiguousNameRef(getLocation(),
+                                                        allowEqual ? "jdk.incubator.vector.VectorOperators.LE"
+                                                                : "jdk.incubator.vector.VectorOperators.LT"),
                                                 codeGenOperandNonVec(cCtx, rhs, codegenResult),
                                                 lhsAP.readSIMDMask()
                                         }
@@ -275,12 +288,13 @@ public class FilterOperator extends CodeGenOperator<LogicalFilter> {
             Java.Rvalue rhsRvalue = codeGenOperandNonVec(cCtx, rhs, codegenResult);
 
             // Generate the required control flow
-            // if (!(lhsRvalue < rhsRvalue))
+            // if (!(lhsRvalue </<= rhsRvalue))
             //     continue;
             codegenResult.add(
                     createIfNotContinue(
                             getLocation(),
-                            lt(getLocation(), lhsRvalue, rhsRvalue)
+                            allowEqual ? le(getLocation(), lhsRvalue, rhsRvalue)
+                                    : lt(getLocation(), lhsRvalue, rhsRvalue)
                     )
             );
         }
@@ -313,6 +327,11 @@ public class FilterOperator extends CodeGenOperator<LogicalFilter> {
 
         } else if (operand instanceof RexLiteral literal) {
             return rexLiteralToRvalue(literal);
+
+        } else if (operand.getType().getSqlTypeName() == SqlTypeName.DATE) {
+            // We assume that all dates are always given in unix days, so we translate
+            // date query constants to unix day format
+            return createIntegerLiteral(getLocation(), translateToUnixDay(operand));
 
         } else {
             throw new UnsupportedOperationException("FilterOperator.codeGenOperandNonVec does not support the provide operand");
@@ -361,7 +380,8 @@ public class FilterOperator extends CodeGenOperator<LogicalFilter> {
         // Forward the generation obligation to the correct method based on the operator type.
         return switch (castFilterOperator.getKind()) {
             case AND -> consumeVecAndOperator(cCtx, oCtx, castFilterOperator, callParentConsumeOnMatch);
-            case LESS_THAN -> consumeVecLtOperator(cCtx, oCtx, castFilterOperator, callParentConsumeOnMatch);
+            case LESS_THAN -> consumeVecLteOperator(cCtx, oCtx, castFilterOperator, false, callParentConsumeOnMatch);
+            case LESS_THAN_OR_EQUAL -> consumeVecLteOperator(cCtx, oCtx, castFilterOperator, true, callParentConsumeOnMatch);
             default -> throw new UnsupportedOperationException(
                     "FilterOperator.consumeVecOperator does not support this operator type");
         };
@@ -403,19 +423,21 @@ public class FilterOperator extends CodeGenOperator<LogicalFilter> {
 
     /**
      * Method to generate the required vectorised code on the backward code generation pass for a
-     * < operator.
+     * </<= operator.
      * @param cCtx The {@link CodeGenContext} to use during the generation.
      * @param oCtx The {@link OptimisationContext} to use during the generation and execution.
-     * @param filterOperator The < operator to generate code for.
+     * @param filterOperator The </<= operator to generate code for.
+     * @param allowEqual {@code true} for executing <=, {@code false} for executing <
      * @param callParentConsumeOnMatch Whether the parent operator consume method should be invoked
      *                                 if this {@code filterOperator} matches. Necessary to allow
      *                                 recursive code generation.
      * @return The generated query code.
      */
-    private List<Java.Statement> consumeVecLtOperator(
+    private List<Java.Statement> consumeVecLteOperator(
             CodeGenContext cCtx,
             OptimisationContext oCtx,
             RexCall filterOperator,
+            boolean allowEqual,
             boolean callParentConsumeOnMatch
     ) {
         // Initialise the result
@@ -426,28 +448,39 @@ public class FilterOperator extends CodeGenOperator<LogicalFilter> {
         RexNode rhs = filterOperator.getOperands().get(1);
 
         // Check if the operands match the expected format:
-        // Vector < Scalar (which means we need a RexInputRef < RexLiteral)
-        if (!(lhs instanceof RexInputRef lhsRef) || !(rhs instanceof RexLiteral rhsLit))
-            throw new UnsupportedOperationException(
-                    "FilterOperator.consumeVecLtOperator does not support this operand combination");
-
+        // Vector < Scalar
         // Get the access path for the lhs input reference
-        AccessPath lhsAP = cCtx.getCurrentOrdinalMapping().get(lhsRef.getIndex());
+        AccessPath lhsAP;
+        if (lhs instanceof RexInputRef lhsRef) {
+            lhsAP = cCtx.getCurrentOrdinalMapping().get(lhsRef.getIndex());
 
-        // Currently the filter operator only supports the integer type, check this condition
+        } else throw new UnsupportedOperationException("FilterOperator.consumeVecLteOperator does not support this left-hand operator");
+
+        Java.Rvalue rhsScalar;
+        QueryVariableType rhsScalarType;
+        if (rhs instanceof RexLiteral rhsLit && rhs.getType().getSqlTypeName() == SqlTypeName.INTEGER) {
+            rhsScalar = rexLiteralToRvalue(rhsLit);
+            rhsScalarType = P_INT;
+
+        } else if (rhs instanceof RexCall rhsRexcall && rhs.getType().getSqlTypeName() == SqlTypeName.DATE) {
+            rhsScalar = createIntegerLiteral(getLocation(), translateToUnixDay(rhsRexcall));
+            rhsScalarType = P_INT_DATE;
+
+        } else throw new UnsupportedOperationException("FilterOperator.consumeVecLteOperator does not support this right-hand operator");
+
+        // Currently the filter operator only supports the integer (date) type, check this condition
         if (
                 (  lhsAP.getType() != ARROW_INT_VECTOR
                 && lhsAP.getType() != ARROW_INT_VECTOR_W_SELECTION_VECTOR
                 && lhsAP.getType() != ARROW_INT_VECTOR_W_VALIDITY_MASK
+                && lhsAP.getType() != ARROW_DATE_VECTOR
                 )
-                || rhs.getType().getSqlTypeName() != SqlTypeName.INTEGER) {
+                ||
+                (rhsScalarType != P_INT && rhsScalarType != P_INT_DATE)) {
             throw new UnsupportedOperationException(
                     "FilterOperator.consumeVecLtOperator does not supports this operand combination: "
                             + lhsAP.getType() + " - " + rhs.getType().toString());
         }
-
-        // Generate the Rvalue for the rhs integer scalar
-        Java.Rvalue rhsIntScalar = rexLiteralToRvalue(rhsLit);
 
         // Handle the generic part of the code generation based on whether SIMD is enabled
         // Do a scan-surrounding allocation for the selection vector/validity mask that will result from this operator
@@ -495,10 +528,13 @@ public class FilterOperator extends CodeGenOperator<LogicalFilter> {
                 cCtx.defineVariable(selectionResultAP.getVariableName() + "_length"),
                 P_INT
         );
+        Java.BooleanLiteral allowEqualLiteral = allowEqual
+                ? new Java.BooleanLiteral(getLocation(), "true")
+                : new Java.BooleanLiteral(getLocation(), "false");
 
         if (lhsAP instanceof ArrowVectorAccessPath lhsArrowVecAP && !this.useSIMDVec()) {
-            // int ordinal_[index]_sel_vec_length = VectorisedFilterOperators.lessThan(
-            //      lhsArrowVecAP.read(), rhsIntScalar, ordinal_[index]_sel_vec);
+            // int ordinal_[index]_sel_vec_length = VectorisedFilterOperators.lessThanEqual(
+            //      lhsArrowVecAP.read(), rhsIntScalar, ordinal_[index]_sel_vec, allowEqual);
             codegenResult.add(
                     createLocalVariable(
                             getLocation(),
@@ -507,19 +543,20 @@ public class FilterOperator extends CodeGenOperator<LogicalFilter> {
                             createMethodInvocation(
                                     getLocation(),
                                     createAmbiguousNameRef(getLocation(), "VectorisedFilterOperators"),
-                                    "lessThan",
+                                    "lessThanEqual",
                                     new Java.Rvalue[] {
                                             lhsArrowVecAP.read(),
-                                            rhsIntScalar,
-                                            selectionResultAP.read()
+                                            rhsScalar,
+                                            selectionResultAP.read(),
+                                            allowEqualLiteral
                                     }
                             )
                     )
             );
 
         } else if (lhsAP instanceof ArrowVectorAccessPath lhsArrowVecAP && this.useSIMDVec()) {
-            // int ordinal_[index]_val_mask_length = VectorisedFilterOperators.lessThanSIMD(
-            //      lhsArrowVecAP.read(), rhsIntScalar, ordinal_[index]_val_mask);
+            // int ordinal_[index]_val_mask_length = VectorisedFilterOperators.lessThanEqualSIMD(
+            //      lhsArrowVecAP.read(), rhsIntScalar, ordinal_[index]_val_mask, allowEqual);
             codegenResult.add(
                     createLocalVariable(
                             getLocation(),
@@ -531,20 +568,21 @@ public class FilterOperator extends CodeGenOperator<LogicalFilter> {
                                             getLocation(),
                                             "VectorisedFilterOperators"
                                     ),
-                                    "lessThanSIMD",
+                                    "lessThanEqualSIMD",
                                     new Java.Rvalue[] {
                                             lhsArrowVecAP.read(),
-                                            rhsIntScalar,
-                                            selectionResultAP.read()
+                                            rhsScalar,
+                                            selectionResultAP.read(),
+                                            allowEqualLiteral
                                     }
                             )
                     )
             );
 
         } else if (lhsAP instanceof ArrowVectorWithSelectionVectorAccessPath lhsArrowVecWSAP && !this.useSIMDVec()) {
-            // int ordinal_[index]_sel_vec_length = VectorisedFilterOperators.lessThan(
+            // int ordinal_[index]_sel_vec_length = VectorisedFilterOperators.lessEqualThan(
             //      lhsArrowVecWSAP.readArrowVector(), rhsIntScalar, ordinal_[index]_sel_vec,
-            //      lhsArrowVecWSAP.readSelectionVector(), lhsArrowVecWSAP.readSelectionVectorLength());
+            //      lhsArrowVecWSAP.readSelectionVector(), lhsArrowVecWSAP.readSelectionVectorLength(), allowEqual);
             codegenResult.add(
                     createLocalVariable(
                             getLocation(),
@@ -553,22 +591,23 @@ public class FilterOperator extends CodeGenOperator<LogicalFilter> {
                             createMethodInvocation(
                                     getLocation(),
                                     createAmbiguousNameRef(getLocation(),"VectorisedFilterOperators"),
-                                    "lessThan",
+                                    "lessThanEqual",
                                     new Java.Rvalue[] {
                                             lhsArrowVecWSAP.readArrowVector(),
-                                            rhsIntScalar,
+                                            rhsScalar,
                                             selectionResultAP.read(),
                                             lhsArrowVecWSAP.readSelectionVector(),
-                                            lhsArrowVecWSAP.readSelectionVectorLength()
+                                            lhsArrowVecWSAP.readSelectionVectorLength(),
+                                            allowEqualLiteral
                                     }
                             )
                     )
             );
 
         } else if (lhsAP instanceof ArrowVectorWithValidityMaskAccessPath lhsAvwvmAP && this.useSIMDVec()) {
-            // int ordinal_[index]_val_mask_length = VectorisedFilterOperators.lessThanSIMD(
+            // int ordinal_[index]_val_mask_length = VectorisedFilterOperators.lessThanEqualSIMD(
             //      lhsAvwvmAP.readArrowVector(), rhsIntScalar, ordinal_[index]_val_mask,
-            //      lhsAvwvmAP.readValidityMask(), lhsAvwvmAP.readValidityMaskLength());
+            //      lhsAvwvmAP.readValidityMask(), lhsAvwvmAP.readValidityMaskLength(), allowEqual);
             codegenResult.add(
                     createLocalVariable(
                             getLocation(),
@@ -577,13 +616,14 @@ public class FilterOperator extends CodeGenOperator<LogicalFilter> {
                             createMethodInvocation(
                                     getLocation(),
                                     createAmbiguousNameRef(getLocation(), "VectorisedFilterOperators"),
-                                    "lessThanSIMD",
+                                    "lessThanEqualSIMD",
                                     new Java.Rvalue[] {
                                             lhsAvwvmAP.readArrowVector(),
-                                            rhsIntScalar,
+                                            rhsScalar,
                                             selectionResultAP.read(),
                                             lhsAvwvmAP.readValidityMask(),
-                                            lhsAvwvmAP.readValidityMaskLength()
+                                            lhsAvwvmAP.readValidityMaskLength(),
+                                            allowEqualLiteral
                                     }
                             )
                     )
@@ -635,4 +675,73 @@ public class FilterOperator extends CodeGenOperator<LogicalFilter> {
         return codegenResult;
     }
 
+    /**
+     * Method to translate a given date into an integer representing the UNIX day.
+     * @param dateSpecification The specification to find the resulting UNIX day for.
+     * @return The integer corresponding to the UNIX day represented by {@code dateSpecification}.
+     */
+    private int translateToUnixDay(RexNode dateSpecification) {
+        if (dateSpecification instanceof RexCall dateComputation)
+            return translateToUnixDay(dateComputation);
+        else if (dateSpecification instanceof RexLiteral dateLiteral)
+            return translateToUnixDay(dateLiteral);
+        else
+            throw new UnsupportedOperationException(
+                    "FilterOperator.translateToUnixDay does not support the provided dateSpecification");
+    }
+
+    /**
+     * Method to translate a given date computation into an integer representing the UNIX day that
+     * results from simplifying the computation.
+     * @param dateComputation The computation to find the resulting UNIX day for.
+     * @return The integer corresponding to the UNIX day represented by {@code dateComputation}.
+     */
+    private int translateToUnixDay(RexCall dateComputation) {
+        // Get and translate the operand values
+        int lhsUnixDay = translateToUnixDay(dateComputation.getOperands().get(0));
+        int rhsUnixDay = translateToUnixDay(dateComputation.getOperands().get(1));
+
+        // Perform the actual computation
+        if (dateComputation.getOperator() instanceof SqlDatetimeSubtractionOperator) {
+            return lhsUnixDay - rhsUnixDay;
+
+        } else if (dateComputation.getOperator() instanceof SqlMonotonicBinaryOperator smbo) {
+            if (smbo.getKind() == SqlKind.TIMES)
+                return lhsUnixDay * rhsUnixDay;
+            else
+                throw new UnsupportedOperationException(
+                        "FilterOperator.translateToUnixDay does not support the given smbo");
+
+        } else {
+            throw new UnsupportedOperationException(
+                    "FilterOperator.translateToUnixDay does not support the given dateComputation");
+        }
+    }
+
+    /**
+     * Method to translate a given date literal into an integer representing the UNIX day.
+     * @param dateLiteral The literal to find the resulting UNIX day for.
+     * @return The integer corresponding to the UNIX day represented by {@code dateLiteral}.
+     */
+    private int translateToUnixDay(RexLiteral dateLiteral) {
+        SqlTypeName dateLiteralType = dateLiteral.getType().getSqlTypeName();
+        if (dateLiteralType == SqlTypeName.DATE) {
+            // Translate the date string to UNIX day format
+            DateString dateLiteralString = dateLiteral.getValueAs(DateString.class);
+            return dateLiteralString.getDaysSinceEpoch();
+
+        } else if (dateLiteralType == SqlTypeName.INTEGER) {
+            // Assume already in UNIX days
+            return dateLiteral.getValueAs(Integer.class);
+
+        } else if (dateLiteralType == SqlTypeName.INTERVAL_DAY) {
+            // Currently this seems to be a "unit", and since we are computing in UNIX days anyhow
+            // this is sort of the identity unit
+            return 1;
+
+        } else {
+            throw new UnsupportedOperationException(
+                    "FilterOperator.translateToUnixDay does not support the given dateLiteral");
+        }
+    }
 }

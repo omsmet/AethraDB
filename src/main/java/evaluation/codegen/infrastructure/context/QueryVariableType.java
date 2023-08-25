@@ -12,6 +12,7 @@ public enum QueryVariableType {
     P_DOUBLE,
     P_FLOAT,
     P_INT,
+    P_INT_DATE, // regular int to be interpreted as a UNIX day
     P_LONG,
 
     // Primitive array types
@@ -28,6 +29,7 @@ public enum QueryVariableType {
     S_A_FL_BIN,
 
     // Arrow vector types
+    ARROW_DATE_VECTOR,
     ARROW_DOUBLE_VECTOR,
     ARROW_FIXED_LENGTH_BINARY_VECTOR,
     ARROW_FLOAT_VECTOR,
@@ -35,6 +37,15 @@ public enum QueryVariableType {
     ARROW_LONG_VECTOR,
 
     // Arrow vector with selection/validity mask types
+    ARROW_DATE_VECTOR_W_SELECTION_VECTOR,
+    ARROW_DATE_VECTOR_W_VALIDITY_MASK,
+
+    ARROW_DOUBLE_VECTOR_W_SELECTION_VECTOR,
+    ARROW_DOUBLE_VECTOR_W_VALIDITY_MASK,
+
+    ARROW_FIXED_LENGTH_BINARY_VECTOR_W_SELECTION_VECTOR,
+    ARROW_FIXED_LENGTH_BINARY_VECTOR_W_VALIDITY_MASK,
+
     ARROW_INT_VECTOR_W_SELECTION_VECTOR,
     ARROW_INT_VECTOR_W_VALIDITY_MASK,
 
@@ -44,6 +55,10 @@ public enum QueryVariableType {
     ARRAY_FLOAT_VECTOR,
     ARRAY_INT_VECTOR,
     ARRAY_LONG_VECTOR,
+
+    // Array vector with selection/validity mask types
+    ARRAY_DOUBLE_VECTOR_W_SELECTION_VECTOR,
+    ARRAY_DOUBLE_VECTOR_W_VALIDITY_MASK,
 
     // SIMD related types
     VECTOR_SPECIES_DOUBLE,

@@ -6,6 +6,8 @@ import evaluation.codegen.infrastructure.context.QueryVariableType;
 import evaluation.codegen.infrastructure.context.access_path.AccessPath;
 import evaluation.codegen.infrastructure.context.access_path.ArrayAccessPath;
 import evaluation.codegen.infrastructure.context.access_path.ArrayVectorAccessPath;
+import evaluation.codegen.infrastructure.context.access_path.ArrayVectorWithSelectionVectorAccessPath;
+import evaluation.codegen.infrastructure.context.access_path.ArrayVectorWithValidityMaskAccessPath;
 import evaluation.codegen.infrastructure.context.access_path.ArrowVectorAccessPath;
 import evaluation.codegen.infrastructure.context.access_path.ArrowVectorWithSelectionVectorAccessPath;
 import evaluation.codegen.infrastructure.context.access_path.ArrowVectorWithValidityMaskAccessPath;
@@ -29,11 +31,18 @@ import java.util.Arrays;
 import java.util.List;
 
 import static evaluation.codegen.infrastructure.context.QueryVariableType.ARRAY_DOUBLE_VECTOR;
+import static evaluation.codegen.infrastructure.context.QueryVariableType.ARRAY_DOUBLE_VECTOR_W_SELECTION_VECTOR;
+import static evaluation.codegen.infrastructure.context.QueryVariableType.ARRAY_DOUBLE_VECTOR_W_VALIDITY_MASK;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.ARRAY_INT_VECTOR;
-import static evaluation.codegen.infrastructure.context.QueryVariableType.ARRAY_LONG_VECTOR;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_DOUBLE_VECTOR;
+import static evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_DOUBLE_VECTOR_W_SELECTION_VECTOR;
+import static evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_DOUBLE_VECTOR_W_VALIDITY_MASK;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_FIXED_LENGTH_BINARY_VECTOR;
+import static evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_FIXED_LENGTH_BINARY_VECTOR_W_SELECTION_VECTOR;
+import static evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_FIXED_LENGTH_BINARY_VECTOR_W_VALIDITY_MASK;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_INT_VECTOR;
+import static evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_INT_VECTOR_W_SELECTION_VECTOR;
+import static evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_INT_VECTOR_W_VALIDITY_MASK;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.MAP_GENERATED;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.P_A_LONG;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.P_DOUBLE;
@@ -47,6 +56,7 @@ import static evaluation.codegen.infrastructure.context.QueryVariableTypeMethods
 import static evaluation.codegen.infrastructure.context.QueryVariableTypeMethods.vectorTypeForPrimitiveArrayType;
 import static evaluation.codegen.infrastructure.janino.JaninoClassGen.createClassInstance;
 import static evaluation.codegen.infrastructure.janino.JaninoControlGen.createForLoop;
+import static evaluation.codegen.infrastructure.janino.JaninoControlGen.createIfNotContinue;
 import static evaluation.codegen.infrastructure.janino.JaninoControlGen.createWhileLoop;
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createAmbiguousNameRef;
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createArrayElementAccessExpr;
@@ -975,6 +985,8 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
                 keyColumnsAccessPathTypes[i] = keyColumnsAccessPaths[i].getType();
             }
 
+            boolean accountForFiltering = keyColumnsAccessPaths[0] instanceof ArrowVectorWithSelectionVectorAccessPath
+                    || keyColumnsAccessPaths[0] instanceof ArrowVectorWithValidityMaskAccessPath;
             for (int i = 0; i < keyColumnsAccessPaths.length; i++) {
                 // Hashing of the key-column depends on whether we are in SIMD mode or not
                 String methodInvocationName = "constructPreHashKeyVector";
@@ -982,14 +994,39 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
                     methodInvocationName += "SIMD";
 
                 // Determine the arguments
-                Java.Rvalue[] methodInvocationArguments = new Java.Rvalue[3];
-                methodInvocationArguments[0] = this.groupKeyPreHashVector.read();
-                methodInvocationArguments[1] = switch (keyColumnsAccessPathTypes[i]) {
-                    case ARROW_FIXED_LENGTH_BINARY_VECTOR, ARROW_INT_VECTOR ->  ((ArrowVectorAccessPath) keyColumnsAccessPaths[i]).read();
+                Java.Rvalue[] methodInvocationArguments = new Java.Rvalue[3 + (accountForFiltering ? 2 : 0)];
+                int currentMethodInvocationArgumentIndex = 0;
+                methodInvocationArguments[currentMethodInvocationArgumentIndex++] = this.groupKeyPreHashVector.read();
+                methodInvocationArguments[currentMethodInvocationArgumentIndex++] = switch (keyColumnsAccessPathTypes[i]) {
+                    case ARROW_FIXED_LENGTH_BINARY_VECTOR, ARROW_INT_VECTOR
+                            -> ((ArrowVectorAccessPath) keyColumnsAccessPaths[i]).read();
+                    case ARROW_FIXED_LENGTH_BINARY_VECTOR_W_SELECTION_VECTOR, ARROW_INT_VECTOR_W_SELECTION_VECTOR
+                            -> ((ArrowVectorWithSelectionVectorAccessPath) keyColumnsAccessPaths[i]).readArrowVector();
+                    case ARROW_FIXED_LENGTH_BINARY_VECTOR_W_VALIDITY_MASK, ARROW_INT_VECTOR_W_VALIDITY_MASK
+                            -> ((ArrowVectorWithValidityMaskAccessPath) keyColumnsAccessPaths[i]).readArrowVector();
 
                     default -> throw new UnsupportedOperationException("AggregationOperator.consumeVec does not support this key column access path type");
                 };
-                methodInvocationArguments[2] = new Java.BooleanLiteral(getLocation(), (i == 0) ? "false" : "true");
+                if (accountForFiltering) {
+                    methodInvocationArguments[currentMethodInvocationArgumentIndex++] = switch (keyColumnsAccessPathTypes[i]) {
+                        case ARROW_FIXED_LENGTH_BINARY_VECTOR_W_SELECTION_VECTOR, ARROW_INT_VECTOR_W_SELECTION_VECTOR
+                                -> ((ArrowVectorWithSelectionVectorAccessPath) keyColumnsAccessPaths[i]).readSelectionVector();
+                        case ARROW_FIXED_LENGTH_BINARY_VECTOR_W_VALIDITY_MASK, ARROW_INT_VECTOR_W_VALIDITY_MASK
+                                -> ((ArrowVectorWithValidityMaskAccessPath) keyColumnsAccessPaths[i]).readValidityMask();
+
+                        default -> throw new UnsupportedOperationException("AggregationOperator.consumeVec does not support this filtering key column access path type");
+                    };
+                    methodInvocationArguments[currentMethodInvocationArgumentIndex++] = switch (keyColumnsAccessPathTypes[i]) {
+                        case ARROW_FIXED_LENGTH_BINARY_VECTOR_W_SELECTION_VECTOR, ARROW_INT_VECTOR_W_SELECTION_VECTOR
+                                -> ((ArrowVectorWithSelectionVectorAccessPath) keyColumnsAccessPaths[i]).readSelectionVectorLength();
+                        case ARROW_FIXED_LENGTH_BINARY_VECTOR_W_VALIDITY_MASK, ARROW_INT_VECTOR_W_VALIDITY_MASK
+                                -> ((ArrowVectorWithValidityMaskAccessPath) keyColumnsAccessPaths[i]).readValidityMaskLength();
+
+                        default -> throw new UnsupportedOperationException("AggregationOperator.consumeVec does not support this filtering key column access path type");
+                    };
+                }
+                methodInvocationArguments[currentMethodInvocationArgumentIndex++] =
+                        new Java.BooleanLiteral(getLocation(), (i == 0) ? "false" : "true");
 
                 // Perform the actual hashing
                 codeGenResult.add(
@@ -1016,20 +1053,52 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
             Java.Block tableMaintenanceLoopBody = new Java.Block(getLocation());
             ScalarVariableAccessPath aviv =
                     new ScalarVariableAccessPath(cCtx.defineVariable("aviv"), P_INT);
+            ScalarVariableAccessPath recordIndexAP = aviv; // Variable to allow record accessing via a selection vector
 
             Java.Rvalue[] incrementForKeyArguments =
                     new Java.Rvalue[this.groupByKeyColumnIndices.length + 1 + this.aggregationMapGenerator.valueVariableNames.length];
             int currentArgumentIndex = 0;
 
-            // Initialise the record count and note down which vector type is in use
-            boolean usingArrowVectors;
+            // Initialise the record count, perform filtering if necessary and update record indexing AP if needed
             if (currentOrdinalMapping.get(0) instanceof ArrowVectorAccessPath avap) {
                 // int recordCount = [avap.read()].getValueCount();
                 recordCountInitValue = createMethodInvocation(getLocation(), avap.read(), "getValueCount");
-                usingArrowVectors = true;
             } else if (currentOrdinalMapping.get(0) instanceof ArrayVectorAccessPath avap) {
                 recordCountInitValue = avap.getVectorLengthVariable().read();
-                usingArrowVectors = false;
+            } else if (currentOrdinalMapping.get(0) instanceof ArrowVectorWithValidityMaskAccessPath avwvmap) {
+                recordCountInitValue = avwvmap.readValidityMaskLength();
+
+                // In the table maintenance loop, skip records whose validity indicator are set to false
+                tableMaintenanceLoopBody.addStatement(
+                        createIfNotContinue(
+                                getLocation(),
+                                createArrayElementAccessExpr(
+                                        getLocation(),
+                                        avwvmap.readValidityMask(),
+                                        aviv.read()
+                                )
+                        )
+                );
+
+            } else if (currentOrdinalMapping.get(0) instanceof ArrowVectorWithSelectionVectorAccessPath avwsvap) {
+                recordCountInitValue = avwsvap.readSelectionVectorLength();
+
+                // In the table maintenance loop, index the records via the selection vector
+                // int aviv_record_index = [avwsvap.readSelectionVector()][aviv];
+                recordIndexAP = new ScalarVariableAccessPath(cCtx.defineVariable("aviv_record_index"), P_INT);
+                tableMaintenanceLoopBody.addStatement(
+                        createLocalVariable(
+                                getLocation(),
+                                toJavaType(getLocation(), recordIndexAP.getType()),
+                                recordIndexAP.getVariableName(),
+                                createArrayElementAccessExpr(
+                                        getLocation(),
+                                        avwsvap.readSelectionVector(),
+                                        aviv.read()
+                                )
+                        )
+                );
+
             } else {
                 throw new UnsupportedOperationException(
                         "AggregationOperator.ConsumeVec does not support hash-table maintenance using the provided access path");
@@ -1038,18 +1107,32 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
             // Obtain the key arguments
             for (int i = 0; i < this.groupByKeyColumnIndices.length; i++) {
                 AccessPath currentKeyOrdinal = currentOrdinalMapping.get(this.groupByKeyColumnIndices[i]);
-                if (usingArrowVectors) {
+                if (currentKeyOrdinal instanceof ArrowVectorAccessPath avap) {
                     incrementForKeyArguments[currentArgumentIndex++] = createMethodInvocation(
                             getLocation(),
-                            ((ArrowVectorAccessPath) currentKeyOrdinal).read(),
+                            avap.read(),
                             "get",
-                            new Java.Rvalue[] { aviv.read() }
+                            new Java.Rvalue[] { recordIndexAP.read() }
                     );
-                } else { // using array vectors
+                } else if (currentKeyOrdinal instanceof ArrowVectorWithSelectionVectorAccessPath avwsvap) {
+                    incrementForKeyArguments[currentArgumentIndex++] = createMethodInvocation(
+                            getLocation(),
+                            avwsvap.readArrowVector(),
+                            "get",
+                            new Java.Rvalue[] { recordIndexAP.read() }
+                    );
+                } else if (currentKeyOrdinal instanceof ArrowVectorWithValidityMaskAccessPath avwvmap) {
+                    incrementForKeyArguments[currentArgumentIndex++] = createMethodInvocation(
+                            getLocation(),
+                            avwvmap.readArrowVector(),
+                            "get",
+                            new Java.Rvalue[] { recordIndexAP.read() }
+                    );
+                } else if (currentKeyOrdinal instanceof ArrayVectorAccessPath avap) {
                     incrementForKeyArguments[currentArgumentIndex++] = createArrayElementAccessExpr(
                             getLocation(),
-                            ((ArrayVectorAccessPath) currentKeyOrdinal).getVectorVariable().read(),
-                            aviv.read()
+                            avap.getVectorVariable().read(),
+                            recordIndexAP.read()
                     );
                 }
             }
@@ -1058,7 +1141,7 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
             incrementForKeyArguments[currentArgumentIndex++] = createArrayElementAccessExpr(
                     getLocation(),
                     this.groupKeyPreHashVector.read(),
-                    aviv.read()
+                    recordIndexAP.read()
             );
 
             // Now get the value to insert based on the aggregation functions
@@ -1081,7 +1164,7 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
                                 getLocation(),
                                 castInputOrdinal.read(),
                                 "get",
-                                new Java.Rvalue[] { aviv.read() }
+                                new Java.Rvalue[] { recordIndexAP.read() }
                         );
 
                     } else if (inputOrdinalType == ARRAY_DOUBLE_VECTOR || inputOrdinalType == ARRAY_INT_VECTOR) {
@@ -1091,7 +1174,50 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
                         incrementForKeyArguments[currentArgumentIndex++] = createArrayElementAccessExpr(
                                 getLocation(),
                                 castInputOrdinal.getVectorVariable().read(),
-                                aviv.read()
+                                recordIndexAP.read()
+                        );
+
+                    } else if (inputOrdinalType == ARROW_DOUBLE_VECTOR_W_SELECTION_VECTOR || inputOrdinalType == ARROW_INT_VECTOR_W_SELECTION_VECTOR) {
+                        ArrowVectorWithSelectionVectorAccessPath castInputOrdinal = (ArrowVectorWithSelectionVectorAccessPath) inputOrdinal;
+
+                        // Simply take the value indicated by the access path
+                        incrementForKeyArguments[currentArgumentIndex++] = createMethodInvocation(
+                                getLocation(),
+                                castInputOrdinal.readArrowVector(),
+                                "get",
+                                new Java.Rvalue[] { recordIndexAP.read() }
+                        );
+
+
+                    }  else if (inputOrdinalType == ARROW_DOUBLE_VECTOR_W_VALIDITY_MASK || inputOrdinalType == ARROW_INT_VECTOR_W_VALIDITY_MASK) {
+                        ArrowVectorWithValidityMaskAccessPath castInputOrdinal = (ArrowVectorWithValidityMaskAccessPath) inputOrdinal;
+
+                        // Simply take the value indicated by the access path
+                        incrementForKeyArguments[currentArgumentIndex++] = createMethodInvocation(
+                                getLocation(),
+                                castInputOrdinal.readArrowVector(),
+                                "get",
+                                new Java.Rvalue[] { recordIndexAP.read() }
+                        );
+
+                    } else if (inputOrdinalType == ARRAY_DOUBLE_VECTOR_W_SELECTION_VECTOR) {
+                        ArrayVectorWithSelectionVectorAccessPath castInputOrdinal = (ArrayVectorWithSelectionVectorAccessPath) inputOrdinal;
+
+                        // Simply take the value indicated by the access path
+                        incrementForKeyArguments[currentArgumentIndex++] = createArrayElementAccessExpr(
+                                getLocation(),
+                                castInputOrdinal.getArrayVectorVariable().getVectorVariable().read(),
+                                recordIndexAP.read()
+                        );
+
+                    } else if (inputOrdinalType == ARRAY_DOUBLE_VECTOR_W_VALIDITY_MASK) {
+                        ArrayVectorWithValidityMaskAccessPath castInputOrdinal = (ArrayVectorWithValidityMaskAccessPath) inputOrdinal;
+
+                        // Simply take the value indicated by the access path
+                        incrementForKeyArguments[currentArgumentIndex++] = createArrayElementAccessExpr(
+                                getLocation(),
+                                castInputOrdinal.getArrayVectorVariable().getVectorVariable().read(),
+                                recordIndexAP.read()
                         );
 
                     } else {
@@ -1171,7 +1297,10 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
         this.groupByKeyColumnsTypes = new QueryVariableType[this.groupByKeyColumnIndices.length];
         for (int i = 0; i < this.groupByKeyColumnsTypes.length; i++) {
             QueryVariableType ordinalType = om.get(this.groupByKeyColumnIndices[i]).getType();
-            if (ordinalType == S_FL_BIN || ordinalType == ARROW_FIXED_LENGTH_BINARY_VECTOR)
+            if (ordinalType == S_FL_BIN
+                    || ordinalType == ARROW_FIXED_LENGTH_BINARY_VECTOR
+                    || ordinalType == ARROW_FIXED_LENGTH_BINARY_VECTOR_W_SELECTION_VECTOR
+                    || ordinalType == ARROW_FIXED_LENGTH_BINARY_VECTOR_W_VALIDITY_MASK)
                 ordinalType = S_FL_BIN;
             else
                 ordinalType = primitiveType(ordinalType);
