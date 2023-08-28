@@ -1,7 +1,7 @@
 package benchmarks.tpch.q1_no_sort_hard_coded;
 
+import evaluation.codegen.infrastructure.data.ABQArrowTableReader;
 import evaluation.codegen.infrastructure.data.ArrowTableReader;
-import evaluation.codegen.infrastructure.data.CachingArrowTableReader;
 import evaluation.general_support.hashmaps.Char_Arr_Hash_Function;
 import org.apache.arrow.memory.RootAllocator;
 import org.openjdk.jmh.annotations.Benchmark;
@@ -78,7 +78,7 @@ public class NonVectorisedNonSimd {
     public void trialSetup() throws Exception {
         // Setup the database
         this.rootAllocator = new RootAllocator();
-        this.lineitem_table = new CachingArrowTableReader(
+        this.lineitem_table = new ABQArrowTableReader(
                 new File(this.tpchInstance + "/lineitem.arrow"), this.rootAllocator);
 
         // Initialise the hash-table
