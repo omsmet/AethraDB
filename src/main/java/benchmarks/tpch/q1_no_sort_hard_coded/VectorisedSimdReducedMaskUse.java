@@ -237,10 +237,8 @@ public class VectorisedSimdReducedMaskUse {
             int projection_computation_result_4_length;
             // DIFF: removed mask
             projection_computation_result_4_length = VectorisedArithmeticOperators.multiplySIMD(projection_computation_result_2, projection_computation_result_2_length, projection_computation_result_3, projection_computation_result_3_length, projection_computation_result_4);
-            // DIFF: removed mask
-            VectorisedHashOperators.constructPreHashKeyVectorSIMD(groupKeyPreHashVector, lineitem_vc_4, false);
-            // DIFF: removed mask
-            VectorisedHashOperators.constructPreHashKeyVectorSIMD(groupKeyPreHashVector, lineitem_vc_5, true);
+            VectorisedHashOperators.constructPreHashKeyVectorSIMD(groupKeyPreHashVector, lineitem_vc_4, ordinal_6_val_mask, ordinal_6_val_mask_length, false);
+            VectorisedHashOperators.constructPreHashKeyVectorSIMD(groupKeyPreHashVector, lineitem_vc_5, ordinal_6_val_mask, ordinal_6_val_mask_length, true);
             int recordCount = ordinal_6_val_mask_length;
             for (int aviv = 0; aviv < recordCount; aviv++) {
                 if (!(ordinal_6_val_mask[aviv])) {
