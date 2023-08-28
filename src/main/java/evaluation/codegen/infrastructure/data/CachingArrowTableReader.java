@@ -48,7 +48,7 @@ public class CachingArrowTableReader extends ArrowTableReader {
     private boolean fieldVectorsInitialised;
 
     /**
-     * Creates a new {@link ArrowTableReader} instance
+     * Creates a new {@link CachingArrowTableReader} instance
      * @param arrowFile The Arrow IPC file representing the table.
      * @param rootAllocator The {@link RootAllocator} used for Arrow operations.
      * @throws FileNotFoundException When the specified Arrow file cannot be found.
