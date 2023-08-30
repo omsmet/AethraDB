@@ -213,7 +213,7 @@ public class VectorisedNonSimd {
             org.apache.arrow.vector.FixedSizeBinaryVector lineitem_vc_4 = ((org.apache.arrow.vector.FixedSizeBinaryVector) lineitem_table.getVector(8));
             org.apache.arrow.vector.FixedSizeBinaryVector lineitem_vc_5 = ((org.apache.arrow.vector.FixedSizeBinaryVector) lineitem_table.getVector(9));
             org.apache.arrow.vector.DateDayVector lineitem_vc_6 = ((org.apache.arrow.vector.DateDayVector) lineitem_table.getVector(10));
-            int ordinal_6_sel_vec_length = VectorisedFilterOperators.lessThanEqual(lineitem_vc_6, 10471, ordinal_6_sel_vec, true);
+            int ordinal_6_sel_vec_length = VectorisedFilterOperators.le(lineitem_vc_6, 10471, ordinal_6_sel_vec);
             int projection_literal = 1;
             int projection_computation_result_length;
             projection_computation_result_length = VectorisedArithmeticOperators.subtract(projection_literal, lineitem_vc_2, ordinal_6_sel_vec, ordinal_6_sel_vec_length, projection_computation_result);

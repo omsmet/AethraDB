@@ -44,7 +44,7 @@ public class QueryCodePrinter {
             printCode(block.statements, indentationLevel);
 
         } else if (code instanceof Java.WhileStatement whileStatement) {
-            String whileGuardLine = "while " + printRvalue(whileStatement.condition) + " {";
+            String whileGuardLine = "while (" + printRvalue(whileStatement.condition) + ") {";
             System.out.print(whileGuardLine.indent(indentationLevel));
             printCode(whileStatement.body, indentationLevel + 4);
             System.out.print("}".indent(indentationLevel));
@@ -191,6 +191,8 @@ public class QueryCodePrinter {
             return newExpr;
         } else if (rValue instanceof Java.Cast cast) {
             return "((" + cast.targetType.toString() + ") " + printRvalue(cast.value) + ')';
+        } else if (rValue instanceof Java.ConditionalExpression cExp) {
+            return "(" + cExp.lhs + ") ? " + cExp.mhs + " : " + cExp.rhs;
         } else {
             return rValue.toString();
         }

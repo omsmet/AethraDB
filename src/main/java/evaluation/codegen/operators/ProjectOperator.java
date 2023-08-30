@@ -21,6 +21,7 @@ import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.sql.SqlBinaryOperator;
 import org.apache.calcite.sql.SqlKind;
 import org.apache.calcite.sql.SqlOperator;
+import org.apache.calcite.sql.fun.SqlCaseOperator;
 import org.codehaus.janino.Java;
 
 import java.util.ArrayList;
@@ -44,9 +45,11 @@ import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createPr
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.getLocation;
 import static evaluation.codegen.infrastructure.janino.JaninoMethodGen.createMethodInvocation;
 import static evaluation.codegen.infrastructure.janino.JaninoOperatorGen.div;
+import static evaluation.codegen.infrastructure.janino.JaninoOperatorGen.eq;
 import static evaluation.codegen.infrastructure.janino.JaninoOperatorGen.mul;
 import static evaluation.codegen.infrastructure.janino.JaninoOperatorGen.plus;
 import static evaluation.codegen.infrastructure.janino.JaninoOperatorGen.sub;
+import static evaluation.codegen.infrastructure.janino.JaninoOperatorGen.ternary;
 import static evaluation.codegen.infrastructure.janino.JaninoVariableGen.createLocalVariable;
 import static evaluation.codegen.infrastructure.janino.JaninoVariableGen.createPrimitiveLocalVar;
 import static evaluation.codegen.infrastructure.janino.JaninoVariableGen.createVariableAssignmentStm;
@@ -137,16 +140,24 @@ public class ProjectOperator extends CodeGenOperator<LogicalProject> {
                     sqlTypeToPrimitiveType(rlExpr.getType().getSqlTypeName())
             );
 
+            Java.Rvalue translatedLiteralValue;
+            if (rlExpr.toString().equals("null:DOUBLE"))
+                translatedLiteralValue = createAmbiguousNameRef(getLocation(), "Double.NaN");
+            else if (rlExpr.toString().equals("null:FLOAT"))
+                translatedLiteralValue = createAmbiguousNameRef(getLocation(), "Float.NaN");
+            else
+                translatedLiteralValue = switch (literalVariableAP.getType()) {
+                    case P_DOUBLE, P_FLOAT -> createFloatingPointLiteral(getLocation(), rlExpr.toString());
+                    case P_INT, P_LONG -> createIntegerLiteral(getLocation(), rlExpr.toString());
+                    default -> throw new UnsupportedOperationException("ProjectOperator.generatedProjectionCode does not support the provided literal type");
+                };
+
             codeGenResult.add(
                     createLocalVariable(
                             getLocation(),
                             toJavaType(getLocation(), literalVariableAP.getType()),
                             literalVariableAP.getVariableName(),
-                            switch (literalVariableAP.getType()) {
-                                case P_DOUBLE, P_FLOAT -> createFloatingPointLiteral(getLocation(), rlExpr.toString());
-                                case P_INT, P_LONG -> createIntegerLiteral(getLocation(), rlExpr.toString());
-                                default -> throw new UnsupportedOperationException("ProjectOperator.generatedProjectionCode does not support the provided literal type");
-                            }
+                            translatedLiteralValue
                     )
             );
 
@@ -181,9 +192,10 @@ public class ProjectOperator extends CodeGenOperator<LogicalProject> {
             List<Java.Statement> codeGenResult
     ) {
         SqlOperator computationOperator = computationExpression.getOperator();
+        List<RexNode> computationOperands = computationExpression.getOperands();
+
         if (computationOperator instanceof SqlBinaryOperator sqlBinaryOperator) {
             // Deal with recursive "projections" first
-            List<RexNode> computationOperands = computationExpression.getOperands();
             if (computationOperands.size() != 2)
                 throw new UnsupportedOperationException(
                         "ProjectOperator.createNonVecComputationCode expects two operands for a binary operator");
@@ -234,32 +246,28 @@ public class ProjectOperator extends CodeGenOperator<LogicalProject> {
 
                 // Generate the code for the actual computation
                 Java.Rvalue operatorComputation = switch (sqlBinaryOperator.getKind()) {
-                    case TIMES ->
-                            mul(
-                                    getLocation(),
-                                    lhsRValue,
-                                    rhsRValue
-                            );
-                    case PLUS ->
-                            plus(
-                                    getLocation(),
-                                    lhsRValue,
-                                    rhsRValue
-                            );
-                    case MINUS ->
-                            sub(
-                                    getLocation(),
-                                    lhsRValue,
-                                    rhsRValue
-                            );
-                    case DIVIDE ->
-                            div(
-                                    getLocation(),
-                                    (primLhsResType != P_DOUBLE)
-                                            ? createCast(getLocation(), toJavaType(getLocation(), P_DOUBLE), lhsRValue)
-                                            : lhsRValue,
-                                    rhsRValue
-                            );
+                    case TIMES -> mul(
+                            getLocation(),
+                            lhsRValue,
+                            rhsRValue
+                    );
+                    case PLUS -> plus(
+                            getLocation(),
+                            lhsRValue,
+                            rhsRValue
+                    );
+                    case MINUS -> sub(
+                            getLocation(),
+                            lhsRValue,
+                            rhsRValue
+                    );
+                    case DIVIDE -> div(
+                            getLocation(),
+                            (primLhsResType != P_DOUBLE)
+                                    ? createCast(getLocation(), toJavaType(getLocation(), P_DOUBLE), lhsRValue)
+                                    : lhsRValue,
+                            rhsRValue
+                    );
                     default -> throw new UnsupportedOperationException(
                             "ProjectOperator.createNonVecComputation does not support the provided operator type");
                 };
@@ -278,6 +286,97 @@ public class ProjectOperator extends CodeGenOperator<LogicalProject> {
             } else { // this.useSIMDNonVec(cCtx)
                 throw new UnsupportedOperationException("NOT YET IMPLEMENTED");
             }
+
+        } else if (computationOperator instanceof SqlCaseOperator caseOperator) {
+            // Currently the case operator is only supported for non-SIMD mode
+            if (this.useSIMDNonVec(cCtx))
+                throw new UnsupportedOperationException(
+                        "ProjectOperator.createNonVecComputationCode only supports the CASE operator in non-SIMD mode");
+
+            // Only supports "binary-choice" case operator
+            if (computationExpression.getOperands().size() != 3)
+                throw new UnsupportedOperationException(
+                        "ProjectionOperator.createNonVecComputationCode only supports 3 operands for the CASE operator");
+
+            if (!(computationOperands.get(0) instanceof RexCall))
+                throw new UnsupportedOperationException(
+                        "ProjectionOperator.createNonVecComputationCode only supports CASE operators with a first RexCall operand");
+            RexCall caseRexCall = (RexCall) computationOperands.get(0);
+
+            if (caseRexCall.getOperator().getKind() != SqlKind.EQUALS)
+                throw new UnsupportedOperationException(
+                        "ProjectionOperator.createNonVecComputationCode only supports CASE operators using the = operator");
+
+            // Translate the result of the case branches
+            AccessPath tbResult = this.generatedProjectionCode(cCtx, computationOperands.get(1), codeGenResult, false);
+            QueryVariableType primitiveTbResultType = primitiveType(tbResult.getType());
+            AccessPath fbResult = this.generatedProjectionCode(cCtx, computationOperands.get(2), codeGenResult, false);
+            QueryVariableType primitiveFbResultType = primitiveType(fbResult.getType());
+
+            // And obtain the r-values corresponding to these values
+            Java.Rvalue tbResultRvalue, fbResultRvalue;
+
+            if (tbResult instanceof ScalarVariableAccessPath tbSvap)
+                tbResultRvalue = tbSvap.read();
+            else
+                throw new UnsupportedOperationException(
+                        "ProjectOperator.createNonVecComputation does not support this true-branch AP for the CASE operator");
+
+            if (fbResult instanceof ScalarVariableAccessPath fbSvap)
+                fbResultRvalue = fbSvap.read();
+            else
+                throw new UnsupportedOperationException(
+                        "ProjectOperator.createNonVecComputation does not support this false-branch AP for the CASE operator");
+
+            // Compute the result type
+            QueryVariableType primitiveReturnType;
+            if (primitiveTbResultType == P_DOUBLE && primitiveFbResultType == P_DOUBLE)
+                primitiveReturnType = P_DOUBLE;
+            else
+                throw new UnsupportedOperationException("ProjectOperator.createNonVecComputation could not determine the return type");
+
+            // Resolve the lhs and rhs of the equality comparison
+            List<RexNode> comparisonOperands = caseRexCall.getOperands();
+            AccessPath lhsCompAp = this.generatedProjectionCode(cCtx, comparisonOperands.get(0), codeGenResult, false);
+            AccessPath rhsCompAp = this.generatedProjectionCode(cCtx, comparisonOperands.get(1), codeGenResult, false);
+
+            // And get the r-values corresponding to the operands
+            Java.Rvalue lhsCompRValue, rhsCompRValue;
+
+            if (lhsCompAp instanceof ScalarVariableAccessPath lhsCompSvap)
+                lhsCompRValue = lhsCompSvap.read();
+            else
+                throw new UnsupportedOperationException(
+                        "ProjectionOperator.createNonVecComputation does not support this lhsCompAp AccessPath");
+
+            if (rhsCompAp instanceof ScalarVariableAccessPath rhsCompSvap)
+                rhsCompRValue = rhsCompSvap.read();
+            else
+                throw new UnsupportedOperationException(
+                        "ProjectionOperator.createNonVecComputation does not support this rhsCompAp AccessPath");
+
+            // Allocate a variable
+            ScalarVariableAccessPath resultPath = new ScalarVariableAccessPath(
+                    cCtx.defineVariable("projection_computation_result"),
+                    primitiveReturnType
+            );
+
+            // Perform the comparison
+            codeGenResult.add(
+                    createLocalVariable(
+                            getLocation(),
+                            toJavaType(getLocation(), resultPath.getType()),
+                            resultPath.getVariableName(),
+                            ternary(
+                                    getLocation(),
+                                    eq(getLocation(), lhsCompRValue, rhsCompRValue),
+                                    tbResultRvalue,
+                                    fbResultRvalue
+                            )
+                    )
+            );
+
+            return resultPath;
 
         } else {
             throw new UnsupportedOperationException(
@@ -466,7 +565,7 @@ public class ProjectOperator extends CodeGenOperator<LogicalProject> {
                         arrayVectorWithSelectionVectorType(vectorTypeForPrimitiveArrayType(returnVectorType))
                 );
 
-            }else if (lhopResult instanceof ScalarVariableAccessPath lhopScalar && rhopResult instanceof ArrowVectorWithValidityMaskAccessPath rhopAVWVMAP) {
+            } else if (lhopResult instanceof ScalarVariableAccessPath lhopScalar && rhopResult instanceof ArrowVectorWithValidityMaskAccessPath rhopAVWVMAP) {
                 // length = operatorMethodName(
                 //         lhopScalar, rhopArrowVector, rhopValidityMask, rhopValidityMaskLength, result);
                 codeGenResult.add(
@@ -683,6 +782,78 @@ public class ProjectOperator extends CodeGenOperator<LogicalProject> {
                                                 lhopAVWVMAP.getArrayVectorVariable().getVectorLengthVariable().read(),
                                                 rhopAVWVMAP.getArrayVectorVariable().getVectorVariable().read(),
                                                 rhopAVWVMAP.getArrayVectorVariable().getVectorLengthVariable().read(),
+                                                lhopAVWVMAP.readValidityMask(),
+                                                lhopAVWVMAP.readValidityMaskLength(),
+                                                projectionComputationResultAP.read()
+                                        }
+                                )
+                        )
+                );
+                return new ArrayVectorWithValidityMaskAccessPath(
+                        new ArrayVectorAccessPath(
+                                projectionComputationResultAP,
+                                projectionComputationResultLengthAP,
+                                vectorTypeForPrimitiveArrayType(returnVectorType)
+                        ),
+                        lhopAVWVMAP.getValidityMaskVariable(),
+                        lhopAVWVMAP.getValidityMaskLengthVariable(),
+                        arrayVectorWithValidityMaskType(vectorTypeForPrimitiveArrayType(returnVectorType))
+                );
+
+            } else if (lhopResult instanceof ArrowVectorWithSelectionVectorAccessPath lhopAVWSVAP
+                    && rhopResult instanceof ArrowVectorWithSelectionVectorAccessPath rhopAVWSVAP) {
+                // The vectors should have the same selection vector by design
+                assert lhopAVWSVAP.getSelectionVectorVariable().getVariableName().equals(
+                        rhopAVWSVAP.getSelectionVectorVariable().getVariableName());
+
+                // length = operatorMethodName(lhsArrowVec, rhsArrowVec, lhsSelVec, lhsSelVecLen, result);
+                codeGenResult.add(
+                        createVariableAssignmentStm(
+                                getLocation(),
+                                projectionComputationResultLengthAP.write(),
+                                createMethodInvocation(
+                                        getLocation(),
+                                        createAmbiguousNameRef(getLocation(), "VectorisedArithmeticOperators"),
+                                        operatorMethodName,
+                                        new Java.Rvalue[]{
+                                                lhopAVWSVAP.readArrowVector(),
+                                                rhopAVWSVAP.readArrowVector(),
+                                                lhopAVWSVAP.readSelectionVector(),
+                                                lhopAVWSVAP.readSelectionVectorLength(),
+                                                projectionComputationResultAP.read()
+                                        }
+                                )
+                        )
+                );
+                return new ArrayVectorWithSelectionVectorAccessPath(
+                        new ArrayVectorAccessPath(
+                                projectionComputationResultAP,
+                                projectionComputationResultLengthAP,
+                                vectorTypeForPrimitiveArrayType(returnVectorType)
+                        ),
+                        lhopAVWSVAP.getSelectionVectorVariable(),
+                        lhopAVWSVAP.getSelectionVectorLengthVariable(),
+                        arrayVectorWithSelectionVectorType(vectorTypeForPrimitiveArrayType(returnVectorType))
+                );
+
+            } else if (lhopResult instanceof ArrowVectorWithValidityMaskAccessPath lhopAVWVMAP
+                    && rhopResult instanceof ArrowVectorWithValidityMaskAccessPath rhopAVWVMAP) {
+                // The vectors should have the same validity mask by design
+                assert lhopAVWVMAP.getValidityMaskVariable().getVariableName().equals(
+                        rhopAVWVMAP.getValidityMaskVariable().getVariableName());
+
+                // length = operatorMethodName(lhopArrowVec, rhopArrowVec, lhopValMask, lhopValMaskLen, result);
+                codeGenResult.add(
+                        createVariableAssignmentStm(
+                                getLocation(),
+                                projectionComputationResultLengthAP.write(),
+                                createMethodInvocation(
+                                        getLocation(),
+                                        createAmbiguousNameRef(getLocation(), "VectorisedArithmeticOperators"),
+                                        operatorMethodName,
+                                        new Java.Rvalue[]{
+                                                lhopAVWVMAP.readArrowVector(),
+                                                rhopAVWVMAP.readArrowVector(),
                                                 lhopAVWVMAP.readValidityMask(),
                                                 lhopAVWVMAP.readValidityMaskLength(),
                                                 projectionComputationResultAP.read()

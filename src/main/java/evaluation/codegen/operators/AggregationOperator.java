@@ -67,6 +67,7 @@ import static evaluation.codegen.infrastructure.janino.JaninoMethodGen.createBlo
 import static evaluation.codegen.infrastructure.janino.JaninoMethodGen.createMethodInvocation;
 import static evaluation.codegen.infrastructure.janino.JaninoMethodGen.createMethodInvocationStm;
 import static evaluation.codegen.infrastructure.janino.JaninoOperatorGen.lt;
+import static evaluation.codegen.infrastructure.janino.JaninoOperatorGen.mul;
 import static evaluation.codegen.infrastructure.janino.JaninoOperatorGen.plus;
 import static evaluation.codegen.infrastructure.janino.JaninoOperatorGen.postIncrement;
 import static evaluation.codegen.infrastructure.janino.JaninoOperatorGen.postIncrementStm;
@@ -105,9 +106,11 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
     private QueryVariableType[] groupByKeyColumnsTypes;
 
     /**
-     * Stores the {@link AccessPath} to the aggregation state variable.
+     * Stores the {@link AccessPath} to the aggregation state variable(s).
+     * For a group-by aggregation, there will be 1 aggregation state variable, while there will be
+     * one aggregation state variable per aggregation function for a non-group-by aggregation.
      */
-    private AccessPath aggregationStateVariable;
+    private AccessPath[] aggregationStateVariables;
 
     /**
      * In case of a group-by aggregation, this variable stores the {@link KeyValueMapGenerator} used
@@ -121,6 +124,7 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
     private enum AggregationFunction {
         // Non-group-by functions
         NG_COUNT,
+        NG_SUM,
 
         // Group-by functions
         G_COUNT,
@@ -189,6 +193,13 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
                     this.aggregationFunctions[i] = AggregationFunction.NG_COUNT;
                     this.aggregationFunctionInputOrdinals[i] = new int[0];
 
+                } else if (aggregationFunction instanceof SqlSumEmptyIsZeroAggFunction) {
+                    if (call.getArgList().size() != 1)
+                        throw new UnsupportedOperationException("AggregationOperator expects exactly one input ordinal for a SUM aggregation function");
+
+                    this.aggregationFunctions[i] = AggregationFunction.NG_SUM;
+                    this.aggregationFunctionInputOrdinals[i] = new int[] { call.getArgList().get(0) };
+
                 } else {
                     throw new UnsupportedOperationException(
                             "AggregationOperator does not support this non-group-by aggregation function " + aggregationFunction.getName());
@@ -200,7 +211,7 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
                         throw new UnsupportedOperationException("AggregationOperator expects exactly one input ordinal for a SUM aggregation function");
 
                     this.aggregationFunctions[i] = AggregationFunction.G_SUM;
-                    this.aggregationFunctionInputOrdinals[i] = new int[] { call.getArgList().get((0)) };
+                    this.aggregationFunctionInputOrdinals[i] = new int[] { call.getArgList().get(0) };
 
                 } else if (aggregationFunction instanceof SqlCountAggFunction) {
                     this.aggregationFunctions[i] = AggregationFunction.G_COUNT;
@@ -252,9 +263,10 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
             for (int i = 0; i < this.aggregationFunctions.length; i++) {
                 AggregationFunction currentFunction = this.aggregationFunctions[i];
 
-                if (currentFunction == AggregationFunction.NG_COUNT) {
-                    // Simply set the current ordinal to refer to the count variable
-                    newOrdinalMapping.add(i, this.aggregationStateVariable);
+                if (currentFunction == AggregationFunction.NG_COUNT
+                        || currentFunction == AggregationFunction.NG_SUM) {
+                    // Simply set the current ordinal to refer to the correct state variable
+                    newOrdinalMapping.add(i, this.aggregationStateVariables[i]);
                 }
 
                 // No other possibilities
@@ -273,7 +285,7 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
             // [numberOfKeys] = [this.aggregationStateVariable.read()].numberOfRecords;
             Java.Rvalue numberOfKeys = new Java.FieldAccessExpression(
                     getLocation(),
-                    ((MapAccessPath) this.aggregationStateVariable).read(),
+                    ((MapAccessPath) this.aggregationStateVariables[0]).read(),
                     "numberOfRecords"
             );
 
@@ -320,7 +332,7 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
                                         getLocation(),
                                         new Java.FieldAccessExpression(
                                                 getLocation(),
-                                                ((MapAccessPath) this.aggregationStateVariable).read(),
+                                                ((MapAccessPath) this.aggregationStateVariables[0]).read(),
                                                 this.aggregationMapGenerator.keyVariableNames[j]
                                         ),
                                         keyIterationIndexVariable.read()
@@ -352,7 +364,7 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
                                             getLocation(),
                                             new Java.FieldAccessExpression(
                                                     getLocation(),
-                                                    ((MapAccessPath) this.aggregationStateVariable).read(),
+                                                    ((MapAccessPath) this.aggregationStateVariables[0]).read(),
                                                     this.aggregationMapGenerator.valueVariableNames[currentMapValueOrdinalIndex]
                                             ),
                                             keyIterationIndexVariable.read()
@@ -398,7 +410,7 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
                             codeGenResult.add(
                                     postIncrementStm(
                                             getLocation(),
-                                            ((ScalarVariableAccessPath) this.aggregationStateVariable).write()
+                                            ((ScalarVariableAccessPath) this.aggregationStateVariables[i]).write()
                                     ));
 
                         } else if (!useSIMD && firstOrdinalAP instanceof IndexedArrowVectorElementAccessPath iaveap) {
@@ -407,7 +419,7 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
                             codeGenResult.add(
                                     postIncrementStm(
                                             getLocation(),
-                                            ((ScalarVariableAccessPath) this.aggregationStateVariable).write()
+                                            ((ScalarVariableAccessPath) this.aggregationStateVariables[i]).write()
                                     ));
 
                         } else if (useSIMD && firstOrdinalAP instanceof SIMDLoopAccessPath slap) {
@@ -415,7 +427,7 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
                             codeGenResult.add(
                                     createVariableAdditionAssignmentStm(
                                             getLocation(),
-                                            ((ScalarVariableAccessPath) this.aggregationStateVariable).write(),
+                                            ((ScalarVariableAccessPath) this.aggregationStateVariables[i]).write(),
                                             createMethodInvocation(
                                                     getLocation(),
                                                     slap.readSIMDMask(),
@@ -428,6 +440,95 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
                             throw new UnsupportedOperationException(
                                     "AggregationOperator.consumeNonVec does not support this AccessPath for the COUNT aggregation while "
                                             + (useSIMD ? "" : "not ") + "using SIMD: "  + firstOrdinalAP);
+                        }
+                    }
+
+                    case NG_SUM -> {
+                        // Check the type of the input ordinal to be able to generate the correct count update statements
+                        int inputOrdinal = this.aggregationFunctionInputOrdinals[i][0];
+                        AccessPath inputOrdinalAP = cCtx.getCurrentOrdinalMapping().get(inputOrdinal);
+                        if (!useSIMD && inputOrdinalAP instanceof ScalarVariableAccessPath svap) {
+                            codeGenResult.add(
+                                    createVariableAdditionAssignmentStm(
+                                            getLocation(),
+                                            ((ScalarVariableAccessPath) this.aggregationStateVariables[i]).write(),
+                                            svap.read()
+                                    ));
+
+                        } else if (!useSIMD && inputOrdinalAP instanceof IndexedArrowVectorElementAccessPath iaveap) {
+                            codeGenResult.add(
+                                    createVariableAdditionAssignmentStm(
+                                            getLocation(),
+                                            ((ScalarVariableAccessPath) this.aggregationStateVariables[i]).write(),
+                                            iaveap.read()
+                                    ));
+
+                        } else if (useSIMD && inputOrdinalAP instanceof SIMDLoopAccessPath slap) {
+                            // Need to perform a SIMD reduce lane operation
+                            // [SIMDVectorType] [SIMDVector] = IntVector.fromSegment(
+                            //      [lhsAP.readVectorSpecies()],
+                            //      [lhsAP.readMemorySegment()],
+                            //      [lhsAP.readArrowVectorOffset()] * [lhsAP.readArrowVector().TYPE_WIDTH],
+                            //      java.nio.ByteOrder.LITTLE_ENDIAN,
+                            //      [lhsAP.readSIMDMask()]
+                            // );
+                            String SIMDVectorName = cCtx.defineVariable("SIMDVector");
+                            String vectorCreationMethodName = switch (slap.getType()) {
+                                case VECTOR_DOUBLE_MASKED -> "createDoubleVector";
+                                case VECTOR_INT_MASKED -> "createIntVector";
+                                default -> throw new UnsupportedOperationException(
+                                        "AggregationOperator.consumeNonVec does not support the provided SIMD-Loop AP type " + slap.getType());
+                            };
+
+                            codeGenResult.add(
+                                    createLocalVariable(
+                                            getLocation(),
+                                            toJavaType(getLocation(), slap.getType()),
+                                            SIMDVectorName,
+                                            createMethodInvocation(
+                                                    getLocation(),
+                                                    createAmbiguousNameRef(getLocation(), "oCtx"),
+                                                    vectorCreationMethodName,
+                                                    new Java.Rvalue[] {
+                                                            slap.readVectorSpecies(),
+                                                            slap.readMemorySegment(),
+                                                            mul(
+                                                                    getLocation(),
+                                                                    slap.readArrowVectorOffset(),
+                                                                    createAmbiguousNameRef(
+                                                                            getLocation(),
+                                                                            slap.getArrowVectorAccessPath().getVariableName() + ".TYPE_WIDTH"
+                                                                    )
+                                                            ),
+                                                            createAmbiguousNameRef(getLocation(), "java.nio.ByteOrder.LITTLE_ENDIAN"),
+                                                            slap.readSIMDMask()
+                                                    }
+                                            )
+                                    )
+                            );
+
+                            // Now reduce the vector by summing all entries
+                            // this.aggregationStateVariables[i] += [SIMDVector].reduceLanes(ADD, slap.readSIMDMask());
+                            codeGenResult.add(
+                                    createVariableAdditionAssignmentStm(
+                                            getLocation(),
+                                            ((ScalarVariableAccessPath) this.aggregationStateVariables[i]).write(),
+                                            createMethodInvocation(
+                                                    getLocation(),
+                                                    createAmbiguousNameRef(getLocation(), SIMDVectorName),
+                                                    "reduceLanes",
+                                                    new Java.Rvalue[] {
+                                                            createAmbiguousNameRef(getLocation(), "jdk.incubator.vector.VectorOperators.ADD"),
+                                                            slap.readSIMDMask()
+                                                    }
+                                            )
+                                    )
+                            );
+
+                        } else {
+                            throw new UnsupportedOperationException(
+                                    "AggregationOperator.consumeNonVec does not support this AccessPath for the SUM aggregation while "
+                                            + (useSIMD ? "" : "not ") + "using SIMD: "  + inputOrdinalAP);
                         }
                     }
 
@@ -574,7 +675,7 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
             hashMapMaintenanceTarget.addStatement(
                     createMethodInvocationStm(
                             getLocation(),
-                            ((MapAccessPath) this.aggregationStateVariable).read(),
+                            ((MapAccessPath) this.aggregationStateVariables[0]).read(),
                             "incrementForKey",
                             incrementForKeyArgs
                     )
@@ -629,9 +730,10 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
             for (int i = 0; i < this.aggregationFunctions.length; i++) {
                 AggregationFunction currentFunction = this.aggregationFunctions[i];
 
-                if (currentFunction == AggregationFunction.NG_COUNT) {
-                    // Simply set the current ordinal to refer to the count variable
-                    newOrdinalMapping.add(i, this.aggregationStateVariable);
+                if (currentFunction == AggregationFunction.NG_COUNT
+                        || currentFunction == AggregationFunction.NG_SUM) {
+                    // Simply set the current ordinal to refer to the relevant aggregation variable
+                    newOrdinalMapping.add(i, this.aggregationStateVariables[i]);
                 }
 
                 // No other possibilities
@@ -640,7 +742,8 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
             cCtx.setCurrentOrdinalMapping(newOrdinalMapping);
 
             // Have the parent operator consume the result
-            codeGenResult.addAll(this.vecParentConsume(cCtx, oCtx));
+            // We do a nonVec consume here, since the result consists only of scalars
+            codeGenResult.addAll(this.nonVecParentConsume(cCtx, oCtx));
 
         } else {
             // Expose the result of the group-by aggregation: we don't need to distinguish between SIMD and Non-SIMD processing
@@ -782,7 +885,7 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
                             numberOfRecordsAP.getVariableName(),
                             new Java.FieldAccessExpression(
                                     getLocation(),
-                                    ((MapAccessPath) this.aggregationStateVariable).read(),
+                                    ((MapAccessPath) this.aggregationStateVariables[0]).read(),
                                     "numberOfRecords"
                             )
                     )
@@ -807,7 +910,7 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
                                 groupKeyVectorsAPs[i].getVectorVariable().read(),
                                 new Java.FieldAccessExpression(
                                         getLocation(),
-                                        ((MapAccessPath) this.aggregationStateVariable).read(),
+                                        ((MapAccessPath) this.aggregationStateVariables[0]).read(),
                                         this.aggregationMapGenerator.keyVariableNames[i]
                                 ),
                                 numberOfRecordsAP.read(),
@@ -854,7 +957,7 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
                                             aggregationResultAPs[i].getVectorVariable().read(),
                                             new Java.FieldAccessExpression(
                                                     getLocation(),
-                                                    ((MapAccessPath) this.aggregationStateVariable).read(),
+                                                    ((MapAccessPath) this.aggregationStateVariables[0]).read(),
                                                     this.aggregationMapGenerator.valueVariableNames[currentMapValueOrdinalIndex]
                                             ),
                                             numberOfRecordsAP.read(),
@@ -955,6 +1058,22 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
                             // count += avap.getVectorLengthVariable().read();
                             countIncrementRValue = avap.getVectorLengthVariable().read();
 
+                        } else if (firstOrdinalAP instanceof ArrayVectorWithSelectionVectorAccessPath avwsvap) {
+                            // count += avwsvap.readSelectionVectorLength();
+                            countIncrementRValue = avwsvap.readSelectionVectorLength();
+
+                        } else if (firstOrdinalAP instanceof ArrayVectorWithValidityMaskAccessPath avwvmap) {
+                            // count += VectorisedAggregationOperators.count(avwvmap.readValidityMask(), avwvmap.readValidityMaskLength());
+                            countIncrementRValue = createMethodInvocation(
+                                    getLocation(),
+                                    createAmbiguousNameRef(getLocation(), "VectorisedAggregationOperators"),
+                                    "count",
+                                    new Java.Rvalue[]{
+                                            avwvmap.readValidityMask(),
+                                            avwvmap.readValidityMaskLength()
+                                    }
+                            );
+
                         } else {
                             throw new UnsupportedOperationException(
                                     "AggregationOperator.consumeVec does not support this access path for the count aggregation");
@@ -966,8 +1085,59 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
                         codeGenResult.add(
                                 createVariableAdditionAssignmentStm(
                                         getLocation(),
-                                        ((ScalarVariableAccessPath) this.aggregationStateVariable).write(),
+                                        ((ScalarVariableAccessPath) this.aggregationStateVariables[i]).write(),
                                         countIncrementRValue
+                                )
+                        );
+
+                    }
+
+                    case NG_SUM -> {
+                        // We simply need to add the cumulative sum of the current vector to the aggregation state variable
+                        AccessPath inputOrdinalAP = cCtx.getCurrentOrdinalMapping().get(this.aggregationFunctionInputOrdinals[i][0]);
+                        Java.Rvalue sumIncrementRValue;
+
+                        if (inputOrdinalAP instanceof ArrayVectorWithSelectionVectorAccessPath avwsvap) {
+                            // sum += VectorisedAggregationOperators.vectorSum(avwsvap.vector, avwsvap.vectorLength, avwsvap.selectionVector, avwsvap.selectionVectorLength);
+                            sumIncrementRValue = createMethodInvocation(
+                                    getLocation(),
+                                    createAmbiguousNameRef(getLocation(), "VectorisedAggregationOperators"),
+                                    "vectorSum",
+                                    new Java.Rvalue[]{
+                                            avwsvap.getArrayVectorVariable().getVectorVariable().read(),
+                                            avwsvap.getArrayVectorVariable().getVectorLengthVariable().read(),
+                                            avwsvap.readSelectionVector(),
+                                            avwsvap.readSelectionVectorLength()
+                                    }
+                            );
+
+                        } else if (inputOrdinalAP instanceof ArrayVectorWithValidityMaskAccessPath avwvmap) {
+                            // sum += VectorisedAggregationOperators.vectorSum(avwvmap.vector, avwvmap.vectorLength, avwvmap.validityMask, avwvmap.validityMaskLength);
+                            sumIncrementRValue = createMethodInvocation(
+                                    getLocation(),
+                                    createAmbiguousNameRef(getLocation(), "VectorisedAggregationOperators"),
+                                    "vectorSum",
+                                    new Java.Rvalue[]{
+                                            avwvmap.getArrayVectorVariable().getVectorVariable().read(),
+                                            avwvmap.getArrayVectorVariable().getVectorLengthVariable().read(),
+                                            avwvmap.readValidityMask(),
+                                            avwvmap.readValidityMaskLength()
+                                    }
+                            );
+
+                        } else {
+                            throw new UnsupportedOperationException(
+                                    "AggregationOperator.consumeVec does not support this access path for the SUM aggregation");
+
+                        }
+
+                        // Do the actual increment
+                        // count += [countIncrementRValue];
+                        codeGenResult.add(
+                                createVariableAdditionAssignmentStm(
+                                        getLocation(),
+                                        ((ScalarVariableAccessPath) this.aggregationStateVariables[i]).write(),
+                                        sumIncrementRValue
                                 )
                         );
 
@@ -1260,7 +1430,7 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
             tableMaintenanceLoopBody.addStatement(
                     createMethodInvocationStm(
                             getLocation(),
-                            ((MapAccessPath) this.aggregationStateVariable).read(),
+                            ((MapAccessPath) this.aggregationStateVariables[0]).read(),
                             "incrementForKey",
                             incrementForKeyArguments
                     )
@@ -1282,17 +1452,30 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
 
         // Declare the aggregation state variable if we have a non-group-by count
         if (!this.groupByAggregation) {
-            if (this.aggregationFunctions[0] == AggregationFunction.NG_COUNT) {
-                this.aggregationStateVariable = new ScalarVariableAccessPath(
-                        cCtx.defineVariable("count"),
-                        P_LONG
-                );
+            this.aggregationStateVariables = new AccessPath[this.aggregationFunctions.length];
+
+            for (int i = 0; i < this.aggregationFunctions.length; i++) {
+                if (this.aggregationFunctions[i] == AggregationFunction.NG_COUNT) {
+                    this.aggregationStateVariables[i] = new ScalarVariableAccessPath(
+                            cCtx.defineVariable("count"),
+                            P_LONG
+                    );
+
+                } else if (this.aggregationFunctions[i] == AggregationFunction.NG_SUM) {
+                    this.aggregationStateVariables[i] = new ScalarVariableAccessPath(
+                            cCtx.defineVariable("sum"),
+                            primitiveType(om.get(this.aggregationFunctionInputOrdinals[i][0]).getType())
+                    );
+
+                }
             }
 
             return;
         }
 
         // Otherwise, we have a group-by aggregation
+        this.aggregationStateVariables = new AccessPath[1];
+
         // Obtain the type of the group-by columns
         this.groupByKeyColumnsTypes = new QueryVariableType[this.groupByKeyColumnIndices.length];
         for (int i = 0; i < this.groupByKeyColumnsTypes.length; i++) {
@@ -1342,7 +1525,7 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
         );
 
         // And finally declare the aggregation map
-        this.aggregationStateVariable = new MapAccessPath(
+        this.aggregationStateVariables[0] = new MapAccessPath(
                 cCtx.defineVariable("aggregation_state_map"),
                 MAP_GENERATED
         );
@@ -1357,14 +1540,17 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
 
         // Allocate all required state variable as local variables
         if (!this.groupByAggregation) {
-            codeGenResult.add(
-                    createLocalVariable(
-                            getLocation(),
-                            toJavaType(getLocation(), this.aggregationStateVariable.getType()),
-                            ((ScalarVariableAccessPath) this.aggregationStateVariable).getVariableName(),
-                            createIntegerLiteral(getLocation(), 0)
-                    )
-            );
+            for (int i = 0; i < this.aggregationStateVariables.length; i++) {
+                codeGenResult.add(
+                        createLocalVariable(
+                                getLocation(),
+                                toJavaType(getLocation(), this.aggregationStateVariables[i].getType()),
+                                ((ScalarVariableAccessPath) this.aggregationStateVariables[i]).getVariableName(),
+                                createIntegerLiteral(getLocation(), 0)
+                        )
+                );
+            }
+
         } else {
             codeGenResult.add(
                     new Java.LocalClassDeclarationStatement(
@@ -1379,7 +1565,7 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
                     createLocalVariable(
                             getLocation(),
                             generatedMapType,
-                            ((MapAccessPath) this.aggregationStateVariable).getVariableName(),
+                            ((MapAccessPath) this.aggregationStateVariables[0]).getVariableName(),
                             createClassInstance(
                                     getLocation(),
                                     generatedMapType

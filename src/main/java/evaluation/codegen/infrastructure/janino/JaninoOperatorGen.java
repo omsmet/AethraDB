@@ -204,4 +204,27 @@ public class JaninoOperatorGen {
         return new Java.BinaryOperation(location, lhs, ">", rhs);
     }
 
+    /**
+     * Generate a greater-than or equal comparison operator.
+     * @param location The location at which the operator is requested for generation.
+     * @param lhs The left-hand side of the comparison.
+     * @param rhs The right-hand side of the comparison.
+     * @return The comparison operator.
+     */
+    public static Java.BinaryOperation ge(Location location, Java.Rvalue lhs, Java.Rvalue rhs) {
+        return new Java.BinaryOperation(location, lhs, ">=", rhs);
+    }
+
+    /**
+     * Generate a ternary operator expression.
+     * @param location The location at which the expression is requested for generation.
+     * @param condition The condition to be evaluated.
+     * @param trueValue The value in case the condition evaluates to true.
+     * @param falseValue The value in case the condition evaluates to false.
+     * @return The ternary operator.
+     */
+    public static Java.Rvalue ternary(Location location, Java.Rvalue condition, Java.Rvalue trueValue, Java.Rvalue falseValue) {
+        return new Java.ConditionalExpression(location, condition, trueValue, falseValue);
+    }
+
 }

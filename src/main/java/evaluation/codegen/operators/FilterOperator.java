@@ -16,7 +16,9 @@ import org.apache.calcite.rex.RexCall;
 import org.apache.calcite.rex.RexInputRef;
 import org.apache.calcite.rex.RexLiteral;
 import org.apache.calcite.rex.RexNode;
+import org.apache.calcite.rex.RexUtil;
 import org.apache.calcite.sql.SqlKind;
+import org.apache.calcite.sql.fun.SqlDatetimePlusOperator;
 import org.apache.calcite.sql.fun.SqlDatetimeSubtractionOperator;
 import org.apache.calcite.sql.fun.SqlMonotonicBinaryOperator;
 import org.apache.calcite.sql.type.SqlTypeName;
@@ -27,11 +29,17 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_DATE_VECTOR;
+import static evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_DATE_VECTOR_W_SELECTION_VECTOR;
+import static evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_DATE_VECTOR_W_VALIDITY_MASK;
+import static evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_DOUBLE_VECTOR;
+import static evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_DOUBLE_VECTOR_W_SELECTION_VECTOR;
+import static evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_DOUBLE_VECTOR_W_VALIDITY_MASK;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_INT_VECTOR;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_INT_VECTOR_W_SELECTION_VECTOR;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_INT_VECTOR_W_VALIDITY_MASK;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.P_A_BOOLEAN;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.P_A_INT;
+import static evaluation.codegen.infrastructure.context.QueryVariableType.P_DOUBLE;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.P_INT;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.P_INT_DATE;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.VECTOR_INT_MASKED;
@@ -44,6 +52,8 @@ import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createIn
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createPrimitiveArrayType;
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.getLocation;
 import static evaluation.codegen.infrastructure.janino.JaninoMethodGen.createMethodInvocation;
+import static evaluation.codegen.infrastructure.janino.JaninoOperatorGen.ge;
+import static evaluation.codegen.infrastructure.janino.JaninoOperatorGen.gt;
 import static evaluation.codegen.infrastructure.janino.JaninoOperatorGen.le;
 import static evaluation.codegen.infrastructure.janino.JaninoOperatorGen.lt;
 import static evaluation.codegen.infrastructure.janino.JaninoOperatorGen.mul;
@@ -91,7 +101,8 @@ public class FilterOperator extends CodeGenOperator<LogicalFilter> {
     public List<Java.Statement> consumeNonVec(CodeGenContext cCtx, OptimisationContext oCtx) {
         // Obtain and process the filter condition
         RexNode filterConditionRaw = this.getLogicalSubplan().getCondition();
-        return consumeNonVecOperator(cCtx, oCtx, filterConditionRaw, true);
+        RexNode filterConditionExpanded = RexUtil.expandSearch(this.getLogicalSubplan().getCluster().getRexBuilder(), null, filterConditionRaw);
+        return consumeNonVecOperator(cCtx, oCtx, filterConditionExpanded, true);
     }
 
     /**
@@ -122,8 +133,8 @@ public class FilterOperator extends CodeGenOperator<LogicalFilter> {
         // Forward the generation obligation to the correct method based on the operator type.
         return switch (castFilterOperator.getKind()) {
             case AND -> consumeNonVecAndOperator(cCtx, oCtx, castFilterOperator, callParentConsumeOnMatch);
-            case LESS_THAN -> consumeNonVecLteOperator(cCtx, oCtx, castFilterOperator, false, callParentConsumeOnMatch);
-            case LESS_THAN_OR_EQUAL -> consumeNonVecLteOperator(cCtx, oCtx, castFilterOperator, true, callParentConsumeOnMatch);
+            case GREATER_THAN, GREATER_THAN_OR_EQUAL, LESS_THAN, LESS_THAN_OR_EQUAL ->
+                    consumeNonVecComparisonOperator(cCtx, oCtx, castFilterOperator, callParentConsumeOnMatch);
             default -> throw new UnsupportedOperationException(
                     "FilterOperator.consumeNonVecOperator does not support this operator type");
         };
@@ -165,25 +176,32 @@ public class FilterOperator extends CodeGenOperator<LogicalFilter> {
 
     /**
      * Method to generate the required non-vectorised code on the backward code generation pass for
-     * a </<= operator.
+     * a comparison (>, >=, <, <=) operator.
      * @param cCtx The {@link CodeGenContext} to use during the generation.
      * @param oCtx The {@link OptimisationContext} to use during the generation and execution.
      * @param filterOperator The < operator to generate code for.
-     * @param allowEqual {@code true} for executing <=, {@code false} for executing <
      * @param callParentConsumeOnMatch Whether the parent operator consume method should be invoked
      *                                 if this {@code filterOperator} matches. Necessary to allow
      *                                 recursive code generation.
      * @return The generated query code.
      */
-    private List<Java.Statement> consumeNonVecLteOperator(
+    private List<Java.Statement> consumeNonVecComparisonOperator(
             CodeGenContext cCtx,
             OptimisationContext oCtx,
             RexCall filterOperator,
-            boolean allowEqual,
             boolean callParentConsumeOnMatch
     ) {
         // Initialise the result
         List<Java.Statement> codegenResult = new ArrayList<>();
+
+        // Obtain the operator
+        SqlKind comparisonOp = filterOperator.getOperator().getKind();
+        if (comparisonOp != SqlKind.GREATER_THAN
+                && comparisonOp != SqlKind.GREATER_THAN_OR_EQUAL
+                && comparisonOp != SqlKind.LESS_THAN
+                && comparisonOp != SqlKind.LESS_THAN_OR_EQUAL)
+            throw new UnsupportedOperationException(
+                    "FilterOperator.consumeNonVecComparisonOperator does not support the provided comparison operator: " + comparisonOp);
 
         // Obtain the operands
         RexNode lhs = filterOperator.getOperands().get(0);
@@ -247,9 +265,17 @@ public class FilterOperator extends CodeGenOperator<LogicalFilter> {
                                         createAmbiguousNameRef(getLocation(), SIMDVectorName),
                                         "compare",
                                         new Java.Rvalue[] {
-                                                createAmbiguousNameRef(getLocation(),
-                                                        allowEqual ? "jdk.incubator.vector.VectorOperators.LE"
-                                                                : "jdk.incubator.vector.VectorOperators.LT"),
+                                                createAmbiguousNameRef(
+                                                        getLocation(),
+                                                        switch (comparisonOp) {
+                                                            case GREATER_THAN -> "jdk.incubator.vector.VectorOperators.GT";
+                                                            case GREATER_THAN_OR_EQUAL -> "jdk.incubator.vector.VectorOperators.GE";
+                                                            case LESS_THAN -> "jdk.incubator.vector.VectorOperators.LT";
+                                                            case LESS_THAN_OR_EQUAL -> "jdk.incubator.vector.VectorOperators.LE";
+                                                            default -> throw new UnsupportedOperationException(
+                                                                    "FilterOperator.consumeNonVecComparisonOperator does not support the provided comparison operator");
+                                                        }
+                                                ),
                                                 codeGenOperandNonVec(cCtx, rhs, codegenResult),
                                                 lhsAP.readSIMDMask()
                                         }
@@ -288,13 +314,19 @@ public class FilterOperator extends CodeGenOperator<LogicalFilter> {
             Java.Rvalue rhsRvalue = codeGenOperandNonVec(cCtx, rhs, codegenResult);
 
             // Generate the required control flow
-            // if (!(lhsRvalue </<= rhsRvalue))
+            // if (!(lhsRvalue "operator" rhsRvalue))
             //     continue;
             codegenResult.add(
                     createIfNotContinue(
                             getLocation(),
-                            allowEqual ? le(getLocation(), lhsRvalue, rhsRvalue)
-                                    : lt(getLocation(), lhsRvalue, rhsRvalue)
+                            switch (comparisonOp) {
+                                case GREATER_THAN -> gt(getLocation(), lhsRvalue, rhsRvalue);
+                                case GREATER_THAN_OR_EQUAL -> ge(getLocation(), lhsRvalue, rhsRvalue);
+                                case LESS_THAN -> lt(getLocation(), lhsRvalue, rhsRvalue);
+                                case LESS_THAN_OR_EQUAL -> le(getLocation(), lhsRvalue, rhsRvalue);
+                                default -> throw new UnsupportedOperationException(
+                                        "FilterOperator.consumeNonVecComparisonOperator does not support the provided comparison operator");
+                            }
                     )
             );
         }
@@ -325,13 +357,13 @@ public class FilterOperator extends CodeGenOperator<LogicalFilter> {
             int ordinalIndex = inputRef.getIndex();
             return getRValueFromAccessPathNonVec(cCtx, ordinalIndex, target);
 
-        } else if (operand instanceof RexLiteral literal) {
-            return rexLiteralToRvalue(literal);
-
         } else if (operand.getType().getSqlTypeName() == SqlTypeName.DATE) {
             // We assume that all dates are always given in unix days, so we translate
             // date query constants to unix day format
             return createIntegerLiteral(getLocation(), translateToUnixDay(operand));
+
+        } else if (operand instanceof RexLiteral literal) {
+            return rexLiteralToRvalue(literal);
 
         } else {
             throw new UnsupportedOperationException("FilterOperator.codeGenOperandNonVec does not support the provide operand");
@@ -348,7 +380,8 @@ public class FilterOperator extends CodeGenOperator<LogicalFilter> {
     public List<Java.Statement> consumeVec(CodeGenContext cCtx, OptimisationContext oCtx) {
         // Obtain and process the filter condition
         RexNode filterConditionRaw = this.getLogicalSubplan().getCondition();
-        return consumeVecOperator(cCtx, oCtx, filterConditionRaw, true);
+        RexNode filterConditionExpanded = RexUtil.expandSearch(this.getLogicalSubplan().getCluster().getRexBuilder(), null, filterConditionRaw);
+        return consumeVecOperator(cCtx, oCtx, filterConditionExpanded, true);
     }
 
     /**
@@ -380,8 +413,8 @@ public class FilterOperator extends CodeGenOperator<LogicalFilter> {
         // Forward the generation obligation to the correct method based on the operator type.
         return switch (castFilterOperator.getKind()) {
             case AND -> consumeVecAndOperator(cCtx, oCtx, castFilterOperator, callParentConsumeOnMatch);
-            case LESS_THAN -> consumeVecLteOperator(cCtx, oCtx, castFilterOperator, false, callParentConsumeOnMatch);
-            case LESS_THAN_OR_EQUAL -> consumeVecLteOperator(cCtx, oCtx, castFilterOperator, true, callParentConsumeOnMatch);
+            case GREATER_THAN, GREATER_THAN_OR_EQUAL, LESS_THAN, LESS_THAN_OR_EQUAL ->
+                    consumeVecComparisonOperator(cCtx, oCtx, castFilterOperator, callParentConsumeOnMatch);
             default -> throw new UnsupportedOperationException(
                     "FilterOperator.consumeVecOperator does not support this operator type");
         };
@@ -422,26 +455,34 @@ public class FilterOperator extends CodeGenOperator<LogicalFilter> {
     }
 
     /**
-     * Method to generate the required vectorised code on the backward code generation pass for a
-     * </<= operator.
+     * Method to generate the required vectorised code on the backward code generation pass for
+     * a comparison (>, >=, <, <=) operator.
      * @param cCtx The {@link CodeGenContext} to use during the generation.
      * @param oCtx The {@link OptimisationContext} to use during the generation and execution.
      * @param filterOperator The </<= operator to generate code for.
-     * @param allowEqual {@code true} for executing <=, {@code false} for executing <
      * @param callParentConsumeOnMatch Whether the parent operator consume method should be invoked
      *                                 if this {@code filterOperator} matches. Necessary to allow
      *                                 recursive code generation.
      * @return The generated query code.
      */
-    private List<Java.Statement> consumeVecLteOperator(
+    private List<Java.Statement> consumeVecComparisonOperator(
             CodeGenContext cCtx,
             OptimisationContext oCtx,
             RexCall filterOperator,
-            boolean allowEqual,
             boolean callParentConsumeOnMatch
     ) {
         // Initialise the result
         List<Java.Statement> codegenResult = new ArrayList<>();
+
+        // Obtain the operator method name
+        String operatorName = switch (filterOperator.getOperator().getKind()) {
+            case GREATER_THAN -> "gt";
+            case GREATER_THAN_OR_EQUAL -> "ge";
+            case LESS_THAN -> "lt";
+            case LESS_THAN_OR_EQUAL -> "le";
+            default -> throw new UnsupportedOperationException(
+                    "FilterOperator.consumeVecComparisonOperator does not support the provided comparison operator: " + filterOperator.getOperator().getKind());
+        };
 
         // Obtain the operands
         RexNode lhs = filterOperator.getOperands().get(0);
@@ -454,31 +495,40 @@ public class FilterOperator extends CodeGenOperator<LogicalFilter> {
         if (lhs instanceof RexInputRef lhsRef) {
             lhsAP = cCtx.getCurrentOrdinalMapping().get(lhsRef.getIndex());
 
-        } else throw new UnsupportedOperationException("FilterOperator.consumeVecLteOperator does not support this left-hand operator");
+        } else throw new UnsupportedOperationException("FilterOperator.consumeVecComparisonOperator does not support this left-hand operator");
 
         Java.Rvalue rhsScalar;
         QueryVariableType rhsScalarType;
-        if (rhs instanceof RexLiteral rhsLit && rhs.getType().getSqlTypeName() == SqlTypeName.INTEGER) {
+        if (rhs.getType().getSqlTypeName() == SqlTypeName.DATE) {
+            rhsScalar = createIntegerLiteral(getLocation(), translateToUnixDay(rhs));
+            rhsScalarType = P_INT_DATE;
+
+        } else if (rhs instanceof RexLiteral rhsLit && rhs.getType().getSqlTypeName() == SqlTypeName.INTEGER) {
             rhsScalar = rexLiteralToRvalue(rhsLit);
             rhsScalarType = P_INT;
 
-        } else if (rhs instanceof RexCall rhsRexcall && rhs.getType().getSqlTypeName() == SqlTypeName.DATE) {
-            rhsScalar = createIntegerLiteral(getLocation(), translateToUnixDay(rhsRexcall));
-            rhsScalarType = P_INT_DATE;
+        } else if (rhs instanceof RexLiteral rhsLit && rhs.getType().getSqlTypeName() == SqlTypeName.DECIMAL) {
+            rhsScalar = rexLiteralToRvalue(rhsLit);
+            rhsScalarType = P_DOUBLE;
 
-        } else throw new UnsupportedOperationException("FilterOperator.consumeVecLteOperator does not support this right-hand operator");
+        } else throw new UnsupportedOperationException("FilterOperator.consumeVecComparisonOperator does not support this right-hand operator");
 
-        // Currently the filter operator only supports the integer (date) type, check this condition
+        // Currently the filter operator only supports the below types, check this condition
         if (
                 (  lhsAP.getType() != ARROW_INT_VECTOR
                 && lhsAP.getType() != ARROW_INT_VECTOR_W_SELECTION_VECTOR
                 && lhsAP.getType() != ARROW_INT_VECTOR_W_VALIDITY_MASK
                 && lhsAP.getType() != ARROW_DATE_VECTOR
+                && lhsAP.getType() != ARROW_DATE_VECTOR_W_SELECTION_VECTOR
+                && lhsAP.getType() != ARROW_DATE_VECTOR_W_VALIDITY_MASK
+                && lhsAP.getType() != ARROW_DOUBLE_VECTOR
+                && lhsAP.getType() != ARROW_DOUBLE_VECTOR_W_SELECTION_VECTOR
+                && lhsAP.getType() != ARROW_DOUBLE_VECTOR_W_VALIDITY_MASK
                 )
                 ||
-                (rhsScalarType != P_INT && rhsScalarType != P_INT_DATE)) {
+                (rhsScalarType != P_INT && rhsScalarType != P_INT_DATE && rhsScalarType != P_DOUBLE)) {
             throw new UnsupportedOperationException(
-                    "FilterOperator.consumeVecLtOperator does not supports this operand combination: "
+                    "FilterOperator.consumeVecComparisonOperator does not supports this operand combination: "
                             + lhsAP.getType() + " - " + rhs.getType().toString());
         }
 
@@ -528,13 +578,10 @@ public class FilterOperator extends CodeGenOperator<LogicalFilter> {
                 cCtx.defineVariable(selectionResultAP.getVariableName() + "_length"),
                 P_INT
         );
-        Java.BooleanLiteral allowEqualLiteral = allowEqual
-                ? new Java.BooleanLiteral(getLocation(), "true")
-                : new Java.BooleanLiteral(getLocation(), "false");
 
         if (lhsAP instanceof ArrowVectorAccessPath lhsArrowVecAP && !this.useSIMDVec()) {
-            // int ordinal_[index]_sel_vec_length = VectorisedFilterOperators.lessThanEqual(
-            //      lhsArrowVecAP.read(), rhsIntScalar, ordinal_[index]_sel_vec, allowEqual);
+            // int ordinal_[index]_sel_vec_length = VectorisedFilterOperators.[operatorName](
+            //      lhsArrowVecAP.read(), rhsIntScalar, ordinal_[index]_sel_vec);
             codegenResult.add(
                     createLocalVariable(
                             getLocation(),
@@ -543,20 +590,19 @@ public class FilterOperator extends CodeGenOperator<LogicalFilter> {
                             createMethodInvocation(
                                     getLocation(),
                                     createAmbiguousNameRef(getLocation(), "VectorisedFilterOperators"),
-                                    "lessThanEqual",
+                                    operatorName,
                                     new Java.Rvalue[] {
                                             lhsArrowVecAP.read(),
                                             rhsScalar,
-                                            selectionResultAP.read(),
-                                            allowEqualLiteral
+                                            selectionResultAP.read()
                                     }
                             )
                     )
             );
 
         } else if (lhsAP instanceof ArrowVectorAccessPath lhsArrowVecAP && this.useSIMDVec()) {
-            // int ordinal_[index]_val_mask_length = VectorisedFilterOperators.lessThanEqualSIMD(
-            //      lhsArrowVecAP.read(), rhsIntScalar, ordinal_[index]_val_mask, allowEqual);
+            // int ordinal_[index]_val_mask_length = VectorisedFilterOperators.[operatorName]SIMD(
+            //      lhsArrowVecAP.read(), rhsIntScalar, ordinal_[index]_val_mask);
             codegenResult.add(
                     createLocalVariable(
                             getLocation(),
@@ -568,21 +614,20 @@ public class FilterOperator extends CodeGenOperator<LogicalFilter> {
                                             getLocation(),
                                             "VectorisedFilterOperators"
                                     ),
-                                    "lessThanEqualSIMD",
+                                    operatorName + "SIMD",
                                     new Java.Rvalue[] {
                                             lhsArrowVecAP.read(),
                                             rhsScalar,
-                                            selectionResultAP.read(),
-                                            allowEqualLiteral
+                                            selectionResultAP.read()
                                     }
                             )
                     )
             );
 
         } else if (lhsAP instanceof ArrowVectorWithSelectionVectorAccessPath lhsArrowVecWSAP && !this.useSIMDVec()) {
-            // int ordinal_[index]_sel_vec_length = VectorisedFilterOperators.lessEqualThan(
+            // int ordinal_[index]_sel_vec_length = VectorisedFilterOperators.[operatorName](
             //      lhsArrowVecWSAP.readArrowVector(), rhsIntScalar, ordinal_[index]_sel_vec,
-            //      lhsArrowVecWSAP.readSelectionVector(), lhsArrowVecWSAP.readSelectionVectorLength(), allowEqual);
+            //      lhsArrowVecWSAP.readSelectionVector(), lhsArrowVecWSAP.readSelectionVectorLength());
             codegenResult.add(
                     createLocalVariable(
                             getLocation(),
@@ -591,23 +636,22 @@ public class FilterOperator extends CodeGenOperator<LogicalFilter> {
                             createMethodInvocation(
                                     getLocation(),
                                     createAmbiguousNameRef(getLocation(),"VectorisedFilterOperators"),
-                                    "lessThanEqual",
+                                    operatorName,
                                     new Java.Rvalue[] {
                                             lhsArrowVecWSAP.readArrowVector(),
                                             rhsScalar,
                                             selectionResultAP.read(),
                                             lhsArrowVecWSAP.readSelectionVector(),
-                                            lhsArrowVecWSAP.readSelectionVectorLength(),
-                                            allowEqualLiteral
+                                            lhsArrowVecWSAP.readSelectionVectorLength()
                                     }
                             )
                     )
             );
 
         } else if (lhsAP instanceof ArrowVectorWithValidityMaskAccessPath lhsAvwvmAP && this.useSIMDVec()) {
-            // int ordinal_[index]_val_mask_length = VectorisedFilterOperators.lessThanEqualSIMD(
+            // int ordinal_[index]_val_mask_length = VectorisedFilterOperators.[operatorName]SIMD(
             //      lhsAvwvmAP.readArrowVector(), rhsIntScalar, ordinal_[index]_val_mask,
-            //      lhsAvwvmAP.readValidityMask(), lhsAvwvmAP.readValidityMaskLength(), allowEqual);
+            //      lhsAvwvmAP.readValidityMask(), lhsAvwvmAP.readValidityMaskLength());
             codegenResult.add(
                     createLocalVariable(
                             getLocation(),
@@ -616,14 +660,13 @@ public class FilterOperator extends CodeGenOperator<LogicalFilter> {
                             createMethodInvocation(
                                     getLocation(),
                                     createAmbiguousNameRef(getLocation(), "VectorisedFilterOperators"),
-                                    "lessThanEqualSIMD",
+                                    operatorName + "SIMD",
                                     new Java.Rvalue[] {
                                             lhsAvwvmAP.readArrowVector(),
                                             rhsScalar,
                                             selectionResultAP.read(),
                                             lhsAvwvmAP.readValidityMask(),
-                                            lhsAvwvmAP.readValidityMaskLength(),
-                                            allowEqualLiteral
+                                            lhsAvwvmAP.readValidityMaskLength()
                                     }
                             )
                     )
@@ -631,7 +674,7 @@ public class FilterOperator extends CodeGenOperator<LogicalFilter> {
 
         } else {
             throw new UnsupportedOperationException(
-                    "FilterOperator.consumeVecLtOperator does not support this left-hand access path and simd enabled combination");
+                    "FilterOperator.consumeVecComparisonOperator does not support this left-hand access path and simd enabled combination");
         }
 
         // Update the current ordinal mapping to include the selection vector for all arrow vectors
@@ -705,6 +748,9 @@ public class FilterOperator extends CodeGenOperator<LogicalFilter> {
         if (dateComputation.getOperator() instanceof SqlDatetimeSubtractionOperator) {
             return lhsUnixDay - rhsUnixDay;
 
+        } else if (dateComputation.getOperator() instanceof SqlDatetimePlusOperator) {
+            return lhsUnixDay + rhsUnixDay;
+
         } else if (dateComputation.getOperator() instanceof SqlMonotonicBinaryOperator smbo) {
             if (smbo.getKind() == SqlKind.TIMES)
                 return lhsUnixDay * rhsUnixDay;
@@ -738,6 +784,11 @@ public class FilterOperator extends CodeGenOperator<LogicalFilter> {
             // Currently this seems to be a "unit", and since we are computing in UNIX days anyhow
             // this is sort of the identity unit
             return 1;
+
+        } else if (dateLiteralType == SqlTypeName.INTERVAL_YEAR) {
+            // Currently this seems to be a "unit", and since we are computing in UNIX days
+            // we should return 365, as that is the number of days per year
+            return 365;
 
         } else {
             throw new UnsupportedOperationException(

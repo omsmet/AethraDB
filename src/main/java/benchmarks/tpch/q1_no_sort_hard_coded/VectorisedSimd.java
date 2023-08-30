@@ -214,7 +214,7 @@ public class VectorisedSimd {
             org.apache.arrow.vector.FixedSizeBinaryVector lineitem_vc_4 = ((org.apache.arrow.vector.FixedSizeBinaryVector) lineitem_table.getVector(8));
             org.apache.arrow.vector.FixedSizeBinaryVector lineitem_vc_5 = ((org.apache.arrow.vector.FixedSizeBinaryVector) lineitem_table.getVector(9));
             org.apache.arrow.vector.DateDayVector lineitem_vc_6 = ((org.apache.arrow.vector.DateDayVector) lineitem_table.getVector(10));
-            int ordinal_6_val_mask_length = VectorisedFilterOperators.lessThanEqualSIMD(lineitem_vc_6, 10471, ordinal_6_val_mask, true);
+            int ordinal_6_val_mask_length = VectorisedFilterOperators.leSIMD(lineitem_vc_6, 10471, ordinal_6_val_mask);
             int projection_literal = 1;
             int projection_computation_result_length;
             projection_computation_result_length = VectorisedArithmeticOperators.subtractSIMD(projection_literal, lineitem_vc_2, ordinal_6_val_mask, ordinal_6_val_mask_length, projection_computation_result);

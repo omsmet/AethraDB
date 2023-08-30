@@ -37,6 +37,50 @@ public class VectorisedArithmeticOperators extends VectorisedOperators {
     /**
      * Method to multiply two double vectors.
      * @param lhsArrowVector The left-hand side double vector, represented as an arrow vector.
+     * @param rhsArrowVector The right-hand side double vector, represented as an arrow vector.
+     * @param result The array to which the result should be written.
+     * @return The length of the valid portion of {@code result}.
+     */
+    public static int multiply(Float8Vector lhsArrowVector, Float8Vector rhsArrowVector, double[] result) {
+        int vectorLength = lhsArrowVector.getValueCount();
+        assert vectorLength == rhsArrowVector.getValueCount();
+
+        for (int i = 0; i < vectorLength; i++) {
+            result[i] = lhsArrowVector.get(i) * rhsArrowVector.get(i);
+        }
+
+        return vectorLength;
+    }
+
+    /**
+     * Method to multiply two double vectors, but only at the indices indicated by a given selection vector.
+     * @param lhsArrowVector The left-hand side double vector, represented as an arrow vector.
+     * @param rhsArrowVector The right-hand side double vector, represented as an arrow vector.
+     * @param selectionVector The vector indicating which indices the operation should be performed at.
+     * @param selectionVectorLength The length of the valid portion of {@code selectionVector}.
+     * @param result The array to which the result should be written.
+     * @return The length of the valid portion of {@code result}.
+     */
+    public static int multiply(
+            Float8Vector lhsArrowVector,
+            Float8Vector rhsArrowVector,
+            int[] selectionVector,
+            int selectionVectorLength,
+            double[] result) {
+        int vectorLength = lhsArrowVector.getValueCount();
+        assert vectorLength == rhsArrowVector.getValueCount();
+
+        for (int i = 0; i < selectionVectorLength; i++) {
+            int selectedIndex = selectionVector[i];
+            result[selectedIndex] = lhsArrowVector.get(selectedIndex) * rhsArrowVector.get(selectedIndex);
+        }
+
+        return vectorLength;
+    }
+
+    /**
+     * Method to multiply two double vectors.
+     * @param lhsArrowVector The left-hand side double vector, represented as an arrow vector.
      * @param rhsArrayVector The right-hand side double vector, represented as an array.
      * @param rhsArrayVectorLength The length of the valid portion of {@code rhsArrayVector}.
      * @param result The array to which the result should be written.
@@ -84,6 +128,49 @@ public class VectorisedArithmeticOperators extends VectorisedOperators {
     /**
      * Method to multiply two double vectors.
      * @param lhsArrowVector The left-hand side double vector, represented as an arrow vector.
+     * @param rhsArrowVector The right-hand side double vector, represented as an arrow vector.
+     * @param result The array to which the result should be written.
+     * @return The length of the valid portion of {@code result}.
+     */
+    public static int multiplySIMD(Float8Vector lhsArrowVector, Float8Vector rhsArrowVector, double[] result) {
+        int vectorLength = lhsArrowVector.getValueCount();
+        assert vectorLength == rhsArrowVector.getValueCount();
+
+        // Initialise the memory segment
+        long bufferSize = (long) vectorLength * Float8Vector.TYPE_WIDTH;
+        MemorySegment lhsMemorySegment = MemorySegment.ofAddress(lhsArrowVector.getDataBufferAddress(), bufferSize);
+        MemorySegment rhsMemorySegment = MemorySegment.ofAddress(rhsArrowVector.getDataBufferAddress(), bufferSize);
+
+        // Perform vectorised processing
+        int currentIndex = 0;
+        for(; currentIndex < DOUBLE_SPECIES_PREFERRED.loopBound(vectorLength); currentIndex += DOUBLE_SPECIES_PREFERRED.length()) {
+            var lhsSIMDVector = jdk.incubator.vector.DoubleVector.fromMemorySegment(
+                    DOUBLE_SPECIES_PREFERRED,
+                    lhsMemorySegment,
+                    (long) currentIndex * Float8Vector.TYPE_WIDTH,
+                    ByteOrder.LITTLE_ENDIAN);
+
+            var rhsSIMDVector = jdk.incubator.vector.DoubleVector.fromMemorySegment(
+                    DOUBLE_SPECIES_PREFERRED,
+                    rhsMemorySegment,
+                    (long) currentIndex * Float8Vector.TYPE_WIDTH,
+                    ByteOrder.LITTLE_ENDIAN);
+
+            var resultSIMDVector = lhsSIMDVector.mul(rhsSIMDVector);
+            resultSIMDVector.intoArray(result, currentIndex);
+        }
+
+        // Process the tail
+        for (; currentIndex < vectorLength; currentIndex++) {
+            result[currentIndex] = lhsArrowVector.get(currentIndex) * rhsArrowVector.get(currentIndex);
+        }
+
+        return vectorLength;
+    }
+
+    /**
+     * Method to multiply two double vectors.
+     * @param lhsArrowVector The left-hand side double vector, represented as an arrow vector.
      * @param rhsArrayVector The right-hand side double vector, represented as an array.
      * @param rhsArrayVectorLength The length of the valid portion of {@code rhsArrayVector}.
      * @param result The array to which the result should be written.
@@ -118,6 +205,62 @@ public class VectorisedArithmeticOperators extends VectorisedOperators {
         // Process the tail
         for (; currentIndex < vectorLength; currentIndex++) {
             result[currentIndex] = lhsArrowVector.get(currentIndex) * rhsArrayVector[currentIndex];
+        }
+
+        return vectorLength;
+    }
+
+    /**
+     * Method to multiply two double vectors, but only at the indices indicated by a given validity mask.
+     * @param lhsArrowVector The left-hand side double vector, represented as an arrow vector.
+     * @param rhsArrowVector The right-hand side double vector, represented as an arrow vector.
+     * @param validityMask The mask indicating which indices the operation should be performed at.
+     * @param validityMaskLength The length of the valid portion of {@code validityMask}.
+     * @param result The array to which the result should be written.
+     * @return The length of the valid portion of {@code result}.
+     */
+    public static int multiplySIMD(
+            Float8Vector lhsArrowVector,
+            Float8Vector rhsArrowVector,
+            boolean[] validityMask,
+            int validityMaskLength,
+            double[] result)
+    {
+        int vectorLength = lhsArrowVector.getValueCount();
+        assert vectorLength == rhsArrowVector.getValueCount();
+
+        // Initialise the memory segment
+        long bufferSize = (long) vectorLength * Float8Vector.TYPE_WIDTH;
+        MemorySegment lhsMemorySegment = MemorySegment.ofAddress(lhsArrowVector.getDataBufferAddress(), bufferSize);
+        MemorySegment rhsMemorySegment = MemorySegment.ofAddress(rhsArrowVector.getDataBufferAddress(), bufferSize);
+
+        // Perform vectorised processing
+        int currentIndex = 0;
+        for(; currentIndex < DOUBLE_SPECIES_PREFERRED.loopBound(vectorLength); currentIndex += DOUBLE_SPECIES_PREFERRED.length()) {
+            var applicationMask = DOUBLE_SPECIES_PREFERRED.loadMask(validityMask, currentIndex);
+
+            var lhsSIMDVector = jdk.incubator.vector.DoubleVector.fromMemorySegment(
+                    DOUBLE_SPECIES_PREFERRED,
+                    lhsMemorySegment,
+                    (long) currentIndex * Float8Vector.TYPE_WIDTH,
+                    ByteOrder.LITTLE_ENDIAN,
+                    applicationMask);
+
+            var rhsSIMDVector = jdk.incubator.vector.DoubleVector.fromMemorySegment(
+                    DOUBLE_SPECIES_PREFERRED,
+                    rhsMemorySegment,
+                    (long) currentIndex * Float8Vector.TYPE_WIDTH,
+                    ByteOrder.LITTLE_ENDIAN,
+                    applicationMask);
+
+            var resultSIMDVector = lhsSIMDVector.mul(rhsSIMDVector, applicationMask);
+            resultSIMDVector.intoArray(result, currentIndex, applicationMask);
+        }
+
+        // Process the tail
+        for (; currentIndex < vectorLength; currentIndex++) {
+            if (validityMask[currentIndex])
+                result[currentIndex] = lhsArrowVector.get(currentIndex) * rhsArrowVector.get(currentIndex);
         }
 
         return vectorLength;

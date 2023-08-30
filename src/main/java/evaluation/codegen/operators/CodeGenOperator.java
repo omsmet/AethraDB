@@ -13,6 +13,7 @@ import org.apache.calcite.rex.RexLiteral;
 import org.apache.calcite.sql.type.BasicSqlType;
 import org.codehaus.janino.Java;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 import static evaluation.codegen.infrastructure.context.QueryVariableTypeMethods.toJavaType;
@@ -254,6 +255,7 @@ public abstract class CodeGenOperator<T extends RelNode> {
             case DOUBLE -> createFloatingPointLiteral(getLocation(), literal.getValueAs(Double.class).toString());
             case FLOAT -> createFloatingPointLiteral(getLocation(), literal.getValueAs(Float.class).toString());
             case INTEGER -> createIntegerLiteral(getLocation(), literal.getValueAs(Integer.class).toString());
+            case DECIMAL -> createFloatingPointLiteral(getLocation(), literal.getValueAs(BigDecimal.class).doubleValue());
             default -> throw new UnsupportedOperationException(
                     "FilterOperator.codeGenOperandNonVec does not support his literal type");
         };
