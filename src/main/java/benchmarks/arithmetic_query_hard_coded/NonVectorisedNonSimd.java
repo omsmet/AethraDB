@@ -1,7 +1,7 @@
 package benchmarks.arithmetic_query_hard_coded;
 
 import evaluation.codegen.infrastructure.data.ArrowTableReader;
-import evaluation.codegen.infrastructure.data.CachingArrowTableReader;
+import evaluation.codegen.infrastructure.data.ABQArrowTableReader;
 import org.apache.arrow.memory.RootAllocator;
 import org.openjdk.jmh.annotations.Benchmark;
 import org.openjdk.jmh.annotations.BenchmarkMode;
@@ -58,7 +58,7 @@ public class NonVectorisedNonSimd {
     public void trialSetup() throws Exception {
         // Setup the database
         this.rootAllocator = new RootAllocator();
-        this.lineitem_doubles = new CachingArrowTableReader(new File(this.tableFilePath + "/lineitem_doubles.arrow"), this.rootAllocator);
+        this.lineitem_doubles = new ABQArrowTableReader(new File(this.tableFilePath + "/lineitem_doubles.arrow"), this.rootAllocator);
 
         // Initialise the result
         this.result = new double[6001215];

@@ -4,7 +4,7 @@ import benchmarks.aggregation_query.ResultVerifier;
 import benchmarks.aggregation_query_hard_coded.NonVectorisedSimdSupport.KeyValueMap_1306429814;
 import evaluation.codegen.infrastructure.context.OptimisationContext;
 import evaluation.codegen.infrastructure.data.ArrowTableReader;
-import evaluation.codegen.infrastructure.data.CachingArrowTableReader;
+import evaluation.codegen.infrastructure.data.ABQArrowTableReader;
 import evaluation.general_support.hashmaps.Int_Hash_Function;
 import org.apache.arrow.memory.RootAllocator;
 import org.openjdk.jmh.annotations.Benchmark;
@@ -127,7 +127,7 @@ public class NonVectorisedSimd {
     public void trialSetup() throws Exception {
         // Setup the database
         this.rootAllocator = new RootAllocator();
-        this.aggregation_query_table = new CachingArrowTableReader(new File(this.tableFilePath + "/aggregation_query_table.arrow"), this.rootAllocator);
+        this.aggregation_query_table = new ABQArrowTableReader(new File(this.tableFilePath + "/aggregation_query_table.arrow"), this.rootAllocator);
 
         // Compute the hash-table sizes as the correct power of two size
         Pattern keysPattern = Pattern.compile("keys\\_\\d+");

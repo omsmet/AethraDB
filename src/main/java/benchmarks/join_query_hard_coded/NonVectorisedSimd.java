@@ -4,7 +4,7 @@ import benchmarks.join_query_hard_coded.NonVectorisedSimdGenSupport.KeyMultiReco
 import benchmarks.join_query_hard_coded.NonVectorisedSimdGenSupport.KeyMultiRecordMap_582857168;
 import evaluation.codegen.infrastructure.context.OptimisationContext;
 import evaluation.codegen.infrastructure.data.ArrowTableReader;
-import evaluation.codegen.infrastructure.data.CachingArrowTableReader;
+import evaluation.codegen.infrastructure.data.ABQArrowTableReader;
 import evaluation.general_support.hashmaps.Int_Hash_Function;
 import org.apache.arrow.memory.RootAllocator;
 import org.openjdk.jmh.annotations.Benchmark;
@@ -107,9 +107,9 @@ public class NonVectorisedSimd {
     public void trialSetup() throws Exception {
         // Setup the database
         this.rootAllocator = new RootAllocator();
-        this.table_A = new CachingArrowTableReader(new File(this.tableFilePath + "/table_A.arrow"), this.rootAllocator);
-        this.table_B = new CachingArrowTableReader(new File(this.tableFilePath + "/table_B.arrow"), this.rootAllocator);
-        this.table_C = new CachingArrowTableReader(new File(this.tableFilePath + "/table_C.arrow"), this.rootAllocator);
+        this.table_A = new ABQArrowTableReader(new File(this.tableFilePath + "/table_A.arrow"), this.rootAllocator);
+        this.table_B = new ABQArrowTableReader(new File(this.tableFilePath + "/table_B.arrow"), this.rootAllocator);
+        this.table_C = new ABQArrowTableReader(new File(this.tableFilePath + "/table_C.arrow"), this.rootAllocator);
 
         // Compute the hash-table sizes as the correct power of two size
         int hashTableSize = Integer.highestOneBit(3 * 1024 * 1024) << 2;

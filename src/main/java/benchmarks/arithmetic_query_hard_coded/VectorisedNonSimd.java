@@ -2,7 +2,7 @@ package benchmarks.arithmetic_query_hard_coded;
 
 import evaluation.codegen.infrastructure.data.ArrowTableReader;
 import evaluation.codegen.infrastructure.data.BufferPoolAllocationManager;
-import evaluation.codegen.infrastructure.data.CachingArrowTableReader;
+import evaluation.codegen.infrastructure.data.ABQArrowTableReader;
 import evaluation.vector_support.VectorisedArithmeticOperators;
 import org.apache.arrow.memory.RootAllocator;
 import org.openjdk.jmh.annotations.Benchmark;
@@ -65,7 +65,7 @@ public class VectorisedNonSimd {
     public void trialSetup() throws Exception {
         // Setup the database
         this.rootAllocator = new RootAllocator();
-        this.lineitem_doubles = new CachingArrowTableReader(new File(this.tableFilePath + "/lineitem_doubles.arrow"), this.rootAllocator);
+        this.lineitem_doubles = new ABQArrowTableReader(new File(this.tableFilePath + "/lineitem_doubles.arrow"), this.rootAllocator);
 
         // Setup the allocation manager
         this.allocationManager = new BufferPoolAllocationManager(8);

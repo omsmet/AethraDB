@@ -5,7 +5,7 @@ import benchmarks.aggregation_query_hard_coded.VectorisedSupport.KeyValueMap_209
 import evaluation.codegen.infrastructure.data.AllocationManager;
 import evaluation.codegen.infrastructure.data.ArrowTableReader;
 import evaluation.codegen.infrastructure.data.BufferPoolAllocationManager;
-import evaluation.codegen.infrastructure.data.CachingArrowTableReader;
+import evaluation.codegen.infrastructure.data.ABQArrowTableReader;
 import evaluation.vector_support.VectorisedAggregationOperators;
 import evaluation.vector_support.VectorisedHashOperators;
 import org.apache.arrow.memory.RootAllocator;
@@ -133,7 +133,7 @@ public class VectorisedNonSimd {
     public void trialSetup() throws Exception {
         // Setup the database
         this.rootAllocator = new RootAllocator();
-        this.aggregation_query_table = new CachingArrowTableReader(new File(this.tableFilePath + "/aggregation_query_table.arrow"), this.rootAllocator);
+        this.aggregation_query_table = new ABQArrowTableReader(new File(this.tableFilePath + "/aggregation_query_table.arrow"), this.rootAllocator);
 
         // Compute the hash-table sizes as the correct power of two size
         Pattern keysPattern = Pattern.compile("keys\\_\\d+");
