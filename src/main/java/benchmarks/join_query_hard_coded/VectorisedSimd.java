@@ -2,10 +2,10 @@ package benchmarks.join_query_hard_coded;
 
 import benchmarks.join_query_hard_coded.VectorisedGenSupport.KeyMultiRecordMap_1214032527;
 import benchmarks.join_query_hard_coded.VectorisedGenSupport.KeyMultiRecordMap_378227888;
+import evaluation.codegen.infrastructure.data.ABQArrowTableReader;
 import evaluation.codegen.infrastructure.data.AllocationManager;
 import evaluation.codegen.infrastructure.data.ArrowTableReader;
 import evaluation.codegen.infrastructure.data.BufferPoolAllocationManager;
-import evaluation.codegen.infrastructure.data.ABQArrowTableReader;
 import evaluation.vector_support.VectorisedHashOperators;
 import evaluation.vector_support.VectorisedOperators;
 import org.apache.arrow.memory.RootAllocator;

@@ -1,8 +1,8 @@
 package benchmarks.arithmetic_query_hard_coded;
 
 import evaluation.codegen.infrastructure.context.OptimisationContext;
-import evaluation.codegen.infrastructure.data.ArrowTableReader;
 import evaluation.codegen.infrastructure.data.ABQArrowTableReader;
+import evaluation.codegen.infrastructure.data.ArrowTableReader;
 import jdk.incubator.vector.DoubleVector;
 import org.apache.arrow.memory.RootAllocator;
 import org.openjdk.jmh.annotations.Benchmark;

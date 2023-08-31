@@ -6,7 +6,11 @@ import evaluation.codegen.infrastructure.context.QueryVariableType;
 import evaluation.codegen.infrastructure.context.access_path.AccessPath;
 import evaluation.codegen.infrastructure.context.access_path.ArrayAccessPath;
 import evaluation.codegen.infrastructure.context.access_path.ArrayVectorAccessPath;
+import evaluation.codegen.infrastructure.context.access_path.ArrayVectorWithSelectionVectorAccessPath;
+import evaluation.codegen.infrastructure.context.access_path.ArrayVectorWithValidityMaskAccessPath;
 import evaluation.codegen.infrastructure.context.access_path.ArrowVectorAccessPath;
+import evaluation.codegen.infrastructure.context.access_path.ArrowVectorWithSelectionVectorAccessPath;
+import evaluation.codegen.infrastructure.context.access_path.ArrowVectorWithValidityMaskAccessPath;
 import evaluation.codegen.infrastructure.context.access_path.MapAccessPath;
 import evaluation.codegen.infrastructure.context.access_path.SIMDLoopAccessPath;
 import evaluation.codegen.infrastructure.context.access_path.ScalarVariableAccessPath;
@@ -25,6 +29,8 @@ import java.util.List;
 
 import static evaluation.codegen.infrastructure.context.QueryVariableType.ARRAY_INT_VECTOR;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_INT_VECTOR;
+import static evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_INT_VECTOR_W_SELECTION_VECTOR;
+import static evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_INT_VECTOR_W_VALIDITY_MASK;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.MAP_GENERATED;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.P_A_LONG;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.P_INT;
@@ -37,6 +43,7 @@ import static evaluation.codegen.infrastructure.janino.JaninoClassGen.createClas
 import static evaluation.codegen.infrastructure.janino.JaninoClassGen.createLocalClassDeclarationStm;
 import static evaluation.codegen.infrastructure.janino.JaninoControlGen.createForLoop;
 import static evaluation.codegen.infrastructure.janino.JaninoControlGen.createIf;
+import static evaluation.codegen.infrastructure.janino.JaninoControlGen.createIfNotContinue;
 import static evaluation.codegen.infrastructure.janino.JaninoControlGen.createWhileLoop;
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createAmbiguousNameRef;
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createArrayElementAccessExpr;
@@ -50,6 +57,7 @@ import static evaluation.codegen.infrastructure.janino.JaninoMethodGen.createMet
 import static evaluation.codegen.infrastructure.janino.JaninoOperatorGen.eq;
 import static evaluation.codegen.infrastructure.janino.JaninoOperatorGen.gt;
 import static evaluation.codegen.infrastructure.janino.JaninoOperatorGen.lt;
+import static evaluation.codegen.infrastructure.janino.JaninoOperatorGen.not;
 import static evaluation.codegen.infrastructure.janino.JaninoOperatorGen.plus;
 import static evaluation.codegen.infrastructure.janino.JaninoOperatorGen.postIncrement;
 import static evaluation.codegen.infrastructure.janino.JaninoOperatorGen.postIncrementStm;
@@ -63,6 +71,12 @@ import static evaluation.codegen.infrastructure.janino.JaninoVariableGen.createV
  * joins implemented by this operator are currently hash-joins over a single equality predicate.
  */
 public class JoinOperator extends CodeGenOperator<LogicalJoin> {
+
+    /**
+     * The {@link RexCall} representing the (normalised) join condition implemented by this
+     * {@link JoinOperator}.
+     */
+    private final RexCall joinCondition;
 
     /**
      * The {@link CodeGenOperator} producing the records to be joined by {@code this} on "left" side
@@ -153,6 +167,24 @@ public class JoinOperator extends CodeGenOperator<LogicalJoin> {
 
         if (joinConditionOperands.get(0).getType() != joinConditionOperands.get(1).getType())
             throw new UnsupportedOperationException("JoinOperator expects the join condition operands to be of the same type");
+
+        // Join condition passes pre-condition, now re-order the predicate so it always has the
+        // lhs join column's predicate first, followed by the rhs join column predicate
+        RexInputRef firstRef = (RexInputRef) joinConditionOperands.get(0);
+        RexInputRef secondRef = (RexInputRef) joinConditionOperands.get(1);
+        List<RexNode> orderedJoinOperands = new ArrayList<>();
+        if (firstRef.getIndex() > secondRef.getIndex()) {
+            orderedJoinOperands.add(secondRef);
+            orderedJoinOperands.add(firstRef);
+        } else {
+            orderedJoinOperands.add(firstRef);
+            orderedJoinOperands.add(secondRef);
+        }
+
+        this.joinCondition = (RexCall) this.getLogicalSubplan().getCluster().getRexBuilder().makeCall(
+                joinConditionCall.getOperator(),
+                orderedJoinOperands
+        );
     }
 
     @Override
@@ -224,8 +256,7 @@ public class JoinOperator extends CodeGenOperator<LogicalJoin> {
         List<Java.Statement> codeGenResult = new ArrayList<>();
 
         // Check that we can handle the key type (casts valid due to pre-condition check in constructor)
-        RexCall joinCondition = (RexCall) this.getLogicalSubplan().getCondition();
-        RexInputRef buildKey = (RexInputRef) joinCondition.getOperands().get(0);
+        RexInputRef buildKey = (RexInputRef) this.joinCondition.getOperands().get(0);
         int buildKeyOrdinal = buildKey.getIndex();
         List<AccessPath> currentOrdinalMapping = cCtx.getCurrentOrdinalMapping();
         AccessPath buildKeyAP = currentOrdinalMapping.get(buildKeyOrdinal);
@@ -343,8 +374,7 @@ public class JoinOperator extends CodeGenOperator<LogicalJoin> {
         List<Java.Statement> codeGenResult = new ArrayList<>();
 
         // Check that we can handle the key type (casts valid due to pre-condition check in constructor)
-        RexCall joinCondition = (RexCall) this.getLogicalSubplan().getCondition();
-        RexInputRef buildKey = (RexInputRef) joinCondition.getOperands().get(1);
+        RexInputRef buildKey = (RexInputRef) this.joinCondition.getOperands().get(1);
         // Need to convert the output ordinal to the right-input ordinal
         int buildKeyOrdinal = buildKey.getIndex() - this.getLogicalSubplan().getLeft().getRowType().getFieldCount();
         AccessPath buildKeyAP = cCtx.getCurrentOrdinalMapping().get(buildKeyOrdinal);
@@ -655,7 +685,8 @@ public class JoinOperator extends CodeGenOperator<LogicalJoin> {
             ArrayAccessPath vectorDescription = this.resultVectorDefinitions[i];
             String instantiationMethod = switch (vectorDescription.getType()) {
                 case P_A_BOOLEAN -> "getBooleanVector";
-                case P_A_INT -> "getIntVector";
+                case P_A_DOUBLE -> "getDoubleVector";
+                case P_A_INT, P_A_INT_DATE -> "getIntVector";
                 case P_A_LONG -> "getLongVector";
                 default -> throw new UnsupportedOperationException(
                         "JoinOperator.produceVec does not support allocating this result vector type");
@@ -746,8 +777,7 @@ public class JoinOperator extends CodeGenOperator<LogicalJoin> {
         List<Java.Statement> codeGenResult = new ArrayList<>();
 
         // Check that we can handle the key type (casts valid due to pre-condition check in constructor)
-        RexCall joinCondition = (RexCall) this.getLogicalSubplan().getCondition();
-        RexInputRef buildKey = (RexInputRef) joinCondition.getOperands().get(0);
+        RexInputRef buildKey = (RexInputRef) this.joinCondition.getOperands().get(0);
         int buildKeyOrdinal = buildKey.getIndex();
         List<AccessPath> currentOrdinalMapping = cCtx.getCurrentOrdinalMapping();
         AccessPath buildKeyAP = currentOrdinalMapping.get(buildKeyOrdinal);
@@ -758,38 +788,25 @@ public class JoinOperator extends CodeGenOperator<LogicalJoin> {
             throw new UnsupportedOperationException("JoinOperator.consumeVecBuild only supports integer join key columns");
 
         // Idea: first perform pre-hashing of the key-column and then perform hash-table inserts
+        String vectorisedHashMethodName = this.useSIMDVec() ? "constructPreHashKeyVectorSIMD" : "constructPreHashKeyVector";
+
         if (buildKeyAPType == ARROW_INT_VECTOR) {
-            // We know that all other vectors on the build side must be of some arrow vector type
+            // We know that all other vectors on the build side must be of some arrow/array vector type
             // without any validity mask/selection vector
             ArrowVectorAccessPath buildKeyAVAP = ((ArrowVectorAccessPath) buildKeyAP);
 
-            if (!this.useSIMDVec()) {
-                // VectorisedHashOperators.constructPreHashKeyVector([this.preHashVectorAP.read()], [buildKeyAVAP.read()], false);
-                codeGenResult.add(
-                        createMethodInvocationStm(
-                                getLocation(),
-                                createAmbiguousNameRef(getLocation(), "VectorisedHashOperators"),
-                                "constructPreHashKeyVector",
-                                new Java.Rvalue[]{
-                                        this.preHashVectorAP.read(),
-                                        buildKeyAVAP.read(),
-                                        new Java.BooleanLiteral(getLocation(), "false")
-                                }
-                        ));
-            } else {
-                // VectorisedHashOperators.constructPreHashKeyVectorSIMD([this.preHashVectorAP.read()], [buildKeyAVAP.read()], false);
-                codeGenResult.add(
-                        createMethodInvocationStm(
-                                getLocation(),
-                                createAmbiguousNameRef(getLocation(), "VectorisedHashOperators"),
-                                "constructPreHashKeyVectorSIMD",
-                                new Java.Rvalue[]{
-                                        this.preHashVectorAP.read(),
-                                        buildKeyAVAP.read(),
-                                        new Java.BooleanLiteral(getLocation(), "false")
-                                }
-                        ));
-            }
+            // VectorisedHashOperators.constructPreHashKeyVector[SIMD]([this.preHashVectorAP.read()], [buildKeyAVAP.read()], false);
+            codeGenResult.add(
+                    createMethodInvocationStm(
+                            getLocation(),
+                            createAmbiguousNameRef(getLocation(), "VectorisedHashOperators"),
+                            vectorisedHashMethodName,
+                            new Java.Rvalue[]{
+                                    this.preHashVectorAP.read(),
+                                    buildKeyAVAP.read(),
+                                    new Java.BooleanLiteral(getLocation(), "false")
+                            }
+                    ));
 
             // Now iterate over the key vector to construct the hash-table records and insert them into the table
             // int recordCount = [buildKeyAVAP.read()].getValueCount();
@@ -882,48 +899,277 @@ public class JoinOperator extends CodeGenOperator<LogicalJoin> {
                     )
             );
 
+        } else if (buildKeyAPType == ARROW_INT_VECTOR_W_SELECTION_VECTOR) {
+            // We know that all other vectors on the build side must be of some arrow/array vector type
+            // with a selection vector
+            ArrowVectorWithSelectionVectorAccessPath buildKeyAVWSVAP = ((ArrowVectorWithSelectionVectorAccessPath) buildKeyAP);
+
+            // VectorisedHashOperators.constructPreHashKeyVector[SIMD](
+            //         [this.preHashVectorAP.read()], [buildKeyAVWSVAP.read()], [buildKeyAVWSVAP.selectionVector], [buildKeyAVWSVAP.selectionVectorLength], false);
+            codeGenResult.add(
+                    createMethodInvocationStm(
+                            getLocation(),
+                            createAmbiguousNameRef(getLocation(), "VectorisedHashOperators"),
+                            vectorisedHashMethodName,
+                            new Java.Rvalue[]{
+                                    this.preHashVectorAP.read(),
+                                    buildKeyAVWSVAP.readArrowVector(),
+                                    buildKeyAVWSVAP.readSelectionVector(),
+                                    buildKeyAVWSVAP.readSelectionVectorLength(),
+                                    new Java.BooleanLiteral(getLocation(), "false")
+                            }
+                    ));
+
+            // Now iterate over the selection vector to construct the hash-table records and insert them into the table
+            // int recordCount = [buildKeyAVWSVAP.readSelectionVectorLength()];
+            ScalarVariableAccessPath recordCountAP = new ScalarVariableAccessPath(
+                    cCtx.defineVariable("recordCount"),
+                    P_INT
+            );
+            codeGenResult.add(
+                    createLocalVariable(
+                            getLocation(),
+                            createPrimitiveType(getLocation(), Java.Primitive.INT),
+                            recordCountAP.getVariableName(),
+                            buildKeyAVWSVAP.readSelectionVectorLength()
+                    )
+            );
+
+            // for (int i = 0; i < recordCount; i++) { [insertionLoopBody] }
+            ScalarVariableAccessPath insertionLoopIndexVariable =
+                    new ScalarVariableAccessPath(cCtx.defineVariable("i"), P_INT);
+            Java.Block insertionLoopBody = new Java.Block(getLocation());
+            codeGenResult.add(
+                    createForLoop(
+                            getLocation(),
+                            createLocalVariable(
+                                    getLocation(),
+                                    toJavaType(getLocation(), insertionLoopIndexVariable.getType()),
+                                    insertionLoopIndexVariable.getVariableName(),
+                                    createIntegerLiteral(getLocation(), 0)
+                            ),
+                            lt(
+                                    getLocation(),
+                                    insertionLoopIndexVariable.read(),
+                                    recordCountAP.read()
+                            ),
+                            postIncrement(getLocation(), insertionLoopIndexVariable.write()),
+                            insertionLoopBody
+                    )
+            );
+
+            // Obtain the selected record index
+            // int selected_record_index = [buildKeyAVWSVAP.readSelectionVector()][i];
+            ScalarVariableAccessPath selectedRecordIndexAP = new ScalarVariableAccessPath(
+                    cCtx.defineVariable("selected_record_index"), P_INT);
+            insertionLoopBody.addStatement(
+                    createLocalVariable(
+                            getLocation(),
+                            toJavaType(getLocation(), selectedRecordIndexAP.getType()),
+                            selectedRecordIndexAP.getVariableName(),
+                            createArrayElementAccessExpr(
+                                    getLocation(),
+                                    buildKeyAVWSVAP.readSelectionVector(),
+                                    insertionLoopIndexVariable.read()
+                            )
+                    )
+            );
+
+            // Insert the record into the hash-table
+            // int left_join_record_key = [buildKeyAVWSVAP].get([selected_record_index]);
+            ScalarVariableAccessPath leftJoinRecordKeyAP = new ScalarVariableAccessPath(
+                    cCtx.defineVariable("left_join_record_key"),
+                    P_INT
+            );
+            insertionLoopBody.addStatement(
+                    createLocalVariable(
+                            getLocation(),
+                            toJavaType(getLocation(), leftJoinRecordKeyAP.getType()),
+                            leftJoinRecordKeyAP.getVariableName(),
+                            createMethodInvocation(
+                                    getLocation(),
+                                    buildKeyAVWSVAP.readArrowVector(),
+                                    "get",
+                                    new Java.Rvalue[] { selectedRecordIndexAP.read() }
+                            )
+                    )
+            );
+
+            Java.Rvalue[] columnValues = new Java.Rvalue[currentOrdinalMapping.size()];
+            for (int i = 0; i < columnValues.length; i++) {
+                if (i == buildKeyOrdinal)
+                    columnValues[i] = leftJoinRecordKeyAP.read();
+                else
+                    columnValues[i] = createMethodInvocation(
+                            getLocation(),
+                            ((ArrowVectorWithSelectionVectorAccessPath) currentOrdinalMapping.get(i)).readArrowVector(),
+                            "get",
+                            new Java.Rvalue[] { selectedRecordIndexAP.read() }
+                    );
+            }
+
+            // [join_map].associate([left_join_record_key], [preHashVector][[selectedRecordIndexAP]], [columnValues])
+            Java.Rvalue[] associateCallArgs = new Java.Rvalue[columnValues.length + 2];
+            associateCallArgs[0] = leftJoinRecordKeyAP.read();
+            associateCallArgs[1] = createArrayElementAccessExpr(
+                    getLocation(), preHashVectorAP.read(), selectedRecordIndexAP.read());
+            System.arraycopy(columnValues, 0, associateCallArgs, 2, columnValues.length);
+
+            insertionLoopBody.addStatement(
+                    createMethodInvocationStm(
+                            getLocation(),
+                            this.joinMapAP.read(),
+                            "associate",
+                            associateCallArgs
+                    )
+            );
+
+        } else if (buildKeyAPType == ARROW_INT_VECTOR_W_VALIDITY_MASK) {
+            // We know that all other vectors on the build side must be of some arrow/array vector type
+            // with a selection vector
+            ArrowVectorWithValidityMaskAccessPath buildKeyAVWVMAP = ((ArrowVectorWithValidityMaskAccessPath) buildKeyAP);
+
+            // VectorisedHashOperators.constructPreHashKeyVector[SIMD](
+            //         [this.preHashVectorAP.read()], [buildKeyAVWVMAP.arrowVector], [buildKeyAVWVMAP.validityMask], [buildKeyAVWVMAP.validityMaskLength], false);
+            codeGenResult.add(
+                    createMethodInvocationStm(
+                            getLocation(),
+                            createAmbiguousNameRef(getLocation(), "VectorisedHashOperators"),
+                            vectorisedHashMethodName,
+                            new Java.Rvalue[]{
+                                    this.preHashVectorAP.read(),
+                                    buildKeyAVWVMAP.readArrowVector(),
+                                    buildKeyAVWVMAP.readValidityMask(),
+                                    buildKeyAVWVMAP.readValidityMaskLength(),
+                                    new Java.BooleanLiteral(getLocation(), "false")
+                            }
+                    ));
+
+            // Now iterate over the selection vector to construct the hash-table records and insert them into the table
+            // int recordCount = [buildKeyAVWSVAP.buildKeyAVWVMAP.arrowVector.getValueCount()];
+            ScalarVariableAccessPath recordCountAP = new ScalarVariableAccessPath(
+                    cCtx.defineVariable("recordCount"),
+                    P_INT
+            );
+            codeGenResult.add(
+                    createLocalVariable(
+                            getLocation(),
+                            createPrimitiveType(getLocation(), Java.Primitive.INT),
+                            recordCountAP.getVariableName(),
+                            createMethodInvocation(
+                                    getLocation(),
+                                    buildKeyAVWVMAP.readArrowVector(),
+                                    "getValueCount"
+                            )
+                    )
+            );
+
+            // for (int i = 0; i < recordCount; i++) { [insertionLoopBody] }
+            ScalarVariableAccessPath insertionLoopIndexVariable =
+                    new ScalarVariableAccessPath(cCtx.defineVariable("i"), P_INT);
+            Java.Block insertionLoopBody = new Java.Block(getLocation());
+            codeGenResult.add(
+                    createForLoop(
+                            getLocation(),
+                            createLocalVariable(
+                                    getLocation(),
+                                    toJavaType(getLocation(), insertionLoopIndexVariable.getType()),
+                                    insertionLoopIndexVariable.getVariableName(),
+                                    createIntegerLiteral(getLocation(), 0)
+                            ),
+                            lt(
+                                    getLocation(),
+                                    insertionLoopIndexVariable.read(),
+                                    recordCountAP.read()
+                            ),
+                            postIncrement(getLocation(), insertionLoopIndexVariable.write()),
+                            insertionLoopBody
+                    )
+            );
+
+            // Skip invalid records
+            insertionLoopBody.addStatement(
+                    createIfNotContinue(
+                            getLocation(),
+                            createArrayElementAccessExpr(
+                                    getLocation(),
+                                    buildKeyAVWVMAP.readValidityMask(),
+                                    insertionLoopIndexVariable.read()
+                            )
+                    )
+            );
+
+            // Insert the record into the hash-table
+            // int left_join_record_key = [buildKeyAVWSVAP].get([selected_record_index]);
+            ScalarVariableAccessPath leftJoinRecordKeyAP = new ScalarVariableAccessPath(
+                    cCtx.defineVariable("left_join_record_key"),
+                    P_INT
+            );
+            insertionLoopBody.addStatement(
+                    createLocalVariable(
+                            getLocation(),
+                            toJavaType(getLocation(), leftJoinRecordKeyAP.getType()),
+                            leftJoinRecordKeyAP.getVariableName(),
+                            createMethodInvocation(
+                                    getLocation(),
+                                    buildKeyAVWVMAP.readArrowVector(),
+                                    "get",
+                                    new Java.Rvalue[] { insertionLoopIndexVariable.read() }
+                            )
+                    )
+            );
+
+            Java.Rvalue[] columnValues = new Java.Rvalue[currentOrdinalMapping.size()];
+            for (int i = 0; i < columnValues.length; i++) {
+                if (i == buildKeyOrdinal)
+                    columnValues[i] = leftJoinRecordKeyAP.read();
+                else
+                    columnValues[i] = createMethodInvocation(
+                            getLocation(),
+                            ((ArrowVectorWithValidityMaskAccessPath) currentOrdinalMapping.get(i)).readArrowVector(),
+                            "get",
+                            new Java.Rvalue[] { insertionLoopIndexVariable.read() }
+                    );
+            }
+
+            // [join_map].associate([left_join_record_key], [preHashVector][[insertionLoopIndexVariable]], [columnValues])
+            Java.Rvalue[] associateCallArgs = new Java.Rvalue[columnValues.length + 2];
+            associateCallArgs[0] = leftJoinRecordKeyAP.read();
+            associateCallArgs[1] = createArrayElementAccessExpr(
+                    getLocation(), preHashVectorAP.read(), insertionLoopIndexVariable.read());
+            System.arraycopy(columnValues, 0, associateCallArgs, 2, columnValues.length);
+
+            insertionLoopBody.addStatement(
+                    createMethodInvocationStm(
+                            getLocation(),
+                            this.joinMapAP.read(),
+                            "associate",
+                            associateCallArgs
+                    )
+            );
+
         } else if (buildKeyAPType == ARRAY_INT_VECTOR) {
-            // We know that all other vectors on the build side must be of some array vector type
+            // We know that all other vectors on the build side must be of some arrow/array vector type
             // without any validity mask/selection vector
             ArrayVectorAccessPath buildKeyAVAP = ((ArrayVectorAccessPath) buildKeyAP);
 
-            if (!this.useSIMDVec()) {
-                // VectorisedHashOperators.constructPreHashKeyVector(
-                //         [this.preHashVectorAP.read()],
-                //         [buildKeyAVAP.getVectorVariable().read()]
-                //         [buildKeyAVAP.getVectorLengthVariable().read()],
-                //         false);
-                codeGenResult.add(
-                        createMethodInvocationStm(
-                                getLocation(),
-                                createAmbiguousNameRef(getLocation(), "VectorisedHashOperators"),
-                                "constructPreHashKeyVector",
-                                new Java.Rvalue[]{
-                                        this.preHashVectorAP.read(),
-                                        buildKeyAVAP.getVectorVariable().read(),
-                                        buildKeyAVAP.getVectorLengthVariable().read(),
-                                        new Java.BooleanLiteral(getLocation(), "false")
-                                }
-                        ));
-            } else {
-                // VectorisedHashOperators.constructPreHashKeyVectorSIMD(
-                //         [this.preHashVectorAP.read()],
-                //         [buildKeyAVAP.getVectorVariable().read()]
-                //         [buildKeyAVAP.getVectorLengthVariable().read()],
-                //         false);
-                codeGenResult.add(
-                        createMethodInvocationStm(
-                                getLocation(),
-                                createAmbiguousNameRef(getLocation(), "VectorisedHashOperators"),
-                                "constructPreHashKeyVectorSIMD",
-                                new Java.Rvalue[]{
-                                        this.preHashVectorAP.read(),
-                                        buildKeyAVAP.getVectorVariable().read(),
-                                        buildKeyAVAP.getVectorLengthVariable().read(),
-                                        new Java.BooleanLiteral(getLocation(), "false")
-                                }
-                        ));
-            }
+            // VectorisedHashOperators.constructPreHashKeyVector[SIMD](
+            //         [this.preHashVectorAP.read()],
+            //         [buildKeyAVAP.getVectorVariable().read()]
+            //         [buildKeyAVAP.getVectorLengthVariable().read()],
+            //         false);
+            codeGenResult.add(
+                    createMethodInvocationStm(
+                            getLocation(),
+                            createAmbiguousNameRef(getLocation(), "VectorisedHashOperators"),
+                            vectorisedHashMethodName,
+                            new Java.Rvalue[]{
+                                    this.preHashVectorAP.read(),
+                                    buildKeyAVAP.getVectorVariable().read(),
+                                    buildKeyAVAP.getVectorLengthVariable().read(),
+                                    new Java.BooleanLiteral(getLocation(), "false")
+                            }
+                    ));
 
             // Now iterate over the key vector to construct the hash-table records and insert them into the table
             // for (int i = 0; i < [buildKeyAVAP.getVectorLengthVariable().read()]; i++) { [insertionLoopBody] }
@@ -1015,8 +1261,7 @@ public class JoinOperator extends CodeGenOperator<LogicalJoin> {
         List<Java.Statement> codeGenResult = new ArrayList<>();
 
         // Check that we can handle the key type (casts valid due to pre-condition check in constructor)
-        RexCall joinCondition = (RexCall) this.getLogicalSubplan().getCondition();
-        RexInputRef buildKey = (RexInputRef) joinCondition.getOperands().get(1);
+        RexInputRef buildKey = (RexInputRef) this.joinCondition.getOperands().get(1);
         // Need to convert the output ordinal to the right-input ordinal
         int buildKeyOrdinal = buildKey.getIndex() - this.getLogicalSubplan().getLeft().getRowType().getFieldCount();
         List<AccessPath> currentOrdinalMapping = cCtx.getCurrentOrdinalMapping();
@@ -1030,50 +1275,43 @@ public class JoinOperator extends CodeGenOperator<LogicalJoin> {
         // We need to handle some functionality based on the input access path:
         //  - Computation of the pre-hash vector
         //  - Initialisation of the recordCount variable
+        //  - Initialisation of the recordIndexVariable (and potential initialisation code required by it)
         //  - The statement required to obtain the right_join_key variable
         // That is done below
+        String vectorisedHashMethodName = this.useSIMDVec() ? "constructPreHashKeyVectorSIMD" : "constructPreHashKeyVector";
         Java.Rvalue recordCountInitialisation;
-        Java.Rvalue rigthJoinKeyReadCode;
+        ScalarVariableAccessPath recordIndexAP;
+        Java.Statement recordIndexAPRelatedStatements = null;
+        Java.Rvalue rightJoinKeyReadCode;
 
-        // Definition of access paths for shared variables
-        // int currentRecordIndex
-        ScalarVariableAccessPath currentRecordIndexAP = new ScalarVariableAccessPath(
-                cCtx.defineVariable("currentRecordIndex"),
+        // Definition of access path for the loop variable which iterates from 0 to recordCount
+        // This allows for indirection via a selection vector
+        // int currentLoopIndex;
+        ScalarVariableAccessPath currentLoopIndexAP = new ScalarVariableAccessPath(
+                cCtx.defineVariable("currentLoopIndex"),
                 P_INT
         );
+
+        // Set the default value for the recordIndexAP to the currentLoopIndexAP
+        recordIndexAP = currentLoopIndexAP;
 
         if (buildKeyAPType == ARROW_INT_VECTOR) {
             // We know that all other vectors on the probe side must be of some arrow vector type
             // without any validity mask/selection vector
             ArrowVectorAccessPath buildKeyAVAP = ((ArrowVectorAccessPath) buildKeyAP);
 
-            if (!this.useSIMDVec()) {
-                // VectorisedHashOperators.constructPreHashKeyVector([this.preHashVectorAP.read()], [buildKeyAVAP.read()], false);
-                codeGenResult.add(
-                        createMethodInvocationStm(
-                                getLocation(),
-                                createAmbiguousNameRef(getLocation(), "VectorisedHashOperators"),
-                                "constructPreHashKeyVector",
-                                new Java.Rvalue[]{
-                                        this.preHashVectorAP.read(),
-                                        buildKeyAVAP.read(),
-                                        new Java.BooleanLiteral(getLocation(), "false")
-                                }
-                        ));
-            } else {
-                // VectorisedHashOperators.constructPreHashKeyVectorSIMD([this.preHashVectorAP.read()], [buildKeyAVAP.read()], false);
-                codeGenResult.add(
-                        createMethodInvocationStm(
-                                getLocation(),
-                                createAmbiguousNameRef(getLocation(), "VectorisedHashOperators"),
-                                "constructPreHashKeyVectorSIMD",
-                                new Java.Rvalue[]{
-                                        this.preHashVectorAP.read(),
-                                        buildKeyAVAP.read(),
-                                        new Java.BooleanLiteral(getLocation(), "false")
-                                }
-                        ));
-            }
+            // VectorisedHashOperators.constructPreHashKeyVector[SIMD]([this.preHashVectorAP.read()], [buildKeyAVAP.read()], false);
+            codeGenResult.add(
+                    createMethodInvocationStm(
+                            getLocation(),
+                            createAmbiguousNameRef(getLocation(), "VectorisedHashOperators"),
+                            vectorisedHashMethodName,
+                            new Java.Rvalue[]{
+                                    this.preHashVectorAP.read(),
+                                    buildKeyAVAP.read(),
+                                    new Java.BooleanLiteral(getLocation(), "false")
+                            }
+                    ));
 
             // Setup the initialisation code for the recordCount variable
             recordCountInitialisation = createMethodInvocation(
@@ -1083,13 +1321,123 @@ public class JoinOperator extends CodeGenOperator<LogicalJoin> {
             );
 
             // Setup the code for obtaining the right_join_key variable value
-            // int right_join_key = [buildKeyAVAP.read()].get([currentRecordIndex.read()]);
-            rigthJoinKeyReadCode = createMethodInvocation(
+            // int right_join_key = [buildKeyAVAP.read()].get([recordIndexAP.read()]);
+            rightJoinKeyReadCode = createMethodInvocation(
                     getLocation(),
                     buildKeyAVAP.read(),
                     "get",
                     new Java.Rvalue[] {
-                            currentRecordIndexAP.read()
+                            recordIndexAP.read()
+                    }
+            );
+
+        } else if (buildKeyAPType == ARROW_INT_VECTOR_W_SELECTION_VECTOR) {
+            // We know that all other vectors on the probe side must be of some arrow vector type
+            // with a selection vector
+            ArrowVectorWithSelectionVectorAccessPath buildKeyAVWSVAP = ((ArrowVectorWithSelectionVectorAccessPath) buildKeyAP);
+
+            // VectorisedHashOperators.constructPreHashKeyVector[SIMD](
+            // [this.preHashVectorAP.read()], [buildKeyAVWSVAP.arrowVector], [buildKeyAVWSVAP.selectionVector], [buildKeyAVWSVAP.selectionVectorLength], false);
+            codeGenResult.add(
+                    createMethodInvocationStm(
+                            getLocation(),
+                            createAmbiguousNameRef(getLocation(), "VectorisedHashOperators"),
+                            vectorisedHashMethodName,
+                            new Java.Rvalue[]{
+                                    this.preHashVectorAP.read(),
+                                    buildKeyAVWSVAP.readArrowVector(),
+                                    buildKeyAVWSVAP.readSelectionVector(),
+                                    buildKeyAVWSVAP.readSelectionVectorLength(),
+                                    new Java.BooleanLiteral(getLocation(), "false")
+                            }
+                    ));
+
+            // Setup the initialisation code for the recordCount variable
+            recordCountInitialisation = buildKeyAVWSVAP.readSelectionVectorLength();
+
+            // Override the recordIndexVariable, which needs to iterate over the selection vector
+            recordIndexAP = new ScalarVariableAccessPath(
+                    cCtx.defineVariable("selected_record_index"), P_INT);
+            // Schedule this variable for creation/instantiation
+            recordIndexAPRelatedStatements = createLocalVariable(
+                    getLocation(),
+                    toJavaType(getLocation(), recordIndexAP.getType()),
+                    recordIndexAP.getVariableName(),
+                    createArrayElementAccessExpr(
+                            getLocation(),
+                            buildKeyAVWSVAP.readSelectionVector(),
+                            currentLoopIndexAP.read()
+                    )
+            );
+
+            // Setup the code for obtaining the right_join_key variable value
+            // int right_join_key = [buildKeyAVWSVAP.readArrowVector()].get([recordIndexAP.read()]);
+            rightJoinKeyReadCode = createMethodInvocation(
+                    getLocation(),
+                    buildKeyAVWSVAP.readArrowVector(),
+                    "get",
+                    new Java.Rvalue[] {
+                            recordIndexAP.read()
+                    }
+            );
+
+        } else if (buildKeyAPType == ARROW_INT_VECTOR_W_VALIDITY_MASK) {
+            // We know that all other vectors on the probe side must be of some arrow vector type
+            // with a validity mask
+            ArrowVectorWithValidityMaskAccessPath buildKeyAVWVMAP = ((ArrowVectorWithValidityMaskAccessPath) buildKeyAP);
+
+            // VectorisedHashOperators.constructPreHashKeyVector[SIMD](
+            // [this.preHashVectorAP.read()], [buildKeyAVWVMAP.arrowVector], [buildKeyAVWVMAP.validityMask], [buildKeyAVWVMAP.validityMaskLength], false);
+            codeGenResult.add(
+                    createMethodInvocationStm(
+                            getLocation(),
+                            createAmbiguousNameRef(getLocation(), "VectorisedHashOperators"),
+                            vectorisedHashMethodName,
+                            new Java.Rvalue[]{
+                                    this.preHashVectorAP.read(),
+                                    buildKeyAVWVMAP.readArrowVector(),
+                                    buildKeyAVWVMAP.readValidityMask(),
+                                    buildKeyAVWVMAP.readValidityMaskLength(),
+                                    new Java.BooleanLiteral(getLocation(), "false")
+                            }
+                    ));
+
+            // Setup the initialisation code for the recordCount variable
+            recordCountInitialisation = createMethodInvocation(
+                    getLocation(),
+                    buildKeyAVWVMAP.readArrowVector(),
+                    "getValueCount"
+            );
+
+            // Add code for skipping keys of invalid records
+            // if (!(validityMask[currentLoopIndex])) {
+            //     currentLoopIndex++;
+            //     continue;
+            // }
+            Java.Block incrementContinueBlock = new Java.Block(getLocation());
+            incrementContinueBlock.addStatement(postIncrementStm(getLocation(), recordIndexAP.write()));
+            incrementContinueBlock.addStatement(new Java.ContinueStatement(getLocation(), null));
+            recordIndexAPRelatedStatements = createIf(
+                    getLocation(),
+                    not(
+                            getLocation(),
+                            createArrayElementAccessExpr(
+                                    getLocation(),
+                                    buildKeyAVWVMAP.readValidityMask(),
+                                    recordIndexAP.read()
+                            )
+                    ),
+                    incrementContinueBlock
+            );
+
+            // Setup the code for obtaining the right_join_key variable value
+            // int right_join_key = [buildKeyAVWVMAP.readArrowVector()].get([recordIndexAP.read()]);
+            rightJoinKeyReadCode = createMethodInvocation(
+                    getLocation(),
+                    buildKeyAVWVMAP.readArrowVector(),
+                    "get",
+                    new Java.Rvalue[] {
+                            recordIndexAP.read()
                     }
             );
 
@@ -1098,54 +1446,33 @@ public class JoinOperator extends CodeGenOperator<LogicalJoin> {
             // without any validity mask/selection vector
             ArrayVectorAccessPath buildKeyAVAP = ((ArrayVectorAccessPath) buildKeyAP);
 
-            if (!this.useSIMDVec()) {
-                // VectorisedHashOperators.constructPreHashKeyVector(
-                //     [this.preHashVectorAP.read()],
-                //     [buildKeyAVAP.getVectorVariable().read()],
-                //     [buildKeyAVAP.getVectorLengthVariable().read(),
-                //     false]
-                // );
-                codeGenResult.add(
-                        createMethodInvocationStm(
-                                getLocation(),
-                                createAmbiguousNameRef(getLocation(), "VectorisedHashOperators"),
-                                "constructPreHashKeyVector",
-                                new Java.Rvalue[]{
-                                        this.preHashVectorAP.read(),
-                                        buildKeyAVAP.getVectorVariable().read(),
-                                        buildKeyAVAP.getVectorLengthVariable().read(),
-                                        new Java.BooleanLiteral(getLocation(), "false")
-                                }
-                        ));
-            } else {
-                // VectorisedHashOperators.constructPreHashKeyVectorSIMD(
-                //     [this.preHashVectorAP.read()],
-                //     [buildKeyAVAP.getVectorVariable().read()],
-                //     [buildKeyAVAP.getVectorLengthVariable().read(),
-                //     false]
-                // );
-                codeGenResult.add(
-                        createMethodInvocationStm(
-                                getLocation(),
-                                createAmbiguousNameRef(getLocation(), "VectorisedHashOperators"),
-                                "constructPreHashKeyVectorSIMD",
-                                new Java.Rvalue[]{
-                                        this.preHashVectorAP.read(),
-                                        buildKeyAVAP.getVectorVariable().read(),
-                                        buildKeyAVAP.getVectorLengthVariable().read(),
-                                        new Java.BooleanLiteral(getLocation(), "false")
-                                }
-                        ));
-            }
+            // VectorisedHashOperators.constructPreHashKeyVector[SIMD](
+            //     [this.preHashVectorAP.read()],
+            //     [buildKeyAVAP.getVectorVariable().read()],
+            //     [buildKeyAVAP.getVectorLengthVariable().read(),
+            //     false]
+            // );
+            codeGenResult.add(
+                    createMethodInvocationStm(
+                            getLocation(),
+                            createAmbiguousNameRef(getLocation(), "VectorisedHashOperators"),
+                            vectorisedHashMethodName,
+                            new Java.Rvalue[]{
+                                    this.preHashVectorAP.read(),
+                                    buildKeyAVAP.getVectorVariable().read(),
+                                    buildKeyAVAP.getVectorLengthVariable().read(),
+                                    new Java.BooleanLiteral(getLocation(), "false")
+                            }
+                    ));
 
             // Setup the initialisation code for the record count variable
             recordCountInitialisation = buildKeyAVAP.getVectorLengthVariable().read();
 
-            // int right_join_key = [buildKeyAVAP.getVectorVariable().read()][currentRecordIndexAP.read()];
-            rigthJoinKeyReadCode =  createArrayElementAccessExpr(
+            // int right_join_key = [buildKeyAVAP.getVectorVariable().read()][recordIndexAP.read()];
+            rightJoinKeyReadCode =  createArrayElementAccessExpr(
                     getLocation(),
                     buildKeyAVAP.getVectorVariable().read(),
-                    currentRecordIndexAP.read()
+                    recordIndexAP.read()
             );
 
         } else {
@@ -1170,12 +1497,12 @@ public class JoinOperator extends CodeGenOperator<LogicalJoin> {
         );
 
         // Add the actual currentRecordIndex variable
-        // int currentRecordIndex = 0;
+        // int currentLoopIndex = 0;
         codeGenResult.add(
                 createPrimitiveLocalVar(
                         getLocation(),
                         Java.Primitive.INT,
-                        currentRecordIndexAP.getVariableName(),
+                        currentLoopIndexAP.getVariableName(),
                         "0"
                 )
         );
@@ -1185,7 +1512,7 @@ public class JoinOperator extends CodeGenOperator<LogicalJoin> {
         codeGenResult.add(
                 createWhileLoop(
                         getLocation(),
-                        lt(getLocation(), currentRecordIndexAP.read(), recordCountAP.read()),
+                        lt(getLocation(), currentLoopIndexAP.read(), recordCountAP.read()),
                         whileLoopBody
                 )
         );
@@ -1207,15 +1534,20 @@ public class JoinOperator extends CodeGenOperator<LogicalJoin> {
         );
 
         // Add the inner loop which will insert as many records as possible into the result vector
-        // while (currentRecordIndex < recordCount) { [resultVectorConstructionLoop] }
+        // while (currentLoopIndex < recordCount) { [resultVectorConstructionLoop] }
         Java.Block resultVectorConstructionLoop = new Java.Block(getLocation());
         whileLoopBody.addStatement(
                 createWhileLoop(
                         getLocation(),
-                        lt(getLocation(), currentRecordIndexAP.read(), recordCountAP.read()),
+                        lt(getLocation(), currentLoopIndexAP.read(), recordCountAP.read()),
                         resultVectorConstructionLoop
                 )
         );
+
+        // Add recordIndexAP related code if required
+        if (recordIndexAPRelatedStatements != null) {
+            resultVectorConstructionLoop.addStatement(recordIndexAPRelatedStatements);
+        }
 
         // int right_join_key = [AccessPathSpecificCode];
         ScalarVariableAccessPath rightJoinKeyAP =
@@ -1225,11 +1557,11 @@ public class JoinOperator extends CodeGenOperator<LogicalJoin> {
                         getLocation(),
                         toJavaType(getLocation(), rightJoinKeyAP.getType()),
                         rightJoinKeyAP.getVariableName(),
-                        rigthJoinKeyReadCode
+                        rightJoinKeyReadCode
                 )
         );
 
-        // long right_join_key_pre_hash = [this.preHashVectorAP.read()][[currentRecordIndex.read()]];
+        // long right_join_key_pre_hash = [this.preHashVectorAP.read()][[recordIndexAP.read()]];
         ScalarVariableAccessPath rightJoinKeyPreHashAP = new ScalarVariableAccessPath(
                 cCtx.defineVariable(rightJoinKeyAP.getVariableName() + "_pre_hash"),
                 P_LONG
@@ -1242,7 +1574,7 @@ public class JoinOperator extends CodeGenOperator<LogicalJoin> {
                         createArrayElementAccessExpr(
                                 getLocation(),
                                 this.preHashVectorAP.read(),
-                                currentRecordIndexAP.read()
+                                recordIndexAP.read()
                         )
                 )
         );
@@ -1271,12 +1603,12 @@ public class JoinOperator extends CodeGenOperator<LogicalJoin> {
         // Use the index to check if the left side of the join contains records for the given key
         // otherwise continue
         // if ([records_to_join_index] == -1) {
-        //     currentRecordIndex++;
+        //     currentLoopIndex++;
         //     continue;
         // }
         Java.Block incrementAndContinueBlock = new Java.Block(getLocation());
         incrementAndContinueBlock.addStatement(
-                postIncrementStm(getLocation(), currentRecordIndexAP.write()));
+                postIncrementStm(getLocation(), currentLoopIndexAP.write()));
         incrementAndContinueBlock.addStatement(new Java.ContinueStatement(getLocation(), null));
 
         resultVectorConstructionLoop.addStatement(
@@ -1348,14 +1680,44 @@ public class JoinOperator extends CodeGenOperator<LogicalJoin> {
                             getLocation(),
                             avap.read(),
                             "get",
-                            new Java.Rvalue[] { currentRecordIndexAP.read() }
+                            new Java.Rvalue[] { recordIndexAP.read() }
+                    );
+
+                } else if (rightJoinColumnAP instanceof ArrowVectorWithSelectionVectorAccessPath avwsvap) {
+                    rightJoinColumnRValue = createMethodInvocation(
+                            getLocation(),
+                            avwsvap.readArrowVector(),
+                            "get",
+                            new Java.Rvalue[] { recordIndexAP.read() }
+                    );
+
+                } else if (rightJoinColumnAP instanceof ArrowVectorWithValidityMaskAccessPath avwvmap) {
+                    rightJoinColumnRValue = createMethodInvocation(
+                            getLocation(),
+                            avwvmap.readArrowVector(),
+                            "get",
+                            new Java.Rvalue[] { recordIndexAP.read() }
                     );
 
                 } else if (rightJoinColumnAP instanceof ArrayVectorAccessPath avap) {
                     rightJoinColumnRValue = createArrayElementAccessExpr(
                             getLocation(),
                             avap.getVectorVariable().read(),
-                            currentRecordIndexAP.read()
+                            recordIndexAP.read()
+                    );
+
+                } else if (rightJoinColumnAP instanceof ArrayVectorWithSelectionVectorAccessPath avwsvap) {
+                    rightJoinColumnRValue = createArrayElementAccessExpr(
+                            getLocation(),
+                            avwsvap.getArrayVectorVariable().getVectorVariable().read(),
+                            recordIndexAP.read()
+                    );
+
+                } else if (rightJoinColumnAP instanceof ArrayVectorWithValidityMaskAccessPath avwvmap) {
+                    rightJoinColumnRValue = createArrayElementAccessExpr(
+                            getLocation(),
+                            avwvmap.getArrayVectorVariable().getVectorVariable().read(),
+                            recordIndexAP.read()
                     );
 
                 } else {
@@ -1447,9 +1809,9 @@ public class JoinOperator extends CodeGenOperator<LogicalJoin> {
         // End of the join-loop
 
         // Finally, move to the next record
-        // currentRecordIndex++;
+        // currentLoopIndex++;
         resultVectorConstructionLoop.addStatement(
-                postIncrementStm(getLocation(), currentRecordIndexAP.write()));
+                postIncrementStm(getLocation(), currentLoopIndexAP.write()));
 
         // End of the inner result vector construction loop
         // Set-up the correct ordinal mapping
@@ -1483,8 +1845,7 @@ public class JoinOperator extends CodeGenOperator<LogicalJoin> {
             this.consumeInProbePhase = true;
 
             // Then introduce the class to store records of the left-child in the hash-table
-            RexCall joinCondition = (RexCall) this.getLogicalSubplan().getCondition();
-            int leftBuildKey = ((RexInputRef) joinCondition.getOperands().get(0)).getIndex();
+            int leftBuildKey = ((RexInputRef) this.joinCondition.getOperands().get(0)).getIndex();
             this.joinMapGenerator = joinMapGeneratorForRelation(
                     cCtx.getCurrentOrdinalMapping(),
                     leftBuildKey

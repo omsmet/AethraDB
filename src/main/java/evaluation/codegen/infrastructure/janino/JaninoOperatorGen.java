@@ -4,6 +4,9 @@ import org.codehaus.commons.compiler.CompileException;
 import org.codehaus.commons.compiler.Location;
 import org.codehaus.janino.Java;
 
+import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createAmbiguousNameRef;
+import static evaluation.codegen.infrastructure.janino.JaninoMethodGen.createMethodInvocation;
+
 /**
  * Class containing helper methods for generating operator-related code with Janino.
  */
@@ -156,7 +159,20 @@ public class JaninoOperatorGen {
      * @param rhs The right-hand side of the comparison.
      * @return The comparison operator.
      */
-    public static Java.BinaryOperation eq(Location location, Java.Rvalue lhs, Java.Rvalue rhs) {
+    public static Java.Rvalue eq(Location location, Java.Rvalue lhs, Java.Rvalue rhs) {
+        // Need to handle some types with more care
+        if (lhs instanceof Java.NewInitializedArray || rhs instanceof Java.NewInitializedArray) {
+            return createMethodInvocation(
+                    location,
+                    createAmbiguousNameRef(location, "Arrays"),
+                    "equals",
+                    new Java.Rvalue[] {
+                            lhs,
+                            rhs
+                    }
+            );
+        }
+
         return new Java.BinaryOperation(location, lhs, "==", rhs);
     }
 

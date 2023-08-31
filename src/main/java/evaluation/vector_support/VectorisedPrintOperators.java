@@ -1,6 +1,19 @@
 package evaluation.vector_support;
 
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
+
 public class VectorisedPrintOperators extends VectorisedOperators {
+
+    /**
+     * {@link DateTimeFormatter} used for printing date columns.
+     */
+    private static final DateTimeFormatter dateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+
+    /**
+     * {@link LocalDate} representing the first UNIX day, used for printing date columns.
+     */
+    private static final LocalDate day_zero = LocalDate.parse("1970-01-01", dateTimeFormatter);
 
     /**
      * Primitive for printing a {@link org.apache.arrow.vector.IntVector} to the standard output.
@@ -101,6 +114,19 @@ public class VectorisedPrintOperators extends VectorisedOperators {
         for (int i = 0; i < lastVectorIndex; i++)
             System.out.print(vector[i] + ", ");
         System.out.println(vector[lastVectorIndex] + "]");
+    }
+
+    /**
+     * Primitive for printing a primitive array representing a vector of dates to the standard output.
+     * @param vector The vector to output.
+     * @param vectorLength The length of the valid portion of {@code vector} to print.
+     */
+    public static void printDate(int[] vector, int vectorLength) {
+        System.out.print("[");
+        int lastVectorIndex = vectorLength - 1;
+        for (int i = 0; i < lastVectorIndex; i++)
+            System.out.print(day_zero.plusDays(vector[i]) + ", ");
+        System.out.println(day_zero.plusDays(vector[lastVectorIndex]) + "]");
     }
 
     /**

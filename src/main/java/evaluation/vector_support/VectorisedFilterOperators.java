@@ -7,6 +7,7 @@ import org.apache.arrow.vector.IntVector;
 
 import java.lang.foreign.MemorySegment;
 import java.nio.ByteOrder;
+import java.util.Arrays;
 
 /**
  * Class containing vectorised primitives for filter operations.
@@ -1189,5 +1190,33 @@ public class VectorisedFilterOperators extends VectorisedOperators {
     }
 
     /* --------------------------------------------------------------------------------------------------- */
+
+    public static int eq(org.apache.arrow.vector.FixedSizeBinaryVector vector, byte[] condition, int[] selectionVector) {
+        assert vector.getByteWidth() == condition.length;
+        int selectionVectorIndex = 0;
+
+        for (int i = 0; i < vector.getValueCount(); i++) {
+            if (Arrays.equals(vector.get(i), condition))
+                selectionVector[selectionVectorIndex++] = i;
+        }
+
+        return selectionVectorIndex;
+    }
+
+    public static int eq(org.apache.arrow.vector.FixedSizeBinaryVector vector, byte[] condition, boolean[] validityMask) {
+        assert vector.getByteWidth() == condition.length;
+        int vectorLength = vector.getValueCount();
+
+        for (int i = 0; i < vectorLength; i++) {
+            validityMask[i] = Arrays.equals(vector.get(i), condition);
+        }
+
+        return vectorLength;
+    }
+
+    public static int eqSIMD(org.apache.arrow.vector.FixedSizeBinaryVector vector, byte[] condition, boolean[] validityMask) {
+        // TODO: not manually SIMDed for now, since we assume the compiler already SIMDs the Arrays.equals call based on the source code
+        return eq(vector, condition, validityMask);
+    }
 
 }

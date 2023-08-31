@@ -12,8 +12,8 @@ import evaluation.codegen.infrastructure.context.access_path.SIMDMemorySegmentAc
 import evaluation.codegen.infrastructure.context.access_path.SIMDVectorMaskAccessPath;
 import evaluation.codegen.infrastructure.context.access_path.SIMDVectorSpeciesAccessPath;
 import evaluation.codegen.infrastructure.context.access_path.ScalarVariableAccessPath;
-import evaluation.codegen.infrastructure.data.ArrowTableReader;
 import evaluation.codegen.infrastructure.data.ABQArrowTableReader;
+import evaluation.codegen.infrastructure.data.ArrowTableReader;
 import evaluation.codegen.infrastructure.janino.JaninoOperatorGen;
 import org.apache.calcite.prepare.RelOptTableImpl;
 import org.apache.calcite.rel.type.RelDataTypeField;

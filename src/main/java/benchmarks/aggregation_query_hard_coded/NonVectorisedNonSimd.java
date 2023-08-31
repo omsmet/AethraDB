@@ -2,8 +2,8 @@ package benchmarks.aggregation_query_hard_coded;
 
 import benchmarks.aggregation_query.ResultVerifier;
 import benchmarks.aggregation_query_hard_coded.NonVectorisedNonSimdSupport.KeyValueMap_2022012779;
-import evaluation.codegen.infrastructure.data.ArrowTableReader;
 import evaluation.codegen.infrastructure.data.ABQArrowTableReader;
+import evaluation.codegen.infrastructure.data.ArrowTableReader;
 import evaluation.general_support.hashmaps.Int_Hash_Function;
 import org.apache.arrow.memory.RootAllocator;
 import org.openjdk.jmh.annotations.Benchmark;

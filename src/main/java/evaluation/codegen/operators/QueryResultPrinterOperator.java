@@ -21,6 +21,7 @@ import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createAm
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createReferenceType;
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createStringLiteral;
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.getLocation;
+import static evaluation.codegen.infrastructure.janino.JaninoMethodGen.createMethodInvocation;
 import static evaluation.codegen.infrastructure.janino.JaninoMethodGen.createMethodInvocationStm;
 import static evaluation.codegen.infrastructure.janino.JaninoOperatorGen.plus;
 
@@ -36,6 +37,16 @@ public class QueryResultPrinterOperator extends CodeGenOperator<RelNode> {
     private final CodeGenOperator<?> child;
 
     /**
+     * Boolean keeping track of whether standard date definitions have already been added to the code.
+     */
+    private boolean dateDefinitionsPresent;
+
+    /**
+     * The name of the day_zero variable if {@code this.dateDefinitionsPresent == true}.
+     */
+    private String dayZeroName;
+
+    /**
      * Create an {@link QueryResultPrinterOperator} instance for a specific query.
      * @param logicalSubplan The logical plan of the query for which the operator is created.
      * @param child The {@link CodeGenOperator} producing the actual query result.
@@ -44,6 +55,7 @@ public class QueryResultPrinterOperator extends CodeGenOperator<RelNode> {
         super(logicalSubplan, false);
         this.child = child;
         this.child.setParent(this);
+        this.dateDefinitionsPresent = false;
     }
 
     @Override
@@ -84,11 +96,33 @@ public class QueryResultPrinterOperator extends CodeGenOperator<RelNode> {
 
             // Convert fixed length strings
             QueryVariableType ordinalType = cCtx.getCurrentOrdinalMapping().get(i).getType();
-            if (ordinalType == QueryVariableType.S_FL_BIN)
+            if (ordinalType == QueryVariableType.S_FL_BIN) {
                 printValue = createClassInstance(
                         getLocation(),
                         createReferenceType(getLocation(), "java.lang.String"),
                         new Java.Rvalue[] { printValue });
+
+            } else if (ordinalType == QueryVariableType.P_INT_DATE) {
+                addDateDefinitions(cCtx);
+                printValue = createMethodInvocation(
+                        getLocation(),
+                        createAmbiguousNameRef(getLocation(), this.dayZeroName),
+                        "plusDays",
+                        new Java.Rvalue[] { printValue }
+                );
+
+            } else if (ordinalType == QueryVariableType.P_DOUBLE) {
+                printValue = createMethodInvocation(
+                        getLocation(),
+                        createAmbiguousNameRef(getLocation(), "String"),
+                        "format",
+                        new Java.Rvalue[] {
+                                createStringLiteral(getLocation(), "\"%.2f\""),
+                                printValue
+                        }
+                );
+
+            }
 
             if (!lastElement)
                 printValue = plus(
@@ -129,12 +163,20 @@ public class QueryResultPrinterOperator extends CodeGenOperator<RelNode> {
 
             // Differentiate by type of result
             AccessPath ordinalAccessPath = currentOrdinalMapping.get(i);
+            QueryVariableType ordinalType = ordinalAccessPath.getType();
+            boolean isDate =
+                       ordinalType == QueryVariableType.ARROW_DATE_VECTOR
+                    || ordinalType == QueryVariableType.ARRAY_INT_DATE_VECTOR
+                    || ordinalType == QueryVariableType.ARROW_DATE_VECTOR_W_SELECTION_VECTOR
+                    || ordinalType == QueryVariableType.ARROW_DATE_VECTOR_W_VALIDITY_MASK;
+            String vectorisedPrintOperatorsMethodName = isDate ? "printDate" : "print";
+
             if (ordinalAccessPath instanceof ArrowVectorAccessPath avap) {
                 codegenResult.add(
                         createMethodInvocationStm(
                                 getLocation(),
                                 createAmbiguousNameRef(getLocation(), "VectorisedPrintOperators"),
-                                "print",
+                                vectorisedPrintOperatorsMethodName,
                                 new Java.Rvalue[] {
                                         avap.read()
                                 }
@@ -146,7 +188,7 @@ public class QueryResultPrinterOperator extends CodeGenOperator<RelNode> {
                         createMethodInvocationStm(
                                 getLocation(),
                                 createAmbiguousNameRef(getLocation(), "VectorisedPrintOperators"),
-                                "print",
+                                vectorisedPrintOperatorsMethodName,
                                 new Java.Rvalue[] {
                                         avwsvap.readArrowVector(),
                                         avwsvap.readSelectionVector(),
@@ -160,7 +202,7 @@ public class QueryResultPrinterOperator extends CodeGenOperator<RelNode> {
                         createMethodInvocationStm(
                                 getLocation(),
                                 createAmbiguousNameRef(getLocation(), "VectorisedPrintOperators"),
-                                "print",
+                                vectorisedPrintOperatorsMethodName,
                                 new Java.Rvalue[] {
                                         avwvmap.readArrowVector(),
                                         avwvmap.readValidityMask(),
@@ -174,7 +216,7 @@ public class QueryResultPrinterOperator extends CodeGenOperator<RelNode> {
                         createMethodInvocationStm(
                                 getLocation(),
                                 createAmbiguousNameRef(getLocation(), "VectorisedPrintOperators"),
-                                "print",
+                                vectorisedPrintOperatorsMethodName,
                                 new Java.Rvalue[]{
                                         avap.getVectorVariable().read(),
                                         avap.getVectorLengthVariable().read()
@@ -209,5 +251,40 @@ public class QueryResultPrinterOperator extends CodeGenOperator<RelNode> {
         }
 
         return codegenResult;
+    }
+
+    private void addDateDefinitions(CodeGenContext cCtx) {
+        if (dateDefinitionsPresent)
+            return;
+
+        String dtfName = cCtx.defineQueryGlobalVariable(
+                "dateTimeFormatter",
+                createReferenceType(getLocation(), "java.time.format.DateTimeFormatter"),
+                createMethodInvocation(
+                        getLocation(),
+                        createAmbiguousNameRef(getLocation(), "java.time.format.DateTimeFormatter"),
+                        "ofPattern",
+                        new Java.Rvalue[] {
+                                createStringLiteral(getLocation(), "\"yyyy-MM-dd\"")
+                        }
+                ),
+                false
+        );
+
+        this.dayZeroName = cCtx.defineQueryGlobalVariable(
+                "day_zero",
+                createReferenceType(getLocation(), "java.time.LocalDate"),
+                createMethodInvocation(
+                        getLocation(),
+                        createAmbiguousNameRef(getLocation(), "java.time.LocalDate"),
+                        "parse",
+                        new Java.Rvalue[] {
+                                createStringLiteral(getLocation(), "\"1970-01-01\""),
+                                createAmbiguousNameRef(getLocation(), dtfName)
+                        }
+                ),
+                false
+        );
+
     }
 }

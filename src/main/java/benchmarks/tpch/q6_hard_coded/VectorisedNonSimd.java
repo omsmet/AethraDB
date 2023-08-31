@@ -1,6 +1,5 @@
 package benchmarks.tpch.q6_hard_coded;
 
-import benchmarks.tpch.q1_no_sort_hard_coded.AggregationMap;
 import evaluation.codegen.infrastructure.data.ABQArrowTableReader;
 import evaluation.codegen.infrastructure.data.AllocationManager;
 import evaluation.codegen.infrastructure.data.ArrowTableReader;

@@ -11,13 +11,17 @@ import evaluation.codegen.infrastructure.context.access_path.ScalarVariableAcces
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rex.RexLiteral;
 import org.apache.calcite.sql.type.BasicSqlType;
+import org.apache.calcite.util.NlsString;
 import org.codehaus.janino.Java;
 
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.Objects;
 
 import static evaluation.codegen.infrastructure.context.QueryVariableTypeMethods.toJavaType;
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createFloatingPointLiteral;
+import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createInitialisedByteArray;
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createIntegerLiteral;
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.getLocation;
 import static evaluation.codegen.infrastructure.janino.JaninoVariableGen.createLocalVariable;
@@ -256,6 +260,12 @@ public abstract class CodeGenOperator<T extends RelNode> {
             case FLOAT -> createFloatingPointLiteral(getLocation(), literal.getValueAs(Float.class).toString());
             case INTEGER -> createIntegerLiteral(getLocation(), literal.getValueAs(Integer.class).toString());
             case DECIMAL -> createFloatingPointLiteral(getLocation(), literal.getValueAs(BigDecimal.class).doubleValue());
+            case CHAR -> {
+                String value = Objects.requireNonNull(literal.getValueAs(NlsString.class)).getValue();
+                byte[] valueBytes = new byte[literalType.getPrecision()];
+                System.arraycopy(value.getBytes(StandardCharsets.US_ASCII), 0, valueBytes, 0, value.length());
+                yield createInitialisedByteArray(getLocation(), valueBytes);
+            }
             default -> throw new UnsupportedOperationException(
                     "FilterOperator.codeGenOperandNonVec does not support his literal type");
         };

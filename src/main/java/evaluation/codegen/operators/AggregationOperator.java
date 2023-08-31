@@ -559,7 +559,7 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
                 for (int i = 0; i < keyColumnRValues.length; i++) {
 
                     Java.AmbiguousName hashFunctionContainer = switch (this.groupByKeyColumnsTypes[i]) {
-                        case P_INT -> createAmbiguousNameRef(getLocation(), "Int_Hash_Function");
+                        case P_INT, P_INT_DATE -> createAmbiguousNameRef(getLocation(), "Int_Hash_Function");
                         case S_FL_BIN -> createAmbiguousNameRef(getLocation(), "Char_Arr_Hash_Function");
 
                         default -> throw new UnsupportedOperationException("AggregationOperator.consumeNonVec does not support this group-by key type");
@@ -774,7 +774,7 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
                         (currentKeyPrimitiveType == S_FL_BIN) ? S_A_FL_BIN : primitiveArrayTypeForPrimitive(currentKeyPrimitiveType));
 
                 String initMethodName = switch (currentKeyPrimitiveType) {
-                    case P_INT -> "getIntVector";
+                    case P_INT, P_INT_DATE -> "getIntVector";
                     case S_FL_BIN -> "getNestedByteVector";
 
                     default -> throw new UnsupportedOperationException("AggregationOperator.produceVec does not support key type " + currentKeyPrimitiveType);
@@ -1163,11 +1163,19 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
                 if (this.useSIMDVec())
                     methodInvocationName += "SIMD";
 
+                // The number of arguments depends on the current vector type
+                boolean arrayVector = keyColumnsAccessPaths[i] instanceof ArrayVectorAccessPath
+                        || keyColumnsAccessPaths[i] instanceof ArrayVectorWithSelectionVectorAccessPath
+                        || keyColumnsAccessPaths[i] instanceof ArrayVectorWithValidityMaskAccessPath;
+
                 // Determine the arguments
-                Java.Rvalue[] methodInvocationArguments = new Java.Rvalue[3 + (accountForFiltering ? 2 : 0)];
+                int numberOfArguments = 3 + (arrayVector ? 1 : 0) + (accountForFiltering ? 2 : 0);
+                Java.Rvalue[] methodInvocationArguments = new Java.Rvalue[numberOfArguments];
                 int currentMethodInvocationArgumentIndex = 0;
                 methodInvocationArguments[currentMethodInvocationArgumentIndex++] = this.groupKeyPreHashVector.read();
                 methodInvocationArguments[currentMethodInvocationArgumentIndex++] = switch (keyColumnsAccessPathTypes[i]) {
+                    case ARRAY_INT_VECTOR, ARRAY_INT_DATE_VECTOR
+                            -> ((ArrayVectorAccessPath) keyColumnsAccessPaths[i]).getVectorVariable().read();
                     case ARROW_FIXED_LENGTH_BINARY_VECTOR, ARROW_INT_VECTOR
                             -> ((ArrowVectorAccessPath) keyColumnsAccessPaths[i]).read();
                     case ARROW_FIXED_LENGTH_BINARY_VECTOR_W_SELECTION_VECTOR, ARROW_INT_VECTOR_W_SELECTION_VECTOR
@@ -1177,6 +1185,18 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
 
                     default -> throw new UnsupportedOperationException("AggregationOperator.consumeVec does not support this key column access path type");
                 };
+
+                // Check if we need to add a length parameter
+                if (arrayVector) {
+                    methodInvocationArguments[currentMethodInvocationArgumentIndex++] = switch (keyColumnsAccessPathTypes[i]) {
+                        case ARRAY_INT_VECTOR, ARRAY_INT_DATE_VECTOR
+                                -> ((ArrayVectorAccessPath) keyColumnsAccessPaths[i]).getVectorLengthVariable().read();
+
+                        default -> throw new UnsupportedOperationException("AggregationOperator.consumeVec does not support this key column access path type");
+                    };
+                }
+
+                // Check if we need to add filtering arguments
                 if (accountForFiltering) {
                     methodInvocationArguments[currentMethodInvocationArgumentIndex++] = switch (keyColumnsAccessPathTypes[i]) {
                         case ARROW_FIXED_LENGTH_BINARY_VECTOR_W_SELECTION_VECTOR, ARROW_INT_VECTOR_W_SELECTION_VECTOR

@@ -193,6 +193,27 @@ public class QueryCodePrinter {
             return "((" + cast.targetType.toString() + ") " + printRvalue(cast.value) + ')';
         } else if (rValue instanceof Java.ConditionalExpression cExp) {
             return "(" + cExp.lhs + ") ? " + cExp.mhs + " : " + cExp.rhs;
+        } else if (rValue instanceof Java.MethodInvocation mi) {
+            String miLine = mi.target + "." + mi.methodName + "(";
+            for (int argumentIndex = 0; argumentIndex < mi.arguments.length; argumentIndex++) {
+                miLine += printRvalue(mi.arguments[argumentIndex]);
+                if (argumentIndex != mi.arguments.length - 1)
+                    miLine += ", ";
+            }
+            miLine += ")";
+            return miLine;
+        } else if (rValue instanceof Java.NewInitializedArray nia) {
+            String niaLine = "new " + nia.arrayType.toString() + " { ";
+            for (int i = 0; i < nia.arrayInitializer.values.length; i++) {
+                niaLine += printInitializerOrRvalue(nia.arrayInitializer.values[i]);
+                if (i != nia.arrayInitializer.values.length - 1)
+                    niaLine += ", ";
+            }
+            niaLine += " }";
+            return niaLine;
+        } else if (rValue instanceof Java.SimpleConstant sc) {
+            String defaultString = sc.toString();
+            return defaultString.substring(1, defaultString.length() - 1);
         } else {
             return rValue.toString();
         }

@@ -34,6 +34,7 @@ import static evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_
 import static evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_DOUBLE_VECTOR;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_DOUBLE_VECTOR_W_SELECTION_VECTOR;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_DOUBLE_VECTOR_W_VALIDITY_MASK;
+import static evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_FIXED_LENGTH_BINARY_VECTOR;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_INT_VECTOR;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_INT_VECTOR_W_SELECTION_VECTOR;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_INT_VECTOR_W_VALIDITY_MASK;
@@ -42,6 +43,7 @@ import static evaluation.codegen.infrastructure.context.QueryVariableType.P_A_IN
 import static evaluation.codegen.infrastructure.context.QueryVariableType.P_DOUBLE;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.P_INT;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.P_INT_DATE;
+import static evaluation.codegen.infrastructure.context.QueryVariableType.S_FL_BIN;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.VECTOR_INT_MASKED;
 import static evaluation.codegen.infrastructure.context.QueryVariableTypeMethods.arrowVectorWithSelectionVectorType;
 import static evaluation.codegen.infrastructure.context.QueryVariableTypeMethods.arrowVectorWithValidityMaskType;
@@ -52,6 +54,7 @@ import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createIn
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createPrimitiveArrayType;
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.getLocation;
 import static evaluation.codegen.infrastructure.janino.JaninoMethodGen.createMethodInvocation;
+import static evaluation.codegen.infrastructure.janino.JaninoOperatorGen.eq;
 import static evaluation.codegen.infrastructure.janino.JaninoOperatorGen.ge;
 import static evaluation.codegen.infrastructure.janino.JaninoOperatorGen.gt;
 import static evaluation.codegen.infrastructure.janino.JaninoOperatorGen.le;
@@ -133,7 +136,7 @@ public class FilterOperator extends CodeGenOperator<LogicalFilter> {
         // Forward the generation obligation to the correct method based on the operator type.
         return switch (castFilterOperator.getKind()) {
             case AND -> consumeNonVecAndOperator(cCtx, oCtx, castFilterOperator, callParentConsumeOnMatch);
-            case GREATER_THAN, GREATER_THAN_OR_EQUAL, LESS_THAN, LESS_THAN_OR_EQUAL ->
+            case EQUALS, GREATER_THAN, GREATER_THAN_OR_EQUAL, LESS_THAN, LESS_THAN_OR_EQUAL ->
                     consumeNonVecComparisonOperator(cCtx, oCtx, castFilterOperator, callParentConsumeOnMatch);
             default -> throw new UnsupportedOperationException(
                     "FilterOperator.consumeNonVecOperator does not support this operator type");
@@ -196,7 +199,8 @@ public class FilterOperator extends CodeGenOperator<LogicalFilter> {
 
         // Obtain the operator
         SqlKind comparisonOp = filterOperator.getOperator().getKind();
-        if (comparisonOp != SqlKind.GREATER_THAN
+        if (comparisonOp != SqlKind.EQUALS
+                && comparisonOp != SqlKind.GREATER_THAN
                 && comparisonOp != SqlKind.GREATER_THAN_OR_EQUAL
                 && comparisonOp != SqlKind.LESS_THAN
                 && comparisonOp != SqlKind.LESS_THAN_OR_EQUAL)
@@ -320,6 +324,7 @@ public class FilterOperator extends CodeGenOperator<LogicalFilter> {
                     createIfNotContinue(
                             getLocation(),
                             switch (comparisonOp) {
+                                case EQUALS -> eq(getLocation(), lhsRvalue, rhsRvalue);
                                 case GREATER_THAN -> gt(getLocation(), lhsRvalue, rhsRvalue);
                                 case GREATER_THAN_OR_EQUAL -> ge(getLocation(), lhsRvalue, rhsRvalue);
                                 case LESS_THAN -> lt(getLocation(), lhsRvalue, rhsRvalue);
@@ -413,7 +418,7 @@ public class FilterOperator extends CodeGenOperator<LogicalFilter> {
         // Forward the generation obligation to the correct method based on the operator type.
         return switch (castFilterOperator.getKind()) {
             case AND -> consumeVecAndOperator(cCtx, oCtx, castFilterOperator, callParentConsumeOnMatch);
-            case GREATER_THAN, GREATER_THAN_OR_EQUAL, LESS_THAN, LESS_THAN_OR_EQUAL ->
+            case EQUALS, GREATER_THAN, GREATER_THAN_OR_EQUAL, LESS_THAN, LESS_THAN_OR_EQUAL ->
                     consumeVecComparisonOperator(cCtx, oCtx, castFilterOperator, callParentConsumeOnMatch);
             default -> throw new UnsupportedOperationException(
                     "FilterOperator.consumeVecOperator does not support this operator type");
@@ -476,6 +481,7 @@ public class FilterOperator extends CodeGenOperator<LogicalFilter> {
 
         // Obtain the operator method name
         String operatorName = switch (filterOperator.getOperator().getKind()) {
+            case EQUALS -> "eq";
             case GREATER_THAN -> "gt";
             case GREATER_THAN_OR_EQUAL -> "ge";
             case LESS_THAN -> "lt";
@@ -511,22 +517,34 @@ public class FilterOperator extends CodeGenOperator<LogicalFilter> {
             rhsScalar = rexLiteralToRvalue(rhsLit);
             rhsScalarType = P_DOUBLE;
 
+        } else if (rhs instanceof RexLiteral rhsLit && rhs.getType().getSqlTypeName() == SqlTypeName.CHAR) {
+            rhsScalar = rexLiteralToRvalue(rhsLit);
+            rhsScalarType = S_FL_BIN;
+
         } else throw new UnsupportedOperationException("FilterOperator.consumeVecComparisonOperator does not support this right-hand operator");
 
         // Currently the filter operator only supports the below types, check this condition
         if (
-                (  lhsAP.getType() != ARROW_INT_VECTOR
-                && lhsAP.getType() != ARROW_INT_VECTOR_W_SELECTION_VECTOR
-                && lhsAP.getType() != ARROW_INT_VECTOR_W_VALIDITY_MASK
-                && lhsAP.getType() != ARROW_DATE_VECTOR
+                (
+                   lhsAP.getType() != ARROW_DATE_VECTOR
                 && lhsAP.getType() != ARROW_DATE_VECTOR_W_SELECTION_VECTOR
                 && lhsAP.getType() != ARROW_DATE_VECTOR_W_VALIDITY_MASK
                 && lhsAP.getType() != ARROW_DOUBLE_VECTOR
                 && lhsAP.getType() != ARROW_DOUBLE_VECTOR_W_SELECTION_VECTOR
                 && lhsAP.getType() != ARROW_DOUBLE_VECTOR_W_VALIDITY_MASK
+                && lhsAP.getType() != ARROW_FIXED_LENGTH_BINARY_VECTOR
+                && lhsAP.getType() != ARROW_INT_VECTOR
+                && lhsAP.getType() != ARROW_INT_VECTOR_W_SELECTION_VECTOR
+                && lhsAP.getType() != ARROW_INT_VECTOR_W_VALIDITY_MASK
                 )
                 ||
-                (rhsScalarType != P_INT && rhsScalarType != P_INT_DATE && rhsScalarType != P_DOUBLE)) {
+                (
+                   rhsScalarType != P_DOUBLE
+                && rhsScalarType != P_INT
+                && rhsScalarType != P_INT_DATE
+                && rhsScalarType != S_FL_BIN
+                )
+        ) {
             throw new UnsupportedOperationException(
                     "FilterOperator.consumeVecComparisonOperator does not supports this operand combination: "
                             + lhsAP.getType() + " - " + rhs.getType().toString());

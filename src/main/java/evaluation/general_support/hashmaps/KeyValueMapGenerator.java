@@ -390,7 +390,7 @@ public class KeyValueMapGenerator {
             );
 
             Java.Rvalue initialisationLiteral = switch (keyVarPrimType) {
-                case P_INT -> createIntegerLiteral(getLocation(), -1);
+                case P_INT, P_INT_DATE -> createIntegerLiteral(getLocation(), -1);
                 case S_FL_BIN -> new Java.NullLiteral(getLocation());
 
                 default -> throw new UnsupportedOperationException(
@@ -1105,7 +1105,7 @@ public class KeyValueMapGenerator {
             );
 
             Java.Rvalue initialisationLiteral = switch (keyPrimType) {
-                case P_INT -> createIntegerLiteral(getLocation(), -1);
+                case P_INT, P_INT_DATE -> createIntegerLiteral(getLocation(), -1);
                 case S_FL_BIN -> new Java.NullLiteral(getLocation());
 
                 default -> throw new UnsupportedOperationException(
@@ -1647,14 +1647,14 @@ public class KeyValueMapGenerator {
             Java.MethodInvocation hashMethodInvocation = createMethodInvocation(
                     getLocation(),
                     switch (this.keyTypes[i]) {
-                        case P_INT -> createAmbiguousNameRef(getLocation(), "Int_Hash_Function");
+                        case P_INT, P_INT_DATE -> createAmbiguousNameRef(getLocation(), "Int_Hash_Function");
                         case S_FL_BIN -> createAmbiguousNameRef(getLocation(), "Char_Arr_Hash_Function");
 
                         default -> throw new UnsupportedOperationException(
                                 "This key-type is currently not supported by the KeyValueMapGenerator");
                     },
                     "preHash",
-                    new Java.Rvalue[]{
+                    new Java.Rvalue[] {
                             keyVarAPs[i].read()
                     }
             );
@@ -1736,7 +1736,7 @@ public class KeyValueMapGenerator {
         for (int i = 0; i < this.keyVariableNames.length; i++) {
             QueryVariableType keyType = this.keyTypes[i];
             Java.Rvalue initialisationLiteral = switch (keyType) {
-                case P_INT -> createIntegerLiteral(getLocation(), -1);
+                case P_INT, P_INT_DATE -> createIntegerLiteral(getLocation(), -1);
                 case S_FL_BIN -> new Java.NullLiteral(getLocation());
 
                 default -> throw new UnsupportedOperationException(

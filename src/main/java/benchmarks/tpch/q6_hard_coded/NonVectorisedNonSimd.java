@@ -1,10 +1,7 @@
 package benchmarks.tpch.q6_hard_coded;
 
-import benchmarks.tpch.q1_no_sort_hard_coded.AggregationMap;
-import benchmarks.tpch.q1_no_sort_hard_coded.ResultVerifier;
 import evaluation.codegen.infrastructure.data.ABQArrowTableReader;
 import evaluation.codegen.infrastructure.data.ArrowTableReader;
-import evaluation.general_support.hashmaps.Char_Arr_Hash_Function;
 import org.apache.arrow.memory.RootAllocator;
 import org.openjdk.jmh.annotations.Benchmark;
 import org.openjdk.jmh.annotations.BenchmarkMode;
@@ -21,7 +18,6 @@ import org.openjdk.jmh.infra.Blackhole;
 
 import java.io.File;
 import java.io.IOException;
-import java.util.Arrays;
 import java.util.concurrent.TimeUnit;
 
 /**

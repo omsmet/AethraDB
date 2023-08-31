@@ -184,6 +184,7 @@ public class ArrowDatabase {
         hepProgramBuilder.addRuleInstance(CoreRules.CALC_REMOVE);                       // Removes trivial logical calc nodes
 
         hepProgramBuilder.addRuleInstance(CoreRules.FILTER_AGGREGATE_TRANSPOSE);        // Pushes a filter past an aggregate
+        hepProgramBuilder.addRuleInstance(CoreRules.FILTER_INTO_JOIN);                  // Pushes filter expressions into a join condition and into the inputs of the join
         hepProgramBuilder.addRuleInstance(CoreRules.FILTER_MERGE);                      // Rule that combines two logical filters
         hepProgramBuilder.addRuleInstance(CoreRules.FILTER_REDUCE_EXPRESSIONS);         // Reduces constant expressions inside filters
 

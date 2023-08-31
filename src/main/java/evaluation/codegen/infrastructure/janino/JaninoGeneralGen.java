@@ -194,6 +194,29 @@ public class JaninoGeneralGen {
     }
 
     /**
+     * Method for generating an initialised array of java bytes.
+     * @param location The location at which the array is requested for generation.
+     * @param initialValues The initial values to be contained in the array.
+     * @return The initialised array.
+     */
+    public static Java.NewInitializedArray createInitialisedByteArray(
+            Location location,
+            byte[] initialValues
+    ) {
+        Java.Rvalue[] initialByteLiterals = new Java.Rvalue[initialValues.length];
+
+        for (int i = 0; i < initialByteLiterals.length; i++) {
+            initialByteLiterals[i] = new Java.SimpleConstant(location, initialValues[i]);
+        }
+
+        return new Java.NewInitializedArray(
+                location,
+                createPrimitiveArrayType(location, Java.Primitive.BYTE),
+                new Java.ArrayInitializer(location, initialByteLiterals)
+        );
+    }
+
+    /**
      * Method for generating an initialised array of java primitives.
      * @param location The location at which the array is requested for generation.
      * @param primitiveType The type of the array elements.

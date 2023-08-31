@@ -93,7 +93,7 @@ public class NonVectorisedSimdHandCrafted {
             case "sf-1" -> 123141078.23d;
 
             default -> throw new UnsupportedOperationException(
-                    "tpch.q6_hard_coded.NonVectorisedNonSimd.trialSetup received an unexpected datasetIdentifier: " + datasetIdentifier);
+                    "tpch.q6_hard_coded.NonVectorisedSimdHandCrafted.trialSetup received an unexpected datasetIdentifier: " + datasetIdentifier);
         };
     }
 
