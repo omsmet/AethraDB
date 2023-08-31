@@ -97,9 +97,9 @@ public class NonVectorisedSimd {
     public void executeQuery(Blackhole bh) throws IOException {
         int resultIndex = 0;                                             // DIFF: added
 
-        int commonSIMDVectorLength = 4;
         // jdk.incubator.vector.VectorSpecies<Integer> IntVectorSpecies = OptimisationContext.getVectorSpeciesInt();
         jdk.incubator.vector.VectorSpecies<Double> DoubleVectorSpecies = OptimisationContext.getVectorSpeciesDouble();
+        int commonSIMDVectorLength = DoubleVectorSpecies.length();       // DIFF: usually hard-coded
         // ArrowTableReader lineitem_doubles = cCtx.getArrowReader(0);
         while (lineitem_doubles.loadNextBatch()) {
             org.apache.arrow.vector.Float8Vector lineitem_doubles_vc_0 = ((org.apache.arrow.vector.Float8Vector) lineitem_doubles.getVector(5));

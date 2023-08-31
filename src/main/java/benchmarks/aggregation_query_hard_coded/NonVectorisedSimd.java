@@ -199,8 +199,8 @@ public class NonVectorisedSimd {
     })
     public void executeQuery() throws IOException {
         // KeyValueMap_1306429814 aggregation_state_map = new KeyValueMap_1306429814();                             // DIFF: hard-coded
-        int commonSIMDVectorLength = 4;
         jdk.incubator.vector.VectorSpecies<Integer> IntVectorSpecies = OptimisationContext.getVectorSpeciesInt();   // DIFF: call on class instead of object
+        int commonSIMDVectorLength = IntVectorSpecies.length();                                                     // DIFF: usually hard-coded
         // ArrowTableReader aggregation_query_table = cCtx.getArrowReader(0);                                       // DIFF: hard-coded
         while (aggregation_query_table.loadNextBatch()) {
             org.apache.arrow.vector.IntVector aggregation_query_table_vc_0 = ((org.apache.arrow.vector.IntVector) aggregation_query_table.getVector(0));

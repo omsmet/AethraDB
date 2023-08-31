@@ -170,8 +170,8 @@ public class NonVectorisedSimd {
     public void executeQuery() throws IOException {
         long count = 0;
         // KeyMultiRecordMap_169110289 join_map = new KeyMultiRecordMap_169110289();                DIFF: hard-coded
-        int commonSIMDVectorLength = 4;
         jdk.incubator.vector.VectorSpecies<Integer> IntVectorSpecies = OptimisationContext.getVectorSpeciesInt();   // DIFF: call on class, not instance
+        int commonSIMDVectorLength = IntVectorSpecies.length();                                                     // DIFF: usually hard-coded
         // ArrowTableReader table_C = cCtx.getArrowReader(0);                                       DIFF: hard-coded
         while (table_C.loadNextBatch()) {
             org.apache.arrow.vector.IntVector table_C_vc_0 = ((org.apache.arrow.vector.IntVector) table_C.getVector(0));
@@ -204,7 +204,7 @@ public class NonVectorisedSimd {
             }
         }
         // KeyMultiRecordMap_582857168 join_map_0 = new KeyMultiRecordMap_582857168();              DIFF: hard-coded
-        int commonSIMDVectorLength_0 = 4;
+        int commonSIMDVectorLength_0 = IntVectorSpecies.length();                                // DIFF: usually hard-coded
         // DIFF: call on class, not instance
         jdk.incubator.vector.VectorSpecies<Integer> IntVectorSpecies_0 = OptimisationContext.getVectorSpeciesInt();
         // ArrowTableReader table_A = cCtx.getArrowReader(1);                                       DIFF: hard-coded
@@ -238,7 +238,7 @@ public class NonVectorisedSimd {
                 }
             }
         }
-        int commonSIMDVectorLength_1 = 4;
+        int commonSIMDVectorLength_1 = IntVectorSpecies.length();                                // DIFF: usually hard-coded
         // DIFF: call on class, not instance
         jdk.incubator.vector.VectorSpecies<Integer> IntVectorSpecies_1 = OptimisationContext.getVectorSpeciesInt();
         // ArrowTableReader table_B = cCtx.getArrowReader(2);                                       DIFF: hard-coded
