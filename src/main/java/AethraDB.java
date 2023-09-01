@@ -84,7 +84,7 @@ public class AethraDB {
         // Plan the query
         RelNode logicalQueryPlan = database.planQuery(validatedSqlQuery);
         System.out.println("[Optimised query]");
-        var relWriter = new RelWriterImpl(new PrintWriter(System.out, true), SqlExplainLevel.ALL_ATTRIBUTES, false);
+        var relWriter = new RelWriterImpl(new PrintWriter(System.out, true), SqlExplainLevel.NON_COST_ATTRIBUTES, false);
         logicalQueryPlan.explain(relWriter);
         System.out.println();
 

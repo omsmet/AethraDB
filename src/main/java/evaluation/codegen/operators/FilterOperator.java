@@ -8,6 +8,7 @@ import evaluation.codegen.infrastructure.context.access_path.ArrayAccessPath;
 import evaluation.codegen.infrastructure.context.access_path.ArrowVectorAccessPath;
 import evaluation.codegen.infrastructure.context.access_path.ArrowVectorWithSelectionVectorAccessPath;
 import evaluation.codegen.infrastructure.context.access_path.ArrowVectorWithValidityMaskAccessPath;
+import evaluation.codegen.infrastructure.context.access_path.IndexedArrowVectorElementAccessPath;
 import evaluation.codegen.infrastructure.context.access_path.SIMDLoopAccessPath;
 import evaluation.codegen.infrastructure.context.access_path.SIMDVectorMaskAccessPath;
 import evaluation.codegen.infrastructure.context.access_path.ScalarVariableAccessPath;
@@ -23,10 +24,14 @@ import org.apache.calcite.sql.fun.SqlDatetimeSubtractionOperator;
 import org.apache.calcite.sql.fun.SqlMonotonicBinaryOperator;
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.calcite.util.DateString;
+import org.apache.calcite.util.NlsString;
 import org.codehaus.janino.Java;
 
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
+import java.util.Objects;
 
 import static evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_DATE_VECTOR;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_DATE_VECTOR_W_SELECTION_VECTOR;
@@ -38,22 +43,26 @@ import static evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_
 import static evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_INT_VECTOR;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_INT_VECTOR_W_SELECTION_VECTOR;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_INT_VECTOR_W_VALIDITY_MASK;
+import static evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_VARCHAR_VECTOR;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.P_A_BOOLEAN;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.P_A_INT;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.P_DOUBLE;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.P_INT;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.P_INT_DATE;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.S_FL_BIN;
+import static evaluation.codegen.infrastructure.context.QueryVariableType.S_VARCHAR;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.VECTOR_INT_MASKED;
 import static evaluation.codegen.infrastructure.context.QueryVariableTypeMethods.arrowVectorWithSelectionVectorType;
 import static evaluation.codegen.infrastructure.context.QueryVariableTypeMethods.arrowVectorWithValidityMaskType;
 import static evaluation.codegen.infrastructure.context.QueryVariableTypeMethods.toJavaType;
 import static evaluation.codegen.infrastructure.janino.JaninoControlGen.createIfNotContinue;
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createAmbiguousNameRef;
+import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createInitialisedByteArray;
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createIntegerLiteral;
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createPrimitiveArrayType;
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.getLocation;
 import static evaluation.codegen.infrastructure.janino.JaninoMethodGen.createMethodInvocation;
+import static evaluation.codegen.infrastructure.janino.JaninoMethodGen.createMethodInvocationStm;
 import static evaluation.codegen.infrastructure.janino.JaninoOperatorGen.eq;
 import static evaluation.codegen.infrastructure.janino.JaninoOperatorGen.ge;
 import static evaluation.codegen.infrastructure.janino.JaninoOperatorGen.gt;
@@ -138,6 +147,7 @@ public class FilterOperator extends CodeGenOperator<LogicalFilter> {
             case AND -> consumeNonVecAndOperator(cCtx, oCtx, castFilterOperator, callParentConsumeOnMatch);
             case EQUALS, GREATER_THAN, GREATER_THAN_OR_EQUAL, LESS_THAN, LESS_THAN_OR_EQUAL ->
                     consumeNonVecComparisonOperator(cCtx, oCtx, castFilterOperator, callParentConsumeOnMatch);
+            case LIKE -> consumeNonVecLikeOperator(cCtx, oCtx, castFilterOperator, callParentConsumeOnMatch);
             default -> throw new UnsupportedOperationException(
                     "FilterOperator.consumeNonVecOperator does not support this operator type");
         };
@@ -342,6 +352,109 @@ public class FilterOperator extends CodeGenOperator<LogicalFilter> {
 
         // Return the result
         return codegenResult;
+    }
+
+    /**
+     * Method to generate the required non-vectorised code on the backward code generation pass for
+     * a LIKE operator.
+     * @param cCtx The {@link CodeGenContext} to use during the generation.
+     * @param oCtx The {@link OptimisationContext} to use during the generation and execution.
+     * @param likeOperator The like operator to generate code for.
+     * @param callParentConsumeOnMatch Whether the parent operator consume method should be invoked
+     *                                 if this {@code filterOperator} matches. Necessary to allow
+     *                                 recursive code generation.
+     * @return The generated query code.
+     */
+    private List<Java.Statement> consumeNonVecLikeOperator(
+            CodeGenContext cCtx,
+            OptimisationContext oCtx,
+            RexCall likeOperator,
+            boolean callParentConsumeOnMatch
+    ) {
+        List<Java.Statement> codeGenResult = new ArrayList<>();
+
+        // Operator currently only supports non-SIMDed execution
+        if (this.useSIMDNonVec(cCtx)) {
+            throw new UnsupportedOperationException(
+                    "FilterOperator.consumeNonVecLikeOperator does not currently support SIMDed code generation");
+        }
+
+        // Check that the like operator follows the rexInputRef, rexLiteral operand pattern
+        List<RexNode> likeOperands = likeOperator.getOperands();
+        if (likeOperands.size() != 2)
+            throw new UnsupportedOperationException(
+                    "FilterOperator.consumeNonVecLikeOperator expects two operands");
+
+        if (!(likeOperands.get(0) instanceof RexInputRef comparisonColumn))
+            throw new UnsupportedOperationException(
+                    "FilterOperator.consumeNonVecLikeOperator expects the first operand to be an input reference");
+
+        if (!(likeOperands.get(1) instanceof RexLiteral conditionLiteral))
+            throw new UnsupportedOperationException(
+                    "FilterOperator.consumeNonVecLikeOperator expects the second operand to be a literal");
+
+        // Get a reference to the input column
+        AccessPath comparisonColumnAP = cCtx.getCurrentOrdinalMapping().get(comparisonColumn.getIndex());
+
+        // Currently, the like operator only supports varchar-varchar like comparisons
+        if (comparisonColumnAP.getType() != S_VARCHAR)
+            throw new UnsupportedOperationException(
+                    "FilterOperator.consumeNonVecLikeOperator expects the first operand to be a VARCHAR type");
+        if (conditionLiteral.getType().getSqlTypeName() != SqlTypeName.CHAR)
+            throw new UnsupportedOperationException(
+                    "FilterOperator.consumeNonVecLikeOperator expects the second operand to be a CHAR literal");
+
+        // Get the RValue to the input column value
+        Java.Rvalue inputColumnRValue = codeGenOperandNonVec(cCtx, comparisonColumn, codeGenResult);
+
+        // Obtain the comparison pattern being used and set-up the relevant information about it
+        String comparisonPatternString = Objects.requireNonNull(conditionLiteral.getValueAs(NlsString.class)).getValue();
+        String methodName;
+        Java.Rvalue conditionRvalue;
+        if (comparisonPatternString.indexOf('%') == 0 && comparisonPatternString.indexOf('%', 1) == comparisonPatternString.length() - 1) {
+            // We have the contains pattern "%someText%"
+            methodName = "contains";
+            byte[] comparisonValue = comparisonPatternString.substring(1, comparisonPatternString.length() - 1).getBytes(StandardCharsets.US_ASCII);
+            conditionRvalue = createInitialisedByteArray(getLocation(), comparisonValue);
+
+        } else {
+            throw new UnsupportedOperationException(
+                    "FilterOperator.consumeNonVecLikeOperator does not support the provided pattern");
+        }
+
+        Java.Rvalue accessSpecificMethodInvocation;
+
+        // Perform the method invocation based on the access path
+        if (comparisonColumnAP instanceof IndexedArrowVectorElementAccessPath iaveap) {
+            accessSpecificMethodInvocation = createMethodInvocation(
+                    getLocation(),
+                    createAmbiguousNameRef(getLocation(), "LikeOperatorPrimitives"),
+                    methodName,
+                    new Java.Rvalue[] {
+                            inputColumnRValue,
+                            conditionRvalue
+                    }
+            );
+
+        } else {
+            throw new UnsupportedOperationException(
+                    "FilterOperator.consumeNonVecLikeOperator does not support the provided access path");
+
+        }
+
+        // Add the conditional statement which skips the current "row" if the value does not match
+        codeGenResult.add(
+                createIfNotContinue(
+                        getLocation(),
+                        accessSpecificMethodInvocation
+                )
+        );
+
+        // Call the parent if required
+        if (callParentConsumeOnMatch)
+            codeGenResult.addAll(this.nonVecParentConsume(cCtx, oCtx));
+
+        return codeGenResult;
     }
 
     /**

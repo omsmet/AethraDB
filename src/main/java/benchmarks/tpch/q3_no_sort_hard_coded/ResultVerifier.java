@@ -14,7 +14,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Class to verify the result of TPC-H Q1 query based on the dataset in an unordered fashion.
+ * Class to verify the result of TPC-H Q3 query based on the dataset in an unordered fashion.
  */
 public class ResultVerifier {
 

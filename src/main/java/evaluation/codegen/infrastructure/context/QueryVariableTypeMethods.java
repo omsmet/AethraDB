@@ -288,6 +288,7 @@ public final class QueryVariableTypeMethods {
             case P_A_LONG -> createPrimitiveArrayType(location, Java.Primitive.LONG);
 
             case S_FL_BIN -> createPrimitiveArrayType(location, Java.Primitive.BYTE);
+            case S_VARCHAR -> createPrimitiveArrayType(location, Java.Primitive.BYTE);
 
             case S_A_FL_BIN -> createNestedPrimitiveArrayType(location, Java.Primitive.BYTE);
 

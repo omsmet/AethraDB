@@ -13,6 +13,8 @@ import evaluation.codegen.infrastructure.context.access_path.ArrowVectorWithSele
 import evaluation.codegen.infrastructure.context.access_path.ArrowVectorWithValidityMaskAccessPath;
 import evaluation.codegen.infrastructure.context.access_path.IndexedArrowVectorElementAccessPath;
 import evaluation.codegen.infrastructure.context.access_path.ScalarVariableAccessPath;
+import org.apache.calcite.avatica.util.TimeUnit;
+import org.apache.calcite.avatica.util.TimeUnitRange;
 import org.apache.calcite.rel.logical.LogicalProject;
 import org.apache.calcite.rex.RexCall;
 import org.apache.calcite.rex.RexInputRef;
@@ -22,10 +24,13 @@ import org.apache.calcite.sql.SqlBinaryOperator;
 import org.apache.calcite.sql.SqlKind;
 import org.apache.calcite.sql.SqlOperator;
 import org.apache.calcite.sql.fun.SqlCaseOperator;
+import org.apache.calcite.sql.fun.SqlExtractFunction;
 import org.codehaus.janino.Java;
 
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 import static evaluation.codegen.infrastructure.context.QueryVariableType.P_DOUBLE;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.P_INT;
@@ -377,6 +382,50 @@ public class ProjectOperator extends CodeGenOperator<LogicalProject> {
             );
 
             return resultPath;
+
+        } else if (computationOperator instanceof SqlExtractFunction sqlExtractFunction) {
+            // Currently the extract operator is only supported for non-SIMD mode
+            if (this.useSIMDNonVec(cCtx))
+                throw new UnsupportedOperationException(
+                        "ProjectOperator.createNonVecComputationCode only supports the EXTRACT operator in non-SIMD mode");
+
+            // The extraction operator currently only supports extracting a year from a date, so check this pre-condition
+            if (!(computationOperands.get(0) instanceof RexLiteral extractLiteral))
+                throw new UnsupportedOperationException(
+                        "ProjectOperator.createNonVecComputationCode expects the first operand of an EXTRACT to be a literal");
+
+            TimeUnitRange extractTimeUnit = Objects.requireNonNull(extractLiteral.getValueAs(TimeUnitRange.class));
+            if (extractTimeUnit.startUnit != TimeUnit.YEAR || extractTimeUnit.endUnit != null)
+                throw new UnsupportedOperationException(
+                        "ProjectOperator.createNonVecComputationCode only supports extracting years from a date column");
+
+            if (!(computationOperands.get(1) instanceof RexInputRef baseValueRef))
+                throw new UnsupportedOperationException(
+                    "ProjectOperator.createNonVecComputationCode expects the second operand of an EXTRACT to be an input reference");
+
+            // Generate the code for extracting the year
+            Java.Rvalue baseValue = getRValueFromAccessPathNonVec(cCtx, baseValueRef.getIndex(), codeGenResult);
+            ScalarVariableAccessPath extractedYearAP = new ScalarVariableAccessPath(
+                    cCtx.defineVariable("extractedYear"), P_INT);
+            codeGenResult.add(
+                    createLocalVariable(
+                            getLocation(),
+                            toJavaType(getLocation(), extractedYearAP.getType()),
+                            extractedYearAP.getVariableName(),
+                            createMethodInvocation(
+                                    getLocation(),
+                                    createMethodInvocation(
+                                            getLocation(),
+                                            createAmbiguousNameRef(getLocation(), "java.time.LocalDate"),
+                                            "ofEpochDay",
+                                            new Java.Rvalue[] { baseValue }
+                                    ),
+                                    "getYear"
+                            )
+                    )
+            );
+
+            return extractedYearAP;
 
         } else {
             throw new UnsupportedOperationException(

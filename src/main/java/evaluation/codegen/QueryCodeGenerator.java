@@ -93,11 +93,13 @@ public class QueryCodeGenerator extends SimpleCompiler {
         this.generatedQuery = null;
         this.generatedQueryClassName = "GeneratedQuery_" + rootOperator.hashCode();
         this.defaultImports = new String[] {
+                "evaluation.codegen.infrastructure.data.ArrowTableReader",
+
                 "evaluation.general_support.hashmaps.Int_Hash_Function",
                 "evaluation.general_support.hashmaps.Char_Arr_Hash_Function",
                 "evaluation.general_support.hashmaps.Simple_Int_Long_Map",
 
-                "evaluation.codegen.infrastructure.data.ArrowTableReader",
+                "evaluation.non_vector_support.LikeOperatorPrimitives",
 
                 "evaluation.vector_support.VectorisedAggregationOperators",
                 "evaluation.vector_support.VectorisedArithmeticOperators",

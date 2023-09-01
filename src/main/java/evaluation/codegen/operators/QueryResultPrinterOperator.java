@@ -96,7 +96,7 @@ public class QueryResultPrinterOperator extends CodeGenOperator<RelNode> {
 
             // Convert fixed length strings
             QueryVariableType ordinalType = cCtx.getCurrentOrdinalMapping().get(i).getType();
-            if (ordinalType == QueryVariableType.S_FL_BIN) {
+            if (ordinalType == QueryVariableType.S_FL_BIN || ordinalType == QueryVariableType.S_VARCHAR) {
                 printValue = createClassInstance(
                         getLocation(),
                         createReferenceType(getLocation(), "java.lang.String"),
