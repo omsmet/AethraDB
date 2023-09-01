@@ -12,24 +12,27 @@ import evaluation.codegen.infrastructure.context.access_path.IndexedArrowVectorE
 import evaluation.codegen.infrastructure.context.access_path.SIMDLoopAccessPath;
 import evaluation.codegen.infrastructure.context.access_path.SIMDVectorMaskAccessPath;
 import evaluation.codegen.infrastructure.context.access_path.ScalarVariableAccessPath;
+import org.apache.calcite.avatica.util.TimeUnitRange;
 import org.apache.calcite.rel.logical.LogicalFilter;
 import org.apache.calcite.rex.RexCall;
 import org.apache.calcite.rex.RexInputRef;
 import org.apache.calcite.rex.RexLiteral;
 import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.rex.RexUtil;
+import org.apache.calcite.sql.SqlIntervalQualifier;
 import org.apache.calcite.sql.SqlKind;
 import org.apache.calcite.sql.fun.SqlDatetimePlusOperator;
 import org.apache.calcite.sql.fun.SqlDatetimeSubtractionOperator;
 import org.apache.calcite.sql.fun.SqlMonotonicBinaryOperator;
+import org.apache.calcite.sql.type.IntervalSqlType;
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.calcite.util.DateString;
 import org.apache.calcite.util.NlsString;
 import org.codehaus.janino.Java;
 
 import java.nio.charset.StandardCharsets;
+import java.time.LocalDate;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 
@@ -43,7 +46,6 @@ import static evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_
 import static evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_INT_VECTOR;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_INT_VECTOR_W_SELECTION_VECTOR;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_INT_VECTOR_W_VALIDITY_MASK;
-import static evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_VARCHAR_VECTOR;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.P_A_BOOLEAN;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.P_A_INT;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.P_DOUBLE;
@@ -62,7 +64,6 @@ import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createIn
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createPrimitiveArrayType;
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.getLocation;
 import static evaluation.codegen.infrastructure.janino.JaninoMethodGen.createMethodInvocation;
-import static evaluation.codegen.infrastructure.janino.JaninoMethodGen.createMethodInvocationStm;
 import static evaluation.codegen.infrastructure.janino.JaninoOperatorGen.eq;
 import static evaluation.codegen.infrastructure.janino.JaninoOperatorGen.ge;
 import static evaluation.codegen.infrastructure.janino.JaninoOperatorGen.gt;
@@ -70,6 +71,10 @@ import static evaluation.codegen.infrastructure.janino.JaninoOperatorGen.le;
 import static evaluation.codegen.infrastructure.janino.JaninoOperatorGen.lt;
 import static evaluation.codegen.infrastructure.janino.JaninoOperatorGen.mul;
 import static evaluation.codegen.infrastructure.janino.JaninoVariableGen.createLocalVariable;
+import static org.apache.calcite.avatica.util.TimeUnitRange.DAY;
+import static org.apache.calcite.avatica.util.TimeUnitRange.MONTH;
+import static org.apache.calcite.avatica.util.TimeUnitRange.WEEK;
+import static org.apache.calcite.avatica.util.TimeUnitRange.YEAR;
 
 /**
  * A {@link CodeGenOperator} which filters out records according to a given condition.
@@ -856,38 +861,67 @@ public class FilterOperator extends CodeGenOperator<LogicalFilter> {
      */
     private int translateToUnixDay(RexNode dateSpecification) {
         if (dateSpecification instanceof RexCall dateComputation)
-            return translateToUnixDay(dateComputation);
+            return (int) translateToUnixDay(dateComputation).toEpochDay();
         else if (dateSpecification instanceof RexLiteral dateLiteral)
-            return translateToUnixDay(dateLiteral);
+            return (int) translateToUnixDay(dateLiteral).toEpochDay();
         else
             throw new UnsupportedOperationException(
                     "FilterOperator.translateToUnixDay does not support the provided dateSpecification");
     }
 
     /**
-     * Method to translate a given date computation into an integer representing the UNIX day that
-     * results from simplifying the computation.
+     * Method to translate a given date computation into a {@link LocalDate} representing the UNIX
+     * day that results from simplifying the computation.
      * @param dateComputation The computation to find the resulting UNIX day for.
-     * @return The integer corresponding to the UNIX day represented by {@code dateComputation}.
+     * @return The {@link LocalDate} corresponding to the UNIX day represented by {@code dateComputation}.
      */
-    private int translateToUnixDay(RexCall dateComputation) {
+    private LocalDate translateToUnixDay(RexCall dateComputation) {
         // Get and translate the operand values
-        int lhsUnixDay = translateToUnixDay(dateComputation.getOperands().get(0));
-        int rhsUnixDay = translateToUnixDay(dateComputation.getOperands().get(1));
+        RexNode lhsOperand = dateComputation.operands.get(0);
+        RexNode rhsOperand = dateComputation.operands.get(1);
 
-        // Perform the actual computation
+        // Check that the lhs operand is a literal
+        if (!(lhsOperand instanceof RexLiteral lhsLiteral))
+            throw new UnsupportedOperationException(
+                    "FilterOperator.translateToUnixDay expects the lhs operand of a RexCall to be literal representing a date");
+        LocalDate lhsDate = translateToUnixDay(lhsLiteral);
+
+        // Check that the rhs operand is some interval
+        if (!(rhsOperand instanceof RexCall rhsRexCall))
+            throw new UnsupportedOperationException(
+                    "FilterOperator.translateToUnixDay expects the rhs operand of a RexCall to be an interval");
+
+        if (!(rhsRexCall.getType() instanceof IntervalSqlType rhsIntervalType))
+            throw new UnsupportedOperationException(
+                    "FilterOperator.translateToUnixDay expects the rhs operand of a RexCall to be an interval");
+
+        // Get the amount of intervals to apply (i.e. x in x months, x years, etc.)
+        RexLiteral rhsIntervalCountLiteral = Objects.requireNonNull((RexLiteral) rhsRexCall.getOperands().get(0));
+        int rhsIntervalCount = Objects.requireNonNull(rhsIntervalCountLiteral.getValueAs(Integer.class));
+
+        // Get the interval qualifier (i.e. months in x months, years in x years, etc.)
+        TimeUnitRange rhsIntervalQualifier = rhsIntervalType.getIntervalQualifier().timeUnitRange;
+
+        // Perform the actual computation based on the interval type and operator
         if (dateComputation.getOperator() instanceof SqlDatetimeSubtractionOperator) {
-            return lhsUnixDay - rhsUnixDay;
+            return switch (rhsIntervalQualifier) {
+                case DAY -> lhsDate.minusDays(rhsIntervalCount);
+                case MONTH -> lhsDate.minusMonths(rhsIntervalCount);
+                case WEEK -> lhsDate.minusWeeks(rhsIntervalCount);
+                case YEAR -> lhsDate.minusYears(rhsIntervalCount);
+                default -> throw new UnsupportedOperationException(
+                        "FilterOperator.translateToUnixDay does not support the given interval type");
+            };
 
         } else if (dateComputation.getOperator() instanceof SqlDatetimePlusOperator) {
-            return lhsUnixDay + rhsUnixDay;
-
-        } else if (dateComputation.getOperator() instanceof SqlMonotonicBinaryOperator smbo) {
-            if (smbo.getKind() == SqlKind.TIMES)
-                return lhsUnixDay * rhsUnixDay;
-            else
-                throw new UnsupportedOperationException(
-                        "FilterOperator.translateToUnixDay does not support the given smbo");
+            return switch (rhsIntervalQualifier) {
+                case DAY -> lhsDate.plusDays(rhsIntervalCount);
+                case MONTH -> lhsDate.plusMonths(rhsIntervalCount);
+                case WEEK -> lhsDate.plusWeeks(rhsIntervalCount);
+                case YEAR -> lhsDate.plusYears(rhsIntervalCount);
+                default -> throw new UnsupportedOperationException(
+                        "FilterOperator.translateToUnixDay does not support the given interval type");
+            };
 
         } else {
             throw new UnsupportedOperationException(
@@ -896,30 +930,16 @@ public class FilterOperator extends CodeGenOperator<LogicalFilter> {
     }
 
     /**
-     * Method to translate a given date literal into an integer representing the UNIX day.
+     * Method to translate a given date literal into a {@link LocalDate} the UNIX day.
      * @param dateLiteral The literal to find the resulting UNIX day for.
-     * @return The integer corresponding to the UNIX day represented by {@code dateLiteral}.
+     * @return The {@link LocalDate} corresponding to the UNIX day represented by {@code dateLiteral}.
      */
-    private int translateToUnixDay(RexLiteral dateLiteral) {
+    private LocalDate translateToUnixDay(RexLiteral dateLiteral) {
         SqlTypeName dateLiteralType = dateLiteral.getType().getSqlTypeName();
         if (dateLiteralType == SqlTypeName.DATE) {
             // Translate the date string to UNIX day format
             DateString dateLiteralString = dateLiteral.getValueAs(DateString.class);
-            return dateLiteralString.getDaysSinceEpoch();
-
-        } else if (dateLiteralType == SqlTypeName.INTEGER) {
-            // Assume already in UNIX days
-            return dateLiteral.getValueAs(Integer.class);
-
-        } else if (dateLiteralType == SqlTypeName.INTERVAL_DAY) {
-            // Currently this seems to be a "unit", and since we are computing in UNIX days anyhow
-            // this is sort of the identity unit
-            return 1;
-
-        } else if (dateLiteralType == SqlTypeName.INTERVAL_YEAR) {
-            // Currently this seems to be a "unit", and since we are computing in UNIX days
-            // we should return 365, as that is the number of days per year
-            return 365;
+            return LocalDate.ofEpochDay(dateLiteralString.getDaysSinceEpoch());
 
         } else {
             throw new UnsupportedOperationException(
