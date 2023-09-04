@@ -124,7 +124,7 @@ public class VectorisedNonSimdReducedSelVecUse {
         this.nation = new ABQArrowTableReader(new File(this.tpchInstance + "/nation.arrow"), this.rootAllocator);
 
         // Setup the allocation manager
-        this.allocationManager = new BufferPoolAllocationManager(16);
+        this.allocationManager = new BufferPoolAllocationManager(32);
 
         // Initialise the hash-table
         this.aggregation_state_map = new AggregationMap();
