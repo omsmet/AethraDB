@@ -2,7 +2,6 @@ package benchmarks.tpch.q3_no_sort_hard_coded;
 
 import evaluation.codegen.infrastructure.data.ABQArrowTableReader;
 import evaluation.codegen.infrastructure.data.ArrowTableReader;
-import evaluation.general_support.hashmaps.Char_Arr_Hash_Function;
 import evaluation.general_support.hashmaps.Int_Hash_Function;
 import org.apache.arrow.memory.RootAllocator;
 import org.openjdk.jmh.annotations.Benchmark;

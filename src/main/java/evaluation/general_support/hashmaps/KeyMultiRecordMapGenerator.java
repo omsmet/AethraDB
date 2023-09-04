@@ -14,6 +14,8 @@ import static evaluation.codegen.infrastructure.context.QueryVariableType.P_A_IN
 import static evaluation.codegen.infrastructure.context.QueryVariableType.P_BOOLEAN;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.P_INT;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.P_LONG;
+import static evaluation.codegen.infrastructure.context.QueryVariableType.S_FL_BIN;
+import static evaluation.codegen.infrastructure.context.QueryVariableType.S_VARCHAR;
 import static evaluation.codegen.infrastructure.context.QueryVariableTypeMethods.isPrimitive;
 import static evaluation.codegen.infrastructure.context.QueryVariableTypeMethods.primitiveArrayTypeForPrimitive;
 import static evaluation.codegen.infrastructure.context.QueryVariableTypeMethods.primitiveMemberTypeForArray;
@@ -29,10 +31,13 @@ import static evaluation.codegen.infrastructure.janino.JaninoControlGen.createWh
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createAmbiguousNameRef;
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createArrayElementAccessExpr;
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createCast;
+import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createDoublyNestedPrimitiveArrayType;
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createIntegerLiteral;
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createNestedPrimitiveArrayType;
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createNew2DPrimitiveArray;
+import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createNew3DPrimitiveArray;
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createNewPrimitiveArray;
+import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createPrimitiveArrayType;
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createPrimitiveType;
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createReferenceType;
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createStringLiteral;
@@ -154,7 +159,7 @@ public class KeyMultiRecordMapGenerator {
             throw new IllegalArgumentException("KeyMultiRecordMapGenerator expects a primitive key type, not " + keyType);
         for (int i = 0; i < valueTypes.length; i++) {
             QueryVariableType valueType = valueTypes[i];
-            if (!isPrimitive(valueType))
+            if (!isPrimitive(valueType) && valueType != S_FL_BIN && valueType != S_VARCHAR)
                 throw new IllegalArgumentException("KeyMultiRecordMapGenerator expects primitive value types, not " + valueType);
         }
 
@@ -247,13 +252,16 @@ public class KeyMultiRecordMapGenerator {
 
         // For each field of the value types, create a nested array
         for (int i = 0; i < this.valueVariableNames.length; i++) {
+            Java.Type arrayType;
+            if (this.valueTypes[i] == S_FL_BIN || this.valueTypes[i] == S_VARCHAR)
+                arrayType = createDoublyNestedPrimitiveArrayType(getLocation(), Java.Primitive.BYTE);
+            else
+                arrayType = createNestedPrimitiveArrayType(getLocation(), toJavaPrimitive(this.valueTypes[i]));
+
             this.mapDeclaration.addFieldDeclaration(
                     createPublicFieldDeclaration(
                             getLocation(),
-                            createNestedPrimitiveArrayType(
-                                    getLocation(),
-                                    toJavaPrimitive(this.valueTypes[i])
-                            ),
+                            arrayType,
                             createSimpleVariableDeclaration(
                                     getLocation(),
                                     this.valueVariableNames[i]
@@ -425,19 +433,33 @@ public class KeyMultiRecordMapGenerator {
 
         // Initialise each of the value arrays
         for (int i = 0; i < this.valueVariableNames.length; i++) {
+            String valueVarName = this.valueVariableNames[i];
+            QueryVariableType valueVarPrimType = this.valueTypes[i];
+
+            Java.NewArray theArray;
+            if (valueVarPrimType == S_FL_BIN || valueVarPrimType == S_VARCHAR)
+                theArray = createNew3DPrimitiveArray(
+                        getLocation(),
+                        Java.Primitive.BYTE,
+                        capacityParameterAP.read(),
+                        createIntegerLiteral(getLocation(), initialRecordsPerKeyCount)
+                );
+            else
+                theArray = createNew2DPrimitiveArray(
+                        getLocation(),
+                        toJavaPrimitive(valueTypes[i]),
+                        capacityParameterAP.read(),
+                        createIntegerLiteral(getLocation(), initialRecordsPerKeyCount)
+                );
+
             constructorBody.add(
                     createVariableAssignmentStm(
                             getLocation(),
                             createThisFieldAccess(
                                     getLocation(),
-                                    this.valueVariableNames[i]
+                                    valueVarName
                             ),
-                            createNew2DPrimitiveArray(
-                                    getLocation(),
-                                    toJavaPrimitive(valueTypes[i]),
-                                    capacityParameterAP.read(),
-                                    createIntegerLiteral(getLocation(), initialRecordsPerKeyCount)
-                            )
+                            theArray
                     )
             );
         }
@@ -768,19 +790,28 @@ public class KeyMultiRecordMapGenerator {
         );
 
         for (int i = 0; i < this.valueVariableNames.length; i++) {
+            QueryVariableType valueVariableType = this.valueTypes[i];
             String valueVariableName = this.valueVariableNames[i];
             String tempVarName = "temp_" + valueVariableName;
+
+            Java.Type arrayType;
+            Java.NewArray theArray;
+            if (valueVariableType == S_FL_BIN || valueVariableType == S_VARCHAR) {
+                arrayType = createNestedPrimitiveArrayType(getLocation(), Java.Primitive.BYTE);
+                theArray = createNew2DPrimitiveArray(getLocation(), Java.Primitive.BYTE, newValueArraysSize.read());
+
+            } else {
+                arrayType = toJavaType(getLocation(), primitiveArrayTypeForPrimitive(valueVariableType));
+                theArray = createNewPrimitiveArray(getLocation(), toJavaPrimitive(valueVariableType), newValueArraysSize.read());
+
+            }
 
             recordStoreExtendArrays.addStatement(
                     createLocalVariable(
                             getLocation(),
-                            toJavaType(getLocation(), primitiveArrayTypeForPrimitive(this.valueTypes[i])),
+                            arrayType,
                             tempVarName,
-                            createNewPrimitiveArray(
-                                    getLocation(),
-                                    toJavaPrimitive(this.valueTypes[i]),
-                                    newValueArraysSize.read()
-                            )
+                            theArray
                     )
             );
 
@@ -1271,23 +1302,36 @@ public class KeyMultiRecordMapGenerator {
 
         // Grow and copy all the value arrays
         for (int i = 0; i < this.valueVariableNames.length; i++) {
+            QueryVariableType valueVariableType = this.valueTypes[i];
             String name = this.valueVariableNames[i];
             String newName = "new_" + name;
+
+            Java.Type arrayType;
+            Java.NewArray theArray;
+            if (valueVariableType == S_FL_BIN || valueVariableType == S_VARCHAR) {
+                arrayType = createDoublyNestedPrimitiveArrayType(getLocation(), Java.Primitive.BYTE);
+                theArray = createNew3DPrimitiveArray(
+                        getLocation(),
+                        Java.Primitive.BYTE,
+                        newSize.read(),
+                        createIntegerLiteral(getLocation(), initialRecordsPerKeyCount));
+
+            } else {
+                arrayType = createNestedPrimitiveArrayType(getLocation(), toJavaPrimitive(valueVariableType));
+                theArray = createNew2DPrimitiveArray(
+                        getLocation(),
+                        toJavaPrimitive(valueVariableType),
+                        newSize.read(),
+                        createIntegerLiteral(getLocation(), initialRecordsPerKeyCount));
+
+            }
 
             growArraysMethodBody.add(
                     createLocalVariable(
                             getLocation(),
-                            createNestedPrimitiveArrayType(
-                                    getLocation(),
-                                    toJavaPrimitive(this.valueTypes[i])
-                            ),
+                            arrayType,
                             newName,
-                            createNew2DPrimitiveArray(
-                                    getLocation(),
-                                    toJavaPrimitive(this.valueTypes[i]),
-                                    newSize.read(),
-                                    createIntegerLiteral(getLocation(), initialRecordsPerKeyCount)
-                            )
+                            theArray
                     )
             );
 

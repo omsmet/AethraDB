@@ -4,7 +4,6 @@ import evaluation.codegen.infrastructure.data.ABQArrowTableReader;
 import evaluation.codegen.infrastructure.data.AllocationManager;
 import evaluation.codegen.infrastructure.data.ArrowTableReader;
 import evaluation.codegen.infrastructure.data.BufferPoolAllocationManager;
-import evaluation.general_support.hashmaps.Int_Hash_Function;
 import evaluation.vector_support.VectorisedAggregationOperators;
 import evaluation.vector_support.VectorisedArithmeticOperators;
 import evaluation.vector_support.VectorisedFilterOperators;

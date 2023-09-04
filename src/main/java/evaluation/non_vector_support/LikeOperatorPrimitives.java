@@ -1,7 +1,5 @@
 package evaluation.non_vector_support;
 
-import sun.misc.Unsafe;
-
 /**
  * Class containing some helper primitives for implementing the LIKE operator.
  */

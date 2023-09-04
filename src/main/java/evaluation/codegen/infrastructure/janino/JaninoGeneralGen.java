@@ -45,13 +45,23 @@ public class JaninoGeneralGen {
     }
 
     /**
-     * Method for creating an {@link Java.Type} instance for an nested array of a java primitive.
+     * Method for creating an {@link Java.Type} instance for a nested array of a java primitive.
      * @param location The location at which the created primitive array type is requested for generation.
      * @param type The type of the primitive that should be generated for.
      * @return A {@link Java.Type} instance for a specific java nested primitive array type.
      */
     public static Java.ArrayType createNestedPrimitiveArrayType(Location location, Java.Primitive type) {
         return new Java.ArrayType(createPrimitiveArrayType(location, type));
+    }
+
+    /**
+     * Method for creating an {@link Java.Type} instance for a doubly nested array of a java primitive.
+     * @param location The location at which the created primitive array type is requested for generation.
+     * @param type The type of the primitive that should be generated for.
+     * @return A {@link Java.Type} instance for a specific java doubly nested primitive array type.
+     */
+    public static Java.ArrayType createDoublyNestedPrimitiveArrayType(Location location, Java.Primitive type) {
+        return new Java.ArrayType(createNestedPrimitiveArrayType(location, type));
     }
 
     /**
@@ -358,6 +368,28 @@ public class JaninoGeneralGen {
                 createPrimitiveType(getLocation(), primitiveType),
                 new Java.Rvalue[] { lengthD1, lengthD2 },
                 0
+        );
+    }
+
+    /**
+     * Method to create a new 3 dimensional array of a primitive java type, where the last dimension is uninitialised.
+     * @param location The location where the new array is requested for generation.
+     * @param primitiveType The primitive type that the array should get.
+     * @param lengthD1 The length to initialise the first array dimension with.
+     * @param lengthD2 The length to initialise the second array dimension with.
+     * @return A {@link Java.NewArray} corresponding to the provided parameters.
+     */
+    public static Java.NewArray createNew3DPrimitiveArray(
+            Location location,
+            Java.Primitive primitiveType,
+            Java.Rvalue lengthD1,
+            Java.Rvalue lengthD2
+    ) {
+        return new Java.NewArray(
+                location,
+                createPrimitiveType(getLocation(), primitiveType),
+                new Java.Rvalue[] { lengthD1, lengthD2 },
+                1
         );
     }
 

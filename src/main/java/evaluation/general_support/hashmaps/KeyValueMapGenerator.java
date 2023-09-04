@@ -15,6 +15,7 @@ import static evaluation.codegen.infrastructure.context.QueryVariableType.P_BOOL
 import static evaluation.codegen.infrastructure.context.QueryVariableType.P_INT;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.P_LONG;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.S_FL_BIN;
+import static evaluation.codegen.infrastructure.context.QueryVariableType.S_VARCHAR;
 import static evaluation.codegen.infrastructure.context.QueryVariableTypeMethods.isPrimitive;
 import static evaluation.codegen.infrastructure.context.QueryVariableTypeMethods.primitiveArrayTypeForPrimitive;
 import static evaluation.codegen.infrastructure.context.QueryVariableTypeMethods.primitiveMemberTypeForArray;
@@ -144,7 +145,7 @@ public class KeyValueMapGenerator {
      */
     public KeyValueMapGenerator(QueryVariableType[] keyTypes, QueryVariableType[] valueTypes) {
         for (QueryVariableType keyType : keyTypes) {
-            if (!isPrimitive(keyType) && keyType != S_FL_BIN)
+            if (!isPrimitive(keyType) && keyType != S_FL_BIN && keyType != S_VARCHAR)
                 throw new IllegalArgumentException("KeyValueMapGenerator expects a primitive key type, not " + keyType);
         }
 
@@ -221,7 +222,7 @@ public class KeyValueMapGenerator {
         // For each field of the key types, create an array
         for (int i = 0; i < this.keyVariableNames.length; i++) {
             Java.Type arrayType;
-            if (this.keyTypes[i] == S_FL_BIN)
+            if (this.keyTypes[i] == S_FL_BIN || this.keyTypes[i] == S_VARCHAR)
                 arrayType = createNestedPrimitiveArrayType(getLocation(), Java.Primitive.BYTE);
             else
                 arrayType = createPrimitiveArrayType(getLocation(), toJavaPrimitive(this.keyTypes[i]));
@@ -372,7 +373,7 @@ public class KeyValueMapGenerator {
             QueryVariableType keyVarPrimType = this.keyTypes[i];
 
             Java.NewArray theArray;
-            if (this.keyTypes[i] == S_FL_BIN)
+            if (keyVarPrimType == S_FL_BIN || keyVarPrimType == S_VARCHAR)
                 theArray = createNew2DPrimitiveArray(getLocation(), Java.Primitive.BYTE, capacityParameterAP.read());
             else
                 theArray = createNewPrimitiveArray(getLocation(), toJavaPrimitive(keyVarPrimType), capacityParameterAP.read());
@@ -390,8 +391,9 @@ public class KeyValueMapGenerator {
             );
 
             Java.Rvalue initialisationLiteral = switch (keyVarPrimType) {
+                case P_DOUBLE -> createFloatingPointLiteral(getLocation(), -1d);
                 case P_INT, P_INT_DATE -> createIntegerLiteral(getLocation(), -1);
-                case S_FL_BIN -> new Java.NullLiteral(getLocation());
+                case S_FL_BIN, S_VARCHAR -> new Java.NullLiteral(getLocation());
 
                 default -> throw new UnsupportedOperationException(
                         "KeyValueMapGenerator.generateConstructors does not support this key type: " + keyVarPrimType);
@@ -555,27 +557,25 @@ public class KeyValueMapGenerator {
         // Create the method body
         List<Java.Statement> incrementForKeyMethodBody = new ArrayList<>();
 
-        // Create the non-negative keys check
-        for (int i = 0; i < this.keyVariableNames.length; i++) {
-            if (this.keyTypes[i] == S_FL_BIN) {
-                incrementForKeyMethodBody.add(
-                        generateNonNullCheck(
-                                createAmbiguousNameRef(
-                                        getLocation(),
-                                        formalParameters[i].name
-                                )
-                        )
-                );
-            } else {
-                incrementForKeyMethodBody.add(
-                        generateNonNegativeCheck(
-                                createAmbiguousNameRef(
-                                        getLocation(),
-                                        formalParameters[i].name
-                                )
-                        )
-                );
-            }
+        // Create the first key to be non-negative
+        if (this.keyTypes[0] == S_FL_BIN || this.keyTypes[0] == S_VARCHAR) {
+            incrementForKeyMethodBody.add(
+                    generateNonNullCheck(
+                            createAmbiguousNameRef(
+                                    getLocation(),
+                                    formalParameters[0].name
+                            )
+                    )
+            );
+        } else {
+            incrementForKeyMethodBody.add(
+                    generateNonNegativeCheck(
+                            createAmbiguousNameRef(
+                                    getLocation(),
+                                    formalParameters[0].name
+                            )
+                    )
+            );
         }
 
         // Declare the index variable and check whether the key is already contained in the map
@@ -881,7 +881,7 @@ public class KeyValueMapGenerator {
 
         // Generate the disjunction for the while-loop guard
         Java.Rvalue nextLoopDisjunction;
-        if (this.keyTypes[0] == S_FL_BIN) {
+        if (this.keyTypes[0] == S_FL_BIN || this.keyTypes[0] == S_VARCHAR) {
             nextLoopDisjunction = not(
                     getLocation(),
                     createMethodInvocation(
@@ -914,7 +914,7 @@ public class KeyValueMapGenerator {
 
         for (int i = 1; i < this.keyVariableNames.length; i++) {
             Java.Rvalue conditionCheck;
-            if (this.keyTypes[i] == S_FL_BIN) {
+            if (this.keyTypes[i] == S_FL_BIN || this.keyTypes[i] == S_VARCHAR) {
                 conditionCheck = not(
                         getLocation(),
                         createMethodInvocation(
@@ -1071,7 +1071,7 @@ public class KeyValueMapGenerator {
 
             Java.Type arrayType;
             Java.NewArray theArray;
-            if (keyPrimType == S_FL_BIN) {
+            if (keyPrimType == S_FL_BIN || keyPrimType == S_VARCHAR) {
                 arrayType = createNestedPrimitiveArrayType(getLocation(), Java.Primitive.BYTE);
                 theArray = createNew2DPrimitiveArray(getLocation(), Java.Primitive.BYTE, newSize.read());
             }
@@ -1105,8 +1105,9 @@ public class KeyValueMapGenerator {
             );
 
             Java.Rvalue initialisationLiteral = switch (keyPrimType) {
+                case P_DOUBLE -> createFloatingPointLiteral(getLocation(), -1d);
                 case P_INT, P_INT_DATE -> createIntegerLiteral(getLocation(), -1);
-                case S_FL_BIN -> new Java.NullLiteral(getLocation());
+                case S_FL_BIN, S_VARCHAR -> new Java.NullLiteral(getLocation());
 
                 default -> throw new UnsupportedOperationException(
                         "KeyValueMapGenerator.generateGrowArraysMethod does not support this key type: " + keyPrimType);
@@ -1377,7 +1378,7 @@ public class KeyValueMapGenerator {
         //     currentIndex = this.next[currentIndex];
         // }
         Java.Rvalue probeWhileLoopDisjunction;
-        if (this.keyTypes[0] == S_FL_BIN) {
+        if (this.keyTypes[0] == S_FL_BIN || this.keyTypes[0] == S_VARCHAR) {
             probeWhileLoopDisjunction = not(
                     getLocation(),
                     createMethodInvocation(
@@ -1410,7 +1411,7 @@ public class KeyValueMapGenerator {
 
         for (int i = 1; i < this.keyVariableNames.length; i++) {
             Java.Rvalue condition;
-            if (this.keyTypes[i] == S_FL_BIN) {
+            if (this.keyTypes[i] == S_FL_BIN || this.keyTypes[i] == S_VARCHAR) {
                 condition = not(
                         getLocation(),
                         createMethodInvocation(
@@ -1647,8 +1648,9 @@ public class KeyValueMapGenerator {
             Java.MethodInvocation hashMethodInvocation = createMethodInvocation(
                     getLocation(),
                     switch (this.keyTypes[i]) {
+                        case P_DOUBLE -> createAmbiguousNameRef(getLocation(), "Double_Hash_Function");
                         case P_INT, P_INT_DATE -> createAmbiguousNameRef(getLocation(), "Int_Hash_Function");
-                        case S_FL_BIN -> createAmbiguousNameRef(getLocation(), "Char_Arr_Hash_Function");
+                        case S_FL_BIN, S_VARCHAR -> createAmbiguousNameRef(getLocation(), "Char_Arr_Hash_Function");
 
                         default -> throw new UnsupportedOperationException(
                                 "This key-type is currently not supported by the KeyValueMapGenerator");
@@ -1736,8 +1738,9 @@ public class KeyValueMapGenerator {
         for (int i = 0; i < this.keyVariableNames.length; i++) {
             QueryVariableType keyType = this.keyTypes[i];
             Java.Rvalue initialisationLiteral = switch (keyType) {
+                case P_DOUBLE -> createFloatingPointLiteral(getLocation(), -1d);
                 case P_INT, P_INT_DATE -> createIntegerLiteral(getLocation(), -1);
-                case S_FL_BIN -> new Java.NullLiteral(getLocation());
+                case S_FL_BIN, S_VARCHAR -> new Java.NullLiteral(getLocation());
 
                 default -> throw new UnsupportedOperationException(
                         "KeyValueMapGenerator.generateResetMethod does not support this key type: " + keyType);
@@ -1826,7 +1829,7 @@ public class KeyValueMapGenerator {
      */
     private Java.Statement generateNonNegativeCheck(Java.Rvalue rValueToCheck) {
         // if ([rvalueToCheck] < 0)
-        //     throw new IllegalArgumentException("The map expects non-negative keys");
+        //     throw new IllegalArgumentException("The map expects the first key ordinal to be non-negative");
         return createIf(
                 getLocation(),
                 lt(
@@ -1843,7 +1846,7 @@ public class KeyValueMapGenerator {
                                         "java.lang.IllegalArgumentException"
                                 ),
                                 new Java.Rvalue[] {
-                                        createStringLiteral(getLocation(), "\"The map expects non-negative keys\"")
+                                        createStringLiteral(getLocation(), "\"The map expects the first key ordinal to be non-negative\"")
                                 }
                         )
                 )
@@ -1858,7 +1861,7 @@ public class KeyValueMapGenerator {
      */
     private Java.Statement generateNonNullCheck(Java.Rvalue rValueToCheck) {
         // if ([rvalueToCheck] == null)
-        //     throw new IllegalArgumentException("The map expects non-null keys");
+        //     throw new IllegalArgumentException("The map expects the first key ordinal to be non-null");
         return createIf(
                 getLocation(),
                 eq(
@@ -1875,7 +1878,7 @@ public class KeyValueMapGenerator {
                                         "java.lang.IllegalArgumentException"
                                 ),
                                 new Java.Rvalue[] {
-                                        createStringLiteral(getLocation(), "\"The map expects non-null keys\"")
+                                        createStringLiteral(getLocation(), "\"The map expects the first key ordinal to be non-null\"")
                                 }
                         )
                 )

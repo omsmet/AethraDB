@@ -27,14 +27,22 @@ import org.codehaus.janino.Java;
 import java.util.ArrayList;
 import java.util.List;
 
+import static evaluation.codegen.infrastructure.context.QueryVariableType.ARRAY_FIXED_LENGTH_BINARY_VECTOR;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.ARRAY_INT_VECTOR;
+import static evaluation.codegen.infrastructure.context.QueryVariableType.ARRAY_VARCHAR_VECTOR;
+import static evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_FIXED_LENGTH_BINARY_VECTOR;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_INT_VECTOR;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_INT_VECTOR_W_SELECTION_VECTOR;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_INT_VECTOR_W_VALIDITY_MASK;
+import static evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_VARCHAR_VECTOR;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.MAP_GENERATED;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.P_A_LONG;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.P_INT;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.P_LONG;
+import static evaluation.codegen.infrastructure.context.QueryVariableType.S_A_FL_BIN;
+import static evaluation.codegen.infrastructure.context.QueryVariableType.S_A_VARCHAR;
+import static evaluation.codegen.infrastructure.context.QueryVariableType.S_FL_BIN;
+import static evaluation.codegen.infrastructure.context.QueryVariableType.S_VARCHAR;
 import static evaluation.codegen.infrastructure.context.QueryVariableTypeMethods.primitiveArrayTypeForPrimitive;
 import static evaluation.codegen.infrastructure.context.QueryVariableTypeMethods.primitiveType;
 import static evaluation.codegen.infrastructure.context.QueryVariableTypeMethods.toJavaType;
@@ -688,6 +696,7 @@ public class JoinOperator extends CodeGenOperator<LogicalJoin> {
                 case P_A_DOUBLE -> "getDoubleVector";
                 case P_A_INT, P_A_INT_DATE -> "getIntVector";
                 case P_A_LONG -> "getLongVector";
+                case S_A_FL_BIN, S_A_VARCHAR -> "getNestedByteVector";
                 default -> throw new UnsupportedOperationException(
                         "JoinOperator.produceVec does not support allocating this result vector type");
             };
@@ -754,12 +763,25 @@ public class JoinOperator extends CodeGenOperator<LogicalJoin> {
                                                : 0;
         for (int i = 0; i < currentOrdinalMapping.size(); i++) {
             int outputVectorIndex = vectorOffset + i;
-            QueryVariableType primitiveOrdinalType =
-                    primitiveType(currentOrdinalMapping.get(i).getType());
+            QueryVariableType ordinalType = currentOrdinalMapping.get(i).getType();
+
+            QueryVariableType primitiveOrdinalType;
+            QueryVariableType primitiveArrayType;
+            if (ordinalType == ARROW_FIXED_LENGTH_BINARY_VECTOR || ordinalType == ARRAY_FIXED_LENGTH_BINARY_VECTOR) {
+                primitiveOrdinalType = S_FL_BIN;
+                primitiveArrayType = S_A_FL_BIN;
+            } else if (ordinalType == ARROW_VARCHAR_VECTOR || ordinalType == ARRAY_VARCHAR_VECTOR) {
+                primitiveOrdinalType = S_VARCHAR;
+                primitiveArrayType = S_A_VARCHAR;
+            } else {
+                primitiveOrdinalType = primitiveType(currentOrdinalMapping.get(i).getType());
+                primitiveArrayType = primitiveArrayTypeForPrimitive(primitiveOrdinalType);
+            }
+
             this.resultVectorDefinitions[outputVectorIndex] =
                     new ArrayAccessPath(
                             this.resultVectorNames[outputVectorIndex],
-                            primitiveArrayTypeForPrimitive(primitiveOrdinalType)
+                            primitiveArrayType
                     );
         }
 
@@ -1725,9 +1747,15 @@ public class JoinOperator extends CodeGenOperator<LogicalJoin> {
                             "JoinOperator.consumeVecProbe does not support obtaining values for the provided AccessPath");
                 }
 
+                QueryVariableType rightJoinColumnType;
+                if (rightJoinColumnAP.getType() == ARROW_FIXED_LENGTH_BINARY_VECTOR)
+                    rightJoinColumnType = S_FL_BIN;
+                else
+                    rightJoinColumnType = primitiveType(primitiveType(rightJoinColumnAP.getType()));
+
                 ScalarVariableAccessPath rightJoinColumnValue = new ScalarVariableAccessPath(
                         cCtx.defineVariable("right_join_ord_" + i),
-                        primitiveType(primitiveType(rightJoinColumnAP.getType()))
+                        rightJoinColumnType
                 );
 
                 resultVectorConstructionLoop.addStatement(
@@ -1872,8 +1900,17 @@ public class JoinOperator extends CodeGenOperator<LogicalJoin> {
             List<AccessPath> relationType, int keyIndex) {
         // Obtain the types of all the columns in the relation
         QueryVariableType[] primitiveColumnTypes = new QueryVariableType[relationType.size()];
-        for (int i = 0; i < primitiveColumnTypes.length; i++)
-            primitiveColumnTypes[i] = primitiveType(relationType.get(i).getType());
+        for (int i = 0; i < primitiveColumnTypes.length; i++) {
+            QueryVariableType relationColumnType = relationType.get(i).getType();
+            if (relationColumnType == S_VARCHAR
+                    || relationColumnType == ARROW_VARCHAR_VECTOR || relationColumnType == ARRAY_VARCHAR_VECTOR)
+                primitiveColumnTypes[i] = S_VARCHAR;
+            else if (relationColumnType == S_FL_BIN
+                    || relationColumnType == ARROW_FIXED_LENGTH_BINARY_VECTOR || relationColumnType == ARRAY_FIXED_LENGTH_BINARY_VECTOR)
+                primitiveColumnTypes[i] = S_FL_BIN;
+            else
+                primitiveColumnTypes[i] = primitiveType(relationColumnType);
+        }
 
         return new KeyMultiRecordMapGenerator(
                 primitiveColumnTypes[keyIndex],

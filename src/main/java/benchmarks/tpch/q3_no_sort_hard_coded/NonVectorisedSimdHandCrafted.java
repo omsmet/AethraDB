@@ -4,7 +4,6 @@ import evaluation.codegen.infrastructure.context.OptimisationContext;
 import evaluation.codegen.infrastructure.data.ABQArrowTableReader;
 import evaluation.codegen.infrastructure.data.ArrowTableReader;
 import evaluation.general_support.hashmaps.Int_Hash_Function;
-import jdk.incubator.vector.DoubleVector;
 import jdk.incubator.vector.VectorOperators;
 import org.apache.arrow.memory.RootAllocator;
 import org.openjdk.jmh.annotations.Benchmark;

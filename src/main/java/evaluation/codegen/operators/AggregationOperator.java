@@ -33,7 +33,9 @@ import java.util.List;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.ARRAY_DOUBLE_VECTOR;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.ARRAY_DOUBLE_VECTOR_W_SELECTION_VECTOR;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.ARRAY_DOUBLE_VECTOR_W_VALIDITY_MASK;
+import static evaluation.codegen.infrastructure.context.QueryVariableType.ARRAY_FIXED_LENGTH_BINARY_VECTOR;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.ARRAY_INT_VECTOR;
+import static evaluation.codegen.infrastructure.context.QueryVariableType.ARRAY_VARCHAR_VECTOR;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_DOUBLE_VECTOR;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_DOUBLE_VECTOR_W_SELECTION_VECTOR;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_DOUBLE_VECTOR_W_VALIDITY_MASK;
@@ -49,7 +51,9 @@ import static evaluation.codegen.infrastructure.context.QueryVariableType.P_DOUB
 import static evaluation.codegen.infrastructure.context.QueryVariableType.P_INT;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.P_LONG;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.S_A_FL_BIN;
+import static evaluation.codegen.infrastructure.context.QueryVariableType.S_A_VARCHAR;
 import static evaluation.codegen.infrastructure.context.QueryVariableType.S_FL_BIN;
+import static evaluation.codegen.infrastructure.context.QueryVariableType.S_VARCHAR;
 import static evaluation.codegen.infrastructure.context.QueryVariableTypeMethods.primitiveArrayTypeForPrimitive;
 import static evaluation.codegen.infrastructure.context.QueryVariableTypeMethods.primitiveType;
 import static evaluation.codegen.infrastructure.context.QueryVariableTypeMethods.toJavaType;
@@ -559,8 +563,9 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
                 for (int i = 0; i < keyColumnRValues.length; i++) {
 
                     Java.AmbiguousName hashFunctionContainer = switch (this.groupByKeyColumnsTypes[i]) {
+                        case P_DOUBLE -> createAmbiguousNameRef(getLocation(), "Double_Hash_Function");
                         case P_INT, P_INT_DATE -> createAmbiguousNameRef(getLocation(), "Int_Hash_Function");
-                        case S_FL_BIN -> createAmbiguousNameRef(getLocation(), "Char_Arr_Hash_Function");
+                        case S_FL_BIN, S_VARCHAR -> createAmbiguousNameRef(getLocation(), "Char_Arr_Hash_Function");
 
                         default -> throw new UnsupportedOperationException("AggregationOperator.consumeNonVec does not support this group-by key type");
                     };
@@ -771,11 +776,13 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
                 // primitiveType[] groupKeyVector_i = cCtx.getAllocationManager().get[primitiveType]Vector();
                 ArrayAccessPath groupKeyVectorArrayAP = new ArrayAccessPath(
                         cCtx.defineVariable("groupKeyVector_" + i),
-                        (currentKeyPrimitiveType == S_FL_BIN) ? S_A_FL_BIN : primitiveArrayTypeForPrimitive(currentKeyPrimitiveType));
+                        (currentKeyPrimitiveType == S_FL_BIN) ? S_A_FL_BIN :
+                                (currentKeyPrimitiveType == S_VARCHAR) ? S_A_VARCHAR : primitiveArrayTypeForPrimitive(currentKeyPrimitiveType));
 
                 String initMethodName = switch (currentKeyPrimitiveType) {
+                    case P_DOUBLE -> "getDoubleVector";
                     case P_INT, P_INT_DATE -> "getIntVector";
-                    case S_FL_BIN -> "getNestedByteVector";
+                    case S_FL_BIN, S_VARCHAR -> "getNestedByteVector";
 
                     default -> throw new UnsupportedOperationException("AggregationOperator.produceVec does not support key type " + currentKeyPrimitiveType);
                 };
@@ -1174,7 +1181,7 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
                 int currentMethodInvocationArgumentIndex = 0;
                 methodInvocationArguments[currentMethodInvocationArgumentIndex++] = this.groupKeyPreHashVector.read();
                 methodInvocationArguments[currentMethodInvocationArgumentIndex++] = switch (keyColumnsAccessPathTypes[i]) {
-                    case ARRAY_INT_VECTOR, ARRAY_INT_DATE_VECTOR
+                    case ARRAY_DOUBLE_VECTOR, ARRAY_FIXED_LENGTH_BINARY_VECTOR, ARRAY_INT_VECTOR, ARRAY_INT_DATE_VECTOR, ARRAY_VARCHAR_VECTOR
                             -> ((ArrayVectorAccessPath) keyColumnsAccessPaths[i]).getVectorVariable().read();
                     case ARROW_FIXED_LENGTH_BINARY_VECTOR, ARROW_INT_VECTOR
                             -> ((ArrowVectorAccessPath) keyColumnsAccessPaths[i]).read();
@@ -1189,7 +1196,7 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
                 // Check if we need to add a length parameter
                 if (arrayVector) {
                     methodInvocationArguments[currentMethodInvocationArgumentIndex++] = switch (keyColumnsAccessPathTypes[i]) {
-                        case ARRAY_INT_VECTOR, ARRAY_INT_DATE_VECTOR
+                        case ARRAY_DOUBLE_VECTOR, ARRAY_FIXED_LENGTH_BINARY_VECTOR, ARRAY_INT_VECTOR, ARRAY_INT_DATE_VECTOR, ARRAY_VARCHAR_VECTOR
                                 -> ((ArrayVectorAccessPath) keyColumnsAccessPaths[i]).getVectorLengthVariable().read();
 
                         default -> throw new UnsupportedOperationException("AggregationOperator.consumeVec does not support this key column access path type");
@@ -1501,10 +1508,14 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
         for (int i = 0; i < this.groupByKeyColumnsTypes.length; i++) {
             QueryVariableType ordinalType = om.get(this.groupByKeyColumnIndices[i]).getType();
             if (ordinalType == S_FL_BIN
+                    || ordinalType == ARRAY_FIXED_LENGTH_BINARY_VECTOR
                     || ordinalType == ARROW_FIXED_LENGTH_BINARY_VECTOR
                     || ordinalType == ARROW_FIXED_LENGTH_BINARY_VECTOR_W_SELECTION_VECTOR
                     || ordinalType == ARROW_FIXED_LENGTH_BINARY_VECTOR_W_VALIDITY_MASK)
                 ordinalType = S_FL_BIN;
+            else if (ordinalType == S_VARCHAR
+                    || ordinalType == ARRAY_VARCHAR_VECTOR)
+                ordinalType = S_VARCHAR;
             else
                 ordinalType = primitiveType(ordinalType);
             this.groupByKeyColumnsTypes[i] = ordinalType;

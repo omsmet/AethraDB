@@ -13,8 +13,8 @@ public final class Char_Arr_Hash_Function {
     }
 
     /**
-     * Method to compute the pre-hash of an character array key.
-     * @param key The key to compute teh pre-hash value for.
+     * Method to compute the pre-hash of a character array key.
+     * @param key The key to compute the pre-hash value for.
      * @return The pre-hash value.
      */
     public static long preHash(byte[] key) {

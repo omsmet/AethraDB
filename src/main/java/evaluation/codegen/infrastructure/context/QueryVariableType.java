@@ -29,6 +29,7 @@ public enum QueryVariableType {
 
     // Special array types
     S_A_FL_BIN,
+    S_A_VARCHAR,
 
     // Arrow vector types
     ARROW_DATE_VECTOR,
@@ -62,6 +63,7 @@ public enum QueryVariableType {
     ARRAY_INT_VECTOR,
     ARRAY_INT_DATE_VECTOR,
     ARRAY_LONG_VECTOR,
+    ARRAY_VARCHAR_VECTOR,
 
     // Array vector with selection/validity mask types
     ARRAY_DOUBLE_VECTOR_W_SELECTION_VECTOR,

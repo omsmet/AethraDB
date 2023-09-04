@@ -130,6 +130,7 @@ public final class QueryVariableTypeMethods {
             case P_A_INT_DATE -> ARRAY_INT_DATE_VECTOR;
             case P_A_LONG -> ARRAY_LONG_VECTOR;
             case S_A_FL_BIN -> ARRAY_FIXED_LENGTH_BINARY_VECTOR;
+            case S_A_VARCHAR -> ARRAY_VARCHAR_VECTOR;
             default ->
                 throw new IllegalArgumentException("vectorTypeForPrimitiveArrayType expects a primitive array type");
         };
@@ -291,6 +292,7 @@ public final class QueryVariableTypeMethods {
             case S_VARCHAR -> createPrimitiveArrayType(location, Java.Primitive.BYTE);
 
             case S_A_FL_BIN -> createNestedPrimitiveArrayType(location, Java.Primitive.BYTE);
+            case S_A_VARCHAR -> createNestedPrimitiveArrayType(location, Java.Primitive.BYTE);
 
             case ARROW_DATE_VECTOR -> createReferenceType(getLocation(), "org.apache.arrow.vector.DateDayVector");
             case ARROW_DOUBLE_VECTOR -> createReferenceType(location, "org.apache.arrow.vector.Float8Vector");
