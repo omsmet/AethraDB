@@ -37,7 +37,6 @@ import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createNe
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createNew2DPrimitiveArray;
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createNew3DPrimitiveArray;
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createNewPrimitiveArray;
-import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createPrimitiveArrayType;
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createPrimitiveType;
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createReferenceType;
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createStringLiteral;

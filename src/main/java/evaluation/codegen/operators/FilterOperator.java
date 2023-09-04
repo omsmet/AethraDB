@@ -19,11 +19,9 @@ import org.apache.calcite.rex.RexInputRef;
 import org.apache.calcite.rex.RexLiteral;
 import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.rex.RexUtil;
-import org.apache.calcite.sql.SqlIntervalQualifier;
 import org.apache.calcite.sql.SqlKind;
 import org.apache.calcite.sql.fun.SqlDatetimePlusOperator;
 import org.apache.calcite.sql.fun.SqlDatetimeSubtractionOperator;
-import org.apache.calcite.sql.fun.SqlMonotonicBinaryOperator;
 import org.apache.calcite.sql.type.IntervalSqlType;
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.calcite.util.DateString;
@@ -71,10 +69,6 @@ import static evaluation.codegen.infrastructure.janino.JaninoOperatorGen.le;
 import static evaluation.codegen.infrastructure.janino.JaninoOperatorGen.lt;
 import static evaluation.codegen.infrastructure.janino.JaninoOperatorGen.mul;
 import static evaluation.codegen.infrastructure.janino.JaninoVariableGen.createLocalVariable;
-import static org.apache.calcite.avatica.util.TimeUnitRange.DAY;
-import static org.apache.calcite.avatica.util.TimeUnitRange.MONTH;
-import static org.apache.calcite.avatica.util.TimeUnitRange.WEEK;
-import static org.apache.calcite.avatica.util.TimeUnitRange.YEAR;
 
 /**
  * A {@link CodeGenOperator} which filters out records according to a given condition.
