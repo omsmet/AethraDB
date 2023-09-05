@@ -134,8 +134,11 @@ public class VectorisedSimd {
         this.join_map_0 = new JoinMapType0();
         this.join_map_1 = new JoinMapType1();
 
+        // Initialise the result verifier
+        this.resultVerifier = new ResultVerifier(this.tpchInstance + "/q10_result.csv");
+
         // Initialise the result
-        int resultSize = 37967;
+        int resultSize = this.resultVerifier.getResultSize();
         this.resultCustKey = new int[resultSize];
         this.resultCName = new byte[resultSize][];
         this.resultRevenue = new double[resultSize];
@@ -153,9 +156,6 @@ public class VectorisedSimd {
         Arrays.fill(this.resultCAddress, null);
         Arrays.fill(this.resultCPhone, null);
         Arrays.fill(this.resultCComment, null);
-
-        // Initialise the result verifier
-        this.resultVerifier = new ResultVerifier(this.tpchInstance + "/q10_result.csv");
     }
 
     /**

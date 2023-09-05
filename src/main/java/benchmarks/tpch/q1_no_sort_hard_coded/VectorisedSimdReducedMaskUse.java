@@ -99,8 +99,11 @@ public class VectorisedSimdReducedMaskUse {
         // Initialise the hash-table
         this.aggregation_state_map = new AggregationMap();
 
+        // Initialise the result verifier
+        this.resultVerifier = new ResultVerifier(this.tpchInstance + "/q1_result.csv");
+
         // Initialise the result
-        int resultSize = 4;
+        int resultSize = this.resultVerifier.getResultSize();
         this.resultReturnFlag = new byte[resultSize][];
         Arrays.fill(this.resultReturnFlag, null);
         this.resultLineStatus = new byte[resultSize][];
@@ -121,9 +124,6 @@ public class VectorisedSimdReducedMaskUse {
         Arrays.fill(this.resultAvgDisc, -1);
         this.resultCountOrder = new int[resultSize];
         Arrays.fill(this.resultCountOrder, -1);
-
-        // Initialise the result verifier
-        this.resultVerifier = new ResultVerifier(this.tpchInstance + "/q1_result.csv");
     }
 
     /**

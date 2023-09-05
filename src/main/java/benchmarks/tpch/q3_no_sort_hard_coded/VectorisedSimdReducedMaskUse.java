@@ -119,8 +119,11 @@ public class VectorisedSimdReducedMaskUse {
         this.join_map = new OuterMostJoinMap();
         this.join_map_0 = new InnerMostJoinMap();
 
+        // Initialise the result verifier
+        this.resultVerifier = new ResultVerifier(this.tpchInstance + "/q3_result.csv");
+
         // Initialise the result
-        int resultSize = 11620;
+        int resultSize = this.resultVerifier.getResultSize();
         this.resultLOrderKey = new int[resultSize];
         Arrays.fill(this.resultLOrderKey, -1);
         this.resultRevenue = new double[resultSize];
@@ -129,9 +132,6 @@ public class VectorisedSimdReducedMaskUse {
         Arrays.fill(this.resultOOrderDate, -1);
         this.resultOShippriority = new int[resultSize];
         Arrays.fill(this.resultOShippriority, -1);
-
-        // Initialise the result verifier
-        this.resultVerifier = new ResultVerifier(this.tpchInstance + "/q3_result.csv");
     }
 
     /**

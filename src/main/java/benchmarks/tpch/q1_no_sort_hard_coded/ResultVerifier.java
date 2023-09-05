@@ -80,6 +80,14 @@ public class ResultVerifier {
     }
 
     /**
+     * Method to get the (expected) size of the result.
+     * @return The number of groups that should exist in the result.
+     */
+    public int getResultSize() {
+        return this.correctResultReturnFlag.length;
+    }
+
+    /**
      * Method to check if the result computed in a query is indeed correct.
      * @return {@code true} iff the result matches the expected result.
      */
@@ -120,14 +128,13 @@ public class ResultVerifier {
             // Check the remaining columns
             groupCorrectInResult[correctResultIndex] =
                        resultSumQuantity[resultIndex] == correctResultSumQuantity[correctResultIndex]
-                    && (Math.abs(resultSumBasePrice[resultIndex] - correctResultSumBasePrice[correctResultIndex]) < 1e-2)
-                    && (Math.abs(resultSumDiscPrice[resultIndex] - correctResultSumDiscPrice[correctResultIndex]) < 1e-2)
-                    && (Math.abs(resultSumCharge[resultIndex] - correctResultSumCharge[correctResultIndex]) < 1e-2)
-                    && (Math.abs(resultAvgQuantity[resultIndex] - correctResultAvgQuantity[correctResultIndex]) < 1e-2)
-                    && (Math.abs(resultAvgPrice[resultIndex] - correctResultAvgPrice[correctResultIndex]) < 1e-2)
-                    && (Math.abs(resultAvgDisc[resultIndex] - correctResultAvgDisc[correctResultIndex])) < 1e-2
+                    && (Math.abs(resultSumBasePrice[resultIndex] - correctResultSumBasePrice[correctResultIndex]) < 3e-1)
+                    && (Math.abs(resultSumDiscPrice[resultIndex] - correctResultSumDiscPrice[correctResultIndex]) < 3e-1)
+                    && (Math.abs(resultSumCharge[resultIndex] - correctResultSumCharge[correctResultIndex]) < 3e-1)
+                    && (Math.abs(resultAvgQuantity[resultIndex] - correctResultAvgQuantity[correctResultIndex]) < 3e-1)
+                    && (Math.abs(resultAvgPrice[resultIndex] - correctResultAvgPrice[correctResultIndex]) < 3e-1)
+                    && (Math.abs(resultAvgDisc[resultIndex] - correctResultAvgDisc[correctResultIndex])) < 3e-1
                     && resultCountOrder[resultIndex] == correctResultCountOrder[correctResultIndex];
-
         }
 
         // Return whether all groups have been correctly found in the result

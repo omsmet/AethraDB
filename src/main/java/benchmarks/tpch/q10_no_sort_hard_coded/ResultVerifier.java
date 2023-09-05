@@ -80,6 +80,14 @@ public class ResultVerifier {
     }
 
     /**
+     * Method to get the (expected) size of the result.
+     * @return The number of groups that should exist in the result.
+     */
+    public int getResultSize() {
+        return this.correctResultCustKey.length;
+    }
+
+    /**
      * Method to check if the result computed in a query is indeed correct.
      * @return {@code true} iff the result matches the expected result.
      */
