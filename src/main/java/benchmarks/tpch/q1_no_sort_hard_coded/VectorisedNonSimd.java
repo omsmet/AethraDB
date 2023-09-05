@@ -38,7 +38,8 @@ public class VectorisedNonSimd {
      * Different instances of the TPC-H database can be tested using this benchmark.
      */
     @Param({
-        "/nvtmp/AethraTestData/tpch/sf-1"
+            "/nvtmp/AethraTestData/tpch/sf-1",
+            "/nvtmp/AethraTestData/tpch/sf-10"
     })
     private String tpchInstance;
 
@@ -185,8 +186,8 @@ public class VectorisedNonSimd {
             "-Darrow.enable_unsafe_memory_access=true",
             "-Darrow.enable_null_check_for_get=false",
             "--enable-preview",
-            "-Xmx16g",
-            "-Xms8g"
+            "-Xmx32g",
+            "-Xms16g"
     })
     public void executeQuery(Blackhole bh) throws IOException {
         // DIFF: hard-coded allocation manager

@@ -36,22 +36,29 @@ public class NonVectorisedNonSimd {
      * selectivity of the join condition between different columns varies.
      */
     @Param({
-            "/nvtmp/AethraTestData/join_query_int/A_B_0.2_C_0.2",
+            // SF-1
+//            "/nvtmp/AethraTestData/join_query_int/A_B_0.2_C_0.2",
 //            "/nvtmp/AethraTestData/join_query_int/A_B_0.2_C_0.4",
 //            "/nvtmp/AethraTestData/join_query_int/A_B_0.2_C_0.6",
-            "/nvtmp/AethraTestData/join_query_int/A_B_0.2_C_0.8",
-            "/nvtmp/AethraTestData/join_query_int/A_B_0.4_C_0.2",
+//            "/nvtmp/AethraTestData/join_query_int/A_B_0.2_C_0.8",
+//            "/nvtmp/AethraTestData/join_query_int/A_B_0.4_C_0.2",
 //            "/nvtmp/AethraTestData/join_query_int/A_B_0.4_C_0.4",
 //            "/nvtmp/AethraTestData/join_query_int/A_B_0.4_C_0.6",
-            "/nvtmp/AethraTestData/join_query_int/A_B_0.4_C_0.8",
-            "/nvtmp/AethraTestData/join_query_int/A_B_0.6_C_0.2",
+//            "/nvtmp/AethraTestData/join_query_int/A_B_0.4_C_0.8",
+//            "/nvtmp/AethraTestData/join_query_int/A_B_0.6_C_0.2",
 //            "/nvtmp/AethraTestData/join_query_int/A_B_0.6_C_0.4",
 //            "/nvtmp/AethraTestData/join_query_int/A_B_0.6_C_0.6",
             "/nvtmp/AethraTestData/join_query_int/A_B_0.6_C_0.8",
-            "/nvtmp/AethraTestData/join_query_int/A_B_0.8_C_0.2",
+//            "/nvtmp/AethraTestData/join_query_int/A_B_0.8_C_0.2",
 //            "/nvtmp/AethraTestData/join_query_int/A_B_0.8_C_0.4",
 //            "/nvtmp/AethraTestData/join_query_int/A_B_0.8_C_0.6",
-            "/nvtmp/AethraTestData/join_query_int/A_B_0.8_C_0.8"
+//            "/nvtmp/AethraTestData/join_query_int/A_B_0.8_C_0.8"
+
+            // SF-10
+            "/nvtmp/AethraTestData/join_query_int_sf10/A_B_0.6_C_0.8",
+
+            // SF-20
+//            "/nvtmp/AethraTestData/join_query_int_sf20/A_B_0.6_C_0.8",
     })
     private String tableFilePath;
 
@@ -109,7 +116,12 @@ public class NonVectorisedNonSimd {
         this.table_C = new ABQArrowTableReader(new File(this.tableFilePath + "/table_C.arrow"), this.rootAllocator);
 
         // Compute the hash-table sizes as the correct power of two size
-        int hashTableSize = Integer.highestOneBit(3 * 1024 * 1024) << 2;
+        int hashTableSize = 3 * 1024 * 1024;
+        if (this.tableFilePath.contains("sf10/"))
+            hashTableSize *= 10;
+        else if (this.tableFilePath.contains("sf20/"))
+            hashTableSize *= 20;
+        hashTableSize = Integer.highestOneBit(hashTableSize) << 2;
 
         // Allocate the hash-tables
         this.join_map = new KeyMultiRecordMap_600554759(hashTableSize);
@@ -160,8 +172,8 @@ public class NonVectorisedNonSimd {
             "-Darrow.enable_unsafe_memory_access=true",
             "-Darrow.enable_null_check_for_get=false",
             "--enable-preview",
-            "-Xmx16g",
-            "-Xms8g"
+            "-Xmx32g",
+            "-Xms16g"
     })
     public void executeQuery() throws IOException {
         long count = 0;

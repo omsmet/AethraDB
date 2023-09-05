@@ -41,7 +41,8 @@ public class NonVectorisedSimdHandCrafted {
      * Different instances of the TPC-H database can be tested using this benchmark.
      */
     @Param({
-        "/nvtmp/AethraTestData/tpch/sf-1"
+            "/nvtmp/AethraTestData/tpch/sf-1",
+            "/nvtmp/AethraTestData/tpch/sf-10"
     })
     private String tpchInstance;
 
@@ -178,8 +179,8 @@ public class NonVectorisedSimdHandCrafted {
             "-Darrow.enable_null_check_for_get=false",
             "--enable-preview",
             "--enable-native-access=ALL-UNNAMED",
-            "-Xmx16g",
-            "-Xms8g"
+            "-Xmx32g",
+            "-Xms16g"
     })
     public void executeQuery(Blackhole bh) throws IOException {
         boolean[] SIMD_sel_mask = new boolean[VECTOR_SPECIES_INT.length()];

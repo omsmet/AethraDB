@@ -30,7 +30,7 @@ public class ABQArrowTableReader extends ArrowTableReader {
     /**
      * The amount of batches of the arrow file that are cached by this reader.
      */
-    public static int QUEUE_CAPACITY = 8;
+    public static int QUEUE_CAPACITY = 16;
 
     /**
      * The buffer indicating whether there are more vectors to be processed.

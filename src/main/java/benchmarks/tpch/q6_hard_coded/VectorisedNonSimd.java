@@ -36,7 +36,8 @@ public class VectorisedNonSimd {
      * Different instances of the TPC-H database can be tested using this benchmark.
      */
     @Param({
-        "/nvtmp/AethraTestData/tpch/sf-1"
+            "/nvtmp/AethraTestData/tpch/sf-1",
+            "/nvtmp/AethraTestData/tpch/sf-10"
     })
     private String tpchInstance;
 
@@ -85,6 +86,7 @@ public class VectorisedNonSimd {
         String datasetIdentifier = this.tpchInstance.substring(this.tpchInstance.lastIndexOf("/") + 1);
         this.expectedSumResult = switch (datasetIdentifier) {
             case "sf-1" -> 123141078.23d;
+            case "sf-10" -> 1230113636.01d;
 
             default -> throw new UnsupportedOperationException(
                     "tpch.q6_hard_coded.VectorisedNonSimd.trialSetup received an unexpected datasetIdentifier: " + datasetIdentifier);
@@ -129,8 +131,8 @@ public class VectorisedNonSimd {
             "-Darrow.enable_unsafe_memory_access=true",
             "-Darrow.enable_null_check_for_get=false",
             "--enable-preview",
-            "-Xmx16g",
-            "-Xms8g"
+            "-Xmx32g",
+            "-Xms16g"
     })
     public void executeQuery(Blackhole bh) throws IOException {
         // DIFF: hard-coded allocation manager

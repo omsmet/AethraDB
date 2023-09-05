@@ -39,6 +39,7 @@ public class VectorisedNonSimd extends ResultConsumptionTarget {
      * instances have different number of aggregation groups and/or key skew.
      */
     @Param({
+            // SF-1
 //            "/nvtmp/AethraTestData/aggregation_query_int/arrow_size_31457280_keys_1",
             "/nvtmp/AethraTestData/aggregation_query_int/arrow_size_31457280_keys_2",
 //            "/nvtmp/AethraTestData/aggregation_query_int/arrow_size_31457280_keys_4",
@@ -46,31 +47,45 @@ public class VectorisedNonSimd extends ResultConsumptionTarget {
             "/nvtmp/AethraTestData/aggregation_query_int/arrow_size_31457280_keys_16",
 //            "/nvtmp/AethraTestData/aggregation_query_int/arrow_size_31457280_keys_32",
 //            "/nvtmp/AethraTestData/aggregation_query_int/arrow_size_31457280_keys_64",
-            "/nvtmp/AethraTestData/aggregation_query_int/arrow_size_31457280_keys_128",
+//            "/nvtmp/AethraTestData/aggregation_query_int/arrow_size_31457280_keys_128",
 //            "/nvtmp/AethraTestData/aggregation_query_int/arrow_size_31457280_keys_256",
 //            "/nvtmp/AethraTestData/aggregation_query_int/arrow_size_31457280_keys_512",
-            "/nvtmp/AethraTestData/aggregation_query_int/arrow_size_31457280_keys_1024",
+//            "/nvtmp/AethraTestData/aggregation_query_int/arrow_size_31457280_keys_1024",
 //            "/nvtmp/AethraTestData/aggregation_query_int/arrow_size_31457280_keys_2048",
 //            "/nvtmp/AethraTestData/aggregation_query_int/arrow_size_31457280_keys_4096",
             "/nvtmp/AethraTestData/aggregation_query_int/arrow_size_31457280_keys_8192",
 //            "/nvtmp/AethraTestData/aggregation_query_int/arrow_size_31457280_keys_16384",
 //            "/nvtmp/AethraTestData/aggregation_query_int/arrow_size_31457280_keys_32768",
-            "/nvtmp/AethraTestData/aggregation_query_int/arrow_size_31457280_keys_65536",
+//            "/nvtmp/AethraTestData/aggregation_query_int/arrow_size_31457280_keys_65536",
 //            "/nvtmp/AethraTestData/aggregation_query_int/arrow_size_31457280_keys_131072",
             "/nvtmp/AethraTestData/aggregation_query_int/arrow_size_31457280_keys_262144",
             "/nvtmp/AethraTestData/aggregation_query_int/arrow_size_31457280_keys_524288",
-            "/nvtmp/AethraTestData/aggregation_query_int/arrow_size_62914560_keys_262144_skew_0.2",
+//            "/nvtmp/AethraTestData/aggregation_query_int/arrow_size_62914560_keys_262144_skew_0.2",
 //            "/nvtmp/AethraTestData/aggregation_query_int/arrow_size_62914560_keys_262144_skew_0.4",
 //            "/nvtmp/AethraTestData/aggregation_query_int/arrow_size_62914560_keys_262144_skew_0.6",
-            "/nvtmp/AethraTestData/aggregation_query_int/arrow_size_62914560_keys_262144_skew_0.8",
+//            "/nvtmp/AethraTestData/aggregation_query_int/arrow_size_62914560_keys_262144_skew_0.8",
 //            "/nvtmp/AethraTestData/aggregation_query_int/arrow_size_62914560_keys_262144_skew_1.0",
 //            "/nvtmp/AethraTestData/aggregation_query_int/arrow_size_62914560_keys_262144_skew_1.2",
-            "/nvtmp/AethraTestData/aggregation_query_int/arrow_size_62914560_keys_262144_skew_1.4",
+//            "/nvtmp/AethraTestData/aggregation_query_int/arrow_size_62914560_keys_262144_skew_1.4",
 //            "/nvtmp/AethraTestData/aggregation_query_int/arrow_size_62914560_keys_262144_skew_1.6",
 //            "/nvtmp/AethraTestData/aggregation_query_int/arrow_size_62914560_keys_262144_skew_1.8",
-            "/nvtmp/AethraTestData/aggregation_query_int/arrow_size_62914560_keys_262144_skew_2.0",
+//            "/nvtmp/AethraTestData/aggregation_query_int/arrow_size_62914560_keys_262144_skew_2.0",
 //            "/nvtmp/AethraTestData/aggregation_query_int/arrow_size_62914560_keys_262144_skew_2.2",
-            "/nvtmp/AethraTestData/aggregation_query_int/arrow_size_62914560_keys_262144_skew_2.4"
+//            "/nvtmp/AethraTestData/aggregation_query_int/arrow_size_62914560_keys_262144_skew_2.4"
+
+            // SF-10
+            "/nvtmp/AethraTestData/aggregation_query_int_sf10/arrow_size_314572800_keys_2",
+            "/nvtmp/AethraTestData/aggregation_query_int_sf10/arrow_size_314572800_keys_16",
+            "/nvtmp/AethraTestData/aggregation_query_int_sf10/arrow_size_314572800_keys_8192",
+            "/nvtmp/AethraTestData/aggregation_query_int_sf10/arrow_size_314572800_keys_262144",
+            "/nvtmp/AethraTestData/aggregation_query_int_sf10/arrow_size_314572800_keys_524288",
+
+            // SF-20
+            "/nvtmp/AethraTestData/aggregation_query_int_sf20/arrow_size_629145600_keys_2",
+            "/nvtmp/AethraTestData/aggregation_query_int_sf20/arrow_size_629145600_keys_16",
+            "/nvtmp/AethraTestData/aggregation_query_int_sf20/arrow_size_629145600_keys_8192",
+            "/nvtmp/AethraTestData/aggregation_query_int_sf20/arrow_size_629145600_keys_262144",
+            "/nvtmp/AethraTestData/aggregation_query_int_sf20/arrow_size_629145600_keys_524288",
     })
     private String tableFilePath;
 
@@ -238,8 +253,8 @@ public class VectorisedNonSimd extends ResultConsumptionTarget {
             "-Darrow.enable_unsafe_memory_access=true",
             "-Darrow.enable_null_check_for_get=false",
             "--enable-preview",
-            "-Xmx16g",
-            "-Xms8g"
+            "-Xmx32g",
+            "-Xms16g"
     })
     public void executeQuery() throws IOException {
         this.generatedQuery.execute();

@@ -37,9 +37,20 @@ public class NonVectorisedSimd extends ResultConsumptionTarget {
      * the first, second or third column is the highly selective column. We do so using the different database instances.
      */
     @Param({
-            "/nvtmp/AethraTestData/filter_query_int/arrow_col1_002_col2_098_col3_098/",
-            "/nvtmp/AethraTestData/filter_query_int/arrow_col1_098_col2_002_col3_098/",
-            "/nvtmp/AethraTestData/filter_query_int/arrow_col1_098_col2_098_col3_002/",
+            // SF-1
+             "/nvtmp/AethraTestData/filter_query_int/arrow_col1_002_col2_098_col3_098/",
+             "/nvtmp/AethraTestData/filter_query_int/arrow_col1_098_col2_002_col3_098/",
+             "/nvtmp/AethraTestData/filter_query_int/arrow_col1_098_col2_098_col3_002/",
+
+            // SF-10
+            "/nvtmp/AethraTestData/filter_query_int_sf10/arrow_col1_002_col2_098_col3_098/",
+            "/nvtmp/AethraTestData/filter_query_int_sf10/arrow_col1_098_col2_002_col3_098/",
+            "/nvtmp/AethraTestData/filter_query_int_sf10/arrow_col1_098_col2_098_col3_002/",
+
+            // SF-20
+            "/nvtmp/AethraTestData/filter_query_int_sf20/arrow_col1_002_col2_098_col3_098/",
+            "/nvtmp/AethraTestData/filter_query_int_sf20/arrow_col1_098_col2_002_col3_098/",
+            "/nvtmp/AethraTestData/filter_query_int_sf20/arrow_col1_098_col2_098_col3_002/",
     })
     private String tableFilePath;
 
@@ -76,6 +87,11 @@ public class NonVectorisedSimd extends ResultConsumptionTarget {
     private long result;
 
     /**
+     * State: the expected result of the query.
+     */
+    private long expectedResult;
+
+    /**
      * Method to consume the query result.
      * The result is a single long that should simply be written to the result field of {@code this}.
      * @param value The value to be consumed.
@@ -107,6 +123,14 @@ public class NonVectorisedSimd extends ResultConsumptionTarget {
 
         // Initialise the result
         this.result = -1;
+
+        // Initialise the expected result
+        if (this.tableFilePath.contains("sf20/"))
+            this.expectedResult = 12084336;
+        else if (this.tableFilePath.contains("sf10/"))
+            this.expectedResult = 6042864;
+        else // if (this.tableFilePath.contains("sf1/"))
+            this.expectedResult = 603769;
     }
 
     /**
@@ -124,7 +148,7 @@ public class NonVectorisedSimd extends ResultConsumptionTarget {
      */
     @TearDown(Level.Invocation)
     public void teardown() {
-        if (result != 603769)
+        if (result != this.expectedResult)
             throw new RuntimeException("The computed result is incorrect");
         result = -1; // reset the result after verifying it
 
@@ -145,8 +169,8 @@ public class NonVectorisedSimd extends ResultConsumptionTarget {
             "-Darrow.enable_null_check_for_get=false",
             "--enable-preview",
             "--enable-native-access=ALL-UNNAMED",
-            "-Xmx16g",
-            "-Xms8g"
+            "-Xmx32g",
+            "-Xms16g"
     })
     public void executeFilterQuery() throws IOException {
         this.generatedQuery.execute();
