@@ -15,6 +15,7 @@ import org.apache.arrow.vector.ipc.ArrowFileReader;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
+import java.io.IOException;
 
 /**
  * An {@link ArrowTableReader} specialisation which preloads all data in the arrow file and then
@@ -43,11 +44,6 @@ public class CachingArrowTableReader extends ArrowTableReader {
     private FieldVector[][] fieldVectors;
 
     /**
-     * Boolean keeping track of whether the {@code fieldVectors} variable has been initialised already.
-     */
-    private boolean fieldVectorsInitialised;
-
-    /**
      * Creates a new {@link CachingArrowTableReader} instance
      * @param arrowFile The Arrow IPC file representing the table.
      * @param rootAllocator The {@link RootAllocator} used for Arrow operations.
@@ -55,21 +51,14 @@ public class CachingArrowTableReader extends ArrowTableReader {
      */
     public CachingArrowTableReader(File arrowFile, RootAllocator rootAllocator) throws Exception {
         super(arrowFile, rootAllocator);
-        this.fieldVectorsInitialised = false;
-        this.reset();
-        this.fieldVectorsInitialised = true;
+        this.initialise();
     }
 
-    @Override
-    public void reset() throws Exception {
-        // Deallocate previous vectors if necessary
-        if (fieldVectorsInitialised) {
-            for (int i = 0; i < this.numberOfVectors; i++) {
-                for (int j = 0; j < this.columnCount; j++) {
-                    this.fieldVectors[i][j].close();
-                }
-            }
-        }
+    /**
+     * Method which initialises the cached vectors in this {@link CachingArrowTableReader}.
+     * @throws IOException If an {@link IOException} is thrown from an Arrow internal method.
+     */
+    public void initialise() throws IOException {
 
         // Initialise the reader
         FileInputStream tableInputStream = new FileInputStream(this.arrowFile);
@@ -130,6 +119,12 @@ public class CachingArrowTableReader extends ArrowTableReader {
         schemaRoot.close();
         tableFileReader.close();
         tableInputStream.close();
+    }
+
+    @Override
+    public void reset() {
+        // Set the correct state
+        this.currentVectorIndex = -1;
     }
 
     @Override
