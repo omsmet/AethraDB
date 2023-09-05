@@ -1,5 +1,6 @@
 package util.arrow;
 
+import calcite.rules.ArrowTableScanFilterProjectRule;
 import calcite.rules.ArrowTableScanProjectionRule;
 import calcite.rules.ArrowTableScanRule;
 import org.apache.calcite.jdbc.CalciteSchema;
@@ -198,13 +199,15 @@ public class ArrowDatabase {
         hepProgramBuilder.addRuleInstance(CoreRules.PROJECT_FILTER_TRANSPOSE);          // Push project past filter
         hepProgramBuilder.addRuleInstance(CoreRules.PROJECT_JOIN_TRANSPOSE);            // Push project past join
         hepProgramBuilder.addRuleInstance(CoreRules.PROJECT_REDUCE_EXPRESSIONS);        // Reduces constant expressions inside projections
-        hepProgramBuilder.addRuleInstance(CoreRules.PROJECT_REMOVE);                    // Removes projections that only return their input)
+        hepProgramBuilder.addRuleInstance(CoreRules.PROJECT_REMOVE);                    // Removes projections that only return their input
 
         // Rules to enable custom, arrow-specific optimisations/translations
         final ArrowTableScanProjectionRule PROJECT_SCAN = ArrowTableScanProjectionRule.Config.DEFAULT.toRule();
         hepProgramBuilder.addRuleInstance(PROJECT_SCAN);
         final ArrowTableScanRule ARROW_SCAN = ArrowTableScanRule.Config.DEFAULT.toRule();
         hepProgramBuilder.addRuleInstance(ARROW_SCAN);
+        final ArrowTableScanFilterProjectRule ARROW_SCAN_FILTER_PROJECT = ArrowTableScanFilterProjectRule.Config.DEFAULT.toRule();
+        hepProgramBuilder.addRuleInstance(ARROW_SCAN_FILTER_PROJECT);
 
         // Interesting sort and union rules also exist
 
