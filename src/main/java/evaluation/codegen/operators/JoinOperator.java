@@ -1750,6 +1750,8 @@ public class JoinOperator extends CodeGenOperator<LogicalJoin> {
                 QueryVariableType rightJoinColumnType;
                 if (rightJoinColumnAP.getType() == ARROW_FIXED_LENGTH_BINARY_VECTOR)
                     rightJoinColumnType = S_FL_BIN;
+                else if (rightJoinColumnAP.getType() == ARROW_VARCHAR_VECTOR)
+                    rightJoinColumnType = S_VARCHAR;
                 else
                     rightJoinColumnType = primitiveType(primitiveType(rightJoinColumnAP.getType()));
 

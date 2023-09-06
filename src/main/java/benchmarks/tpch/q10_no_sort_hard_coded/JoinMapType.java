@@ -8,14 +8,14 @@ public final class JoinMapType {
     private int numberOfRecords;
     private int[] keys;
     public int[] keysRecordCount;
-    public int[][] values_record_ord_0;
-    public byte[][][] values_record_ord_1;
+    public byte[][][] values_record_ord_0;
+    public int[][] values_record_ord_1;
     public byte[][][] values_record_ord_2;
-    public int[][] values_record_ord_3;
+    public byte[][][] values_record_ord_3;
     public byte[][][] values_record_ord_4;
     public double[][] values_record_ord_5;
     public byte[][][] values_record_ord_6;
-    public double[][] values_record_ord_7;
+    public int[][] values_record_ord_7;
     private int[] hashTable;
     private int[] next;
 
@@ -30,21 +30,21 @@ public final class JoinMapType {
         this.keys = new int[capacity];
         Arrays.fill(this.keys, -1);
         this.keysRecordCount = new int[capacity];
-        this.values_record_ord_0 = new int[capacity][8];
-        this.values_record_ord_1 = new byte[capacity][8][];
+        this.values_record_ord_0 = new byte[capacity][8][];
+        this.values_record_ord_1 = new int[capacity][8];
         this.values_record_ord_2 = new byte[capacity][8][];
-        this.values_record_ord_3 = new int[capacity][8];
+        this.values_record_ord_3 = new byte[capacity][8][];
         this.values_record_ord_4 = new byte[capacity][8][];
         this.values_record_ord_5 = new double[capacity][8];
         this.values_record_ord_6 = new byte[capacity][8][];
-        this.values_record_ord_7 = new double[capacity][8];
+        this.values_record_ord_7 = new int[capacity][8];
         this.hashTable = new int[capacity];
         Arrays.fill(this.hashTable, -1);
         this.next = new int[capacity];
         Arrays.fill(this.next, -1);
     }
 
-    public void associate(int key, long preHash, int record_ord_0, byte[] record_ord_1, byte[] record_ord_2, int record_ord_3, byte[] record_ord_4, double record_ord_5, byte[] record_ord_6, double record_ord_7) {
+    public void associate(int key, long preHash, byte[] record_ord_0, int record_ord_1, byte[] record_ord_2, byte[] record_ord_3, byte[] record_ord_4, double record_ord_5, byte[] record_ord_6, int record_ord_7) {
         if ((key < 0)) {
             throw new java.lang.IllegalArgumentException("The map expects non-negative keys");
         }
@@ -62,16 +62,16 @@ public final class JoinMapType {
         if (!((insertionIndex < this.values_record_ord_0[index].length))) {
             int currentValueArraysSize = this.values_record_ord_0[index].length;
             int newValueArraysSize = (2 * currentValueArraysSize);
-            int[] temp_values_record_ord_0 = new int[newValueArraysSize];
+            byte[][] temp_values_record_ord_0 = new byte[newValueArraysSize][];
             System.arraycopy(this.values_record_ord_0[index], 0, temp_values_record_ord_0, 0, currentValueArraysSize);
             this.values_record_ord_0[index] = temp_values_record_ord_0;
-            byte[][] temp_values_record_ord_1 = new byte[newValueArraysSize][];
+            int[] temp_values_record_ord_1 = new int[newValueArraysSize];
             System.arraycopy(this.values_record_ord_1[index], 0, temp_values_record_ord_1, 0, currentValueArraysSize);
             this.values_record_ord_1[index] = temp_values_record_ord_1;
             byte[][] temp_values_record_ord_2 = new byte[newValueArraysSize][];
             System.arraycopy(this.values_record_ord_2[index], 0, temp_values_record_ord_2, 0, currentValueArraysSize);
             this.values_record_ord_2[index] = temp_values_record_ord_2;
-            int[] temp_values_record_ord_3 = new int[newValueArraysSize];
+            byte[][] temp_values_record_ord_3 = new byte[newValueArraysSize][];
             System.arraycopy(this.values_record_ord_3[index], 0, temp_values_record_ord_3, 0, currentValueArraysSize);
             this.values_record_ord_3[index] = temp_values_record_ord_3;
             byte[][] temp_values_record_ord_4 = new byte[newValueArraysSize][];
@@ -83,7 +83,7 @@ public final class JoinMapType {
             byte[][] temp_values_record_ord_6 = new byte[newValueArraysSize][];
             System.arraycopy(this.values_record_ord_6[index], 0, temp_values_record_ord_6, 0, currentValueArraysSize);
             this.values_record_ord_6[index] = temp_values_record_ord_6;
-            double[] temp_values_record_ord_7 = new double[newValueArraysSize];
+            int[] temp_values_record_ord_7 = new int[newValueArraysSize];
             System.arraycopy(this.values_record_ord_7[index], 0, temp_values_record_ord_7, 0, currentValueArraysSize);
             this.values_record_ord_7[index] = temp_values_record_ord_7;
         }
@@ -135,16 +135,16 @@ public final class JoinMapType {
         System.arraycopy(this.next, 0, newNext, 0, currentSize);
         Arrays.fill(newNext, currentSize, newSize, -1);
         this.next = newNext;
-        int[][] new_values_record_ord_0 = new int[newSize][8];
+        byte[][][] new_values_record_ord_0 = new byte[newSize][8][];
         System.arraycopy(this.values_record_ord_0, 0, new_values_record_ord_0, 0, currentSize);
         this.values_record_ord_0 = new_values_record_ord_0;
-        byte[][][] new_values_record_ord_1 = new byte[newSize][8][];
+        int[][] new_values_record_ord_1 = new int[newSize][8];
         System.arraycopy(this.values_record_ord_1, 0, new_values_record_ord_1, 0, currentSize);
         this.values_record_ord_1 = new_values_record_ord_1;
         byte[][][] new_values_record_ord_2 = new byte[newSize][8][];
         System.arraycopy(this.values_record_ord_2, 0, new_values_record_ord_2, 0, currentSize);
         this.values_record_ord_2 = new_values_record_ord_2;
-        int[][] new_values_record_ord_3 = new int[newSize][8];
+        byte[][][] new_values_record_ord_3 = new byte[newSize][8][];
         System.arraycopy(this.values_record_ord_3, 0, new_values_record_ord_3, 0, currentSize);
         this.values_record_ord_3 = new_values_record_ord_3;
         byte[][][] new_values_record_ord_4 = new byte[newSize][8][];
@@ -156,7 +156,7 @@ public final class JoinMapType {
         byte[][][] new_values_record_ord_6 = new byte[newSize][8][];
         System.arraycopy(this.values_record_ord_6, 0, new_values_record_ord_6, 0, currentSize);
         this.values_record_ord_6 = new_values_record_ord_6;
-        double[][] new_values_record_ord_7 = new double[newSize][8];
+        int[][] new_values_record_ord_7 = new int[newSize][8];
         System.arraycopy(this.values_record_ord_7, 0, new_values_record_ord_7, 0, currentSize);
         this.values_record_ord_7 = new_values_record_ord_7;
     }
