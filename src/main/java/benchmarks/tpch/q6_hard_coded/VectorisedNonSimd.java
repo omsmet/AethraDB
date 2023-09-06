@@ -8,6 +8,7 @@ import evaluation.vector_support.VectorisedAggregationOperators;
 import evaluation.vector_support.VectorisedArithmeticOperators;
 import evaluation.vector_support.VectorisedFilterOperators;
 import org.apache.arrow.memory.RootAllocator;
+import org.apache.calcite.util.ImmutableIntList;
 import org.openjdk.jmh.annotations.Benchmark;
 import org.openjdk.jmh.annotations.BenchmarkMode;
 import org.openjdk.jmh.annotations.Fork;
@@ -74,7 +75,7 @@ public class VectorisedNonSimd {
         // Setup the database
         this.rootAllocator = new RootAllocator();
         this.lineitem_table = new ABQArrowTableReader(
-                new File(this.tpchInstance + "/lineitem.arrow"), this.rootAllocator);
+                new File(this.tpchInstance + "/lineitem.arrow"), this.rootAllocator, ImmutableIntList.of(4, 5, 6, 10));
 
         // Setup the allocation manager
         this.allocationManager = new BufferPoolAllocationManager(16);

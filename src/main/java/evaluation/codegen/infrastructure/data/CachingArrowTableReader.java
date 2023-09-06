@@ -11,6 +11,7 @@ import org.apache.arrow.vector.LargeVarCharVector;
 import org.apache.arrow.vector.VarCharVector;
 import org.apache.arrow.vector.VectorSchemaRoot;
 import org.apache.arrow.vector.ipc.ArrowFileReader;
+import org.apache.calcite.util.ImmutableIntList;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -47,10 +48,11 @@ public class CachingArrowTableReader extends ArrowTableReader {
      * Creates a new {@link CachingArrowTableReader} instance
      * @param arrowFile The Arrow IPC file representing the table.
      * @param rootAllocator The {@link RootAllocator} used for Arrow operations.
+     * @param columnsToProject The columns of the {@code arrowFile} to actually project out.
      * @throws FileNotFoundException When the specified Arrow file cannot be found.
      */
-    public CachingArrowTableReader(File arrowFile, RootAllocator rootAllocator) throws Exception {
-        super(arrowFile, rootAllocator);
+    public CachingArrowTableReader(File arrowFile, RootAllocator rootAllocator, ImmutableIntList columnsToProject) throws Exception {
+        super(arrowFile, rootAllocator, columnsToProject);
         this.initialise();
     }
 
@@ -59,7 +61,6 @@ public class CachingArrowTableReader extends ArrowTableReader {
      * @throws IOException If an {@link IOException} is thrown from an Arrow internal method.
      */
     public void initialise() throws IOException {
-
         // Initialise the reader
         FileInputStream tableInputStream = new FileInputStream(this.arrowFile);
         ArrowFileReader tableFileReader =
@@ -74,7 +75,8 @@ public class CachingArrowTableReader extends ArrowTableReader {
         // Read and cache the data
         int cvi = 0;
         while (tableFileReader.loadNextBatch()) {
-            for (int i = 0; i < columnCount; i++) {
+            // Cache columns as indicated by the columns to project
+            for (int i : this.columnsToProject) {
                 FieldVector fv_cvi_i = schemaRoot.getVector(i);
                 if (fv_cvi_i instanceof IntVector int_fv_cvi_i) {
                     this.fieldVectors[cvi][i] = new IntVector(int_fv_cvi_i.getField(), this.tableAllocator);
@@ -142,7 +144,7 @@ public class CachingArrowTableReader extends ArrowTableReader {
     @Override
     protected void specificClose() {
         for (int i = 0; i < this.numberOfVectors; i++) {
-            for (int j = 0; j < this.columnCount; j++) {
+            for (int j : this.columnsToProject) {
                 this.fieldVectors[i][j].close();
             }
         }

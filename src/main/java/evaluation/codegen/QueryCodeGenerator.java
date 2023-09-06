@@ -130,6 +130,7 @@ public class QueryCodeGenerator extends SimpleCompiler {
         // Return the cached query if we have already generated the query
         if (generated)
             return this.generatedQuery;
+        System.out.println("Generating query code ...");
 
         // Generate the query
         Java.AbstractCompilationUnit.ImportDeclaration[] importDeclarations = this.makeImportDeclarations();
@@ -229,6 +230,9 @@ public class QueryCodeGenerator extends SimpleCompiler {
                 new Java.Type[] { this.classToType(getLocation(), IOException.class) },
                 completedExecuteMethodBody
         );
+
+        System.out.println("Finished query code!");
+        System.out.println();
 
         // Print the generated method body if requested
         if (printCode) {

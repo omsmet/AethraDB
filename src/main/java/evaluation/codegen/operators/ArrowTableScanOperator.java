@@ -21,6 +21,7 @@ import org.codehaus.janino.Java;
 import util.arrow.ArrowTable;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -439,12 +440,14 @@ public class ArrowTableScanOperator extends CodeGenOperator<LogicalArrowTableSca
         // Create an arrow reader instance
         var relOptTable = (RelOptTableImpl) this.getLogicalSubplan().getTable();
         var arrowTable = (ArrowTable) relOptTable.table();
+        var columnsToProject = this.getLogicalSubplan().projects;
 
         ArrowTableReader arrowReader;
         try {
             arrowReader = new ABQArrowTableReader(
                     arrowTable.getArrowFile(),
-                    cCtx.getArrowRootAllocator()
+                    cCtx.getArrowRootAllocator(),
+                    columnsToProject
             );
         } catch (Exception e) {
             throw new RuntimeException("Could not create ArrowTableReader in query compilation stage.", e);
@@ -478,6 +481,8 @@ public class ArrowTableScanOperator extends CodeGenOperator<LogicalArrowTableSca
                         )
                 )
         );
+
+        System.out.println("Arrow reader " + arrowReaderIndex + " projects columns  " + Arrays.toString(columnsToProject.toIntArray()));
 
         // Loop over the vectors in the arrow file
         // while ([arrowReaderVariableName].loadNextBatch()) { [whileLoopBody] }

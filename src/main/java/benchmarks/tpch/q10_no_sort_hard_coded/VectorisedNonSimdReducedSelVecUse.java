@@ -10,6 +10,7 @@ import evaluation.vector_support.VectorisedFilterOperators;
 import evaluation.vector_support.VectorisedHashOperators;
 import evaluation.vector_support.VectorisedOperators;
 import org.apache.arrow.memory.RootAllocator;
+import org.apache.calcite.util.ImmutableIntList;
 import org.openjdk.jmh.annotations.Benchmark;
 import org.openjdk.jmh.annotations.BenchmarkMode;
 import org.openjdk.jmh.annotations.Fork;
@@ -119,10 +120,14 @@ public class VectorisedNonSimdReducedSelVecUse {
     public void trialSetup() throws Exception {
         // Setup the database
         this.rootAllocator = new RootAllocator();
-        this.customer = new ABQArrowTableReader(new File(this.tpchInstance + "/customer.arrow"), this.rootAllocator);
-        this.orders = new ABQArrowTableReader(new File(this.tpchInstance + "/orders.arrow"), this.rootAllocator);
-        this.lineitem = new ABQArrowTableReader(new File(this.tpchInstance + "/lineitem.arrow"), this.rootAllocator);
-        this.nation = new ABQArrowTableReader(new File(this.tpchInstance + "/nation.arrow"), this.rootAllocator);
+        this.customer = new ABQArrowTableReader(
+                new File(this.tpchInstance + "/customer.arrow"), this.rootAllocator, ImmutableIntList.of(0, 1, 2, 3, 4, 5, 7));
+        this.orders = new ABQArrowTableReader(
+                new File(this.tpchInstance + "/orders.arrow"), this.rootAllocator, ImmutableIntList.of(0, 1, 4));
+        this.lineitem = new ABQArrowTableReader(
+                new File(this.tpchInstance + "/lineitem.arrow"), this.rootAllocator, ImmutableIntList.of(0, 5, 6, 8));
+        this.nation = new ABQArrowTableReader(
+                new File(this.tpchInstance + "/nation.arrow"), this.rootAllocator, ImmutableIntList.of(0, 1));
 
         // Setup the allocation manager
         this.allocationManager = new BufferPoolAllocationManager(32);
@@ -228,19 +233,20 @@ public class VectorisedNonSimdReducedSelVecUse {
             "-Xms16g"
     })
     public void executeQuery(Blackhole bh) throws IOException {
-        // DIFF: all allocation manager references are hard-coded
-        int[] ordinal_4_sel_vec = this.allocationManager.getIntVector();
-        int[] ordinal_4_sel_vec_0 = this.allocationManager.getIntVector();
-        int[] ordinal_8_sel_vec = this.allocationManager.getIntVector();
+        // DIFF: hard-coded allocation manager in whole query
+        int[] ordinal_2_sel_vec = this.allocationManager.getIntVector();
+        int[] ordinal_2_sel_vec_0 = this.allocationManager.getIntVector();
+        int[] ordinal_3_sel_vec = this.allocationManager.getIntVector();
         double[] projection_computation_result = this.allocationManager.getDoubleVector();
         double[] projection_computation_result_0 = this.allocationManager.getDoubleVector();
-        long[] groupKeyPreHashVector = this.allocationManager.getLongVector();
 
         // DIFF: hard-coded
-        // KeyValueMap_1694102613 aggregation_state_map = new KeyValueMap_1694102613();
-        // KeyMultiRecordMap_1406763631 join_map = new KeyMultiRecordMap_1406763631();
-        // KeyMultiRecordMap_1082640380 join_map_1 = new KeyMultiRecordMap_1082640380();
+        // KeyValueMap_118887511 aggregation_state_map = new KeyValueMap_118887511();
+        // KeyMultiRecordMap_766089249 join_map = new KeyMultiRecordMap_766089249();
+        // KeyMultiRecordMap_1916303325 join_map_0 = new KeyMultiRecordMap_1916303325();
+        // KeyMultiRecordMap_1353406178 join_map_1 = new KeyMultiRecordMap_1353406178();
 
+        long[] groupKeyPreHashVector = this.allocationManager.getLongVector();
         long[] pre_hash_vector = this.allocationManager.getLongVector();
         long[] pre_hash_vector_0 = this.allocationManager.getLongVector();
         long[] pre_hash_vector_1 = this.allocationManager.getLongVector();
@@ -276,23 +282,17 @@ public class VectorisedNonSimdReducedSelVecUse {
         while (orders.loadNextBatch()) {
             org.apache.arrow.vector.IntVector orders_vc_0 = ((org.apache.arrow.vector.IntVector) orders.getVector(0));
             org.apache.arrow.vector.IntVector orders_vc_1 = ((org.apache.arrow.vector.IntVector) orders.getVector(1));
-            org.apache.arrow.vector.FixedSizeBinaryVector orders_vc_2 = ((org.apache.arrow.vector.FixedSizeBinaryVector) orders.getVector(2));
-            org.apache.arrow.vector.Float8Vector orders_vc_3 = ((org.apache.arrow.vector.Float8Vector) orders.getVector(3));
-            org.apache.arrow.vector.DateDayVector orders_vc_4 = ((org.apache.arrow.vector.DateDayVector) orders.getVector(4));
-            org.apache.arrow.vector.FixedSizeBinaryVector orders_vc_5 = ((org.apache.arrow.vector.FixedSizeBinaryVector) orders.getVector(5));
-            org.apache.arrow.vector.FixedSizeBinaryVector orders_vc_6 = ((org.apache.arrow.vector.FixedSizeBinaryVector) orders.getVector(6));
-            org.apache.arrow.vector.IntVector orders_vc_7 = ((org.apache.arrow.vector.IntVector) orders.getVector(7));
-            org.apache.arrow.vector.VarCharVector orders_vc_8 = ((org.apache.arrow.vector.VarCharVector) orders.getVector(8));
-            int ordinal_4_sel_vec_length = VectorisedFilterOperators.ge(orders_vc_4, 8674, ordinal_4_sel_vec);
-            int ordinal_4_sel_vec_0_length = VectorisedFilterOperators.lt(orders_vc_4, 8766, ordinal_4_sel_vec_0, ordinal_4_sel_vec, ordinal_4_sel_vec_length);
+            org.apache.arrow.vector.DateDayVector orders_vc_2 = ((org.apache.arrow.vector.DateDayVector) orders.getVector(4));
+            int ordinal_2_sel_vec_length = VectorisedFilterOperators.ge(orders_vc_2, 8674, ordinal_2_sel_vec);
+            int ordinal_2_sel_vec_0_length = VectorisedFilterOperators.lt(orders_vc_2, 8766, ordinal_2_sel_vec_0, ordinal_2_sel_vec, ordinal_2_sel_vec_length);
             // DIFF: removed selection vector
             VectorisedHashOperators.constructPreHashKeyVector(pre_hash_vector_1, orders_vc_1, false);
-            int recordCount = ordinal_4_sel_vec_0_length;
+            int recordCount = ordinal_2_sel_vec_0_length;
             int currentLoopIndex = 0;
             while ((currentLoopIndex < recordCount)) {
                 int currentResultIndex = 0;
                 while ((currentLoopIndex < recordCount)) {
-                    int selected_record_index = ordinal_4_sel_vec_0[currentLoopIndex];
+                    int selected_record_index = ordinal_2_sel_vec_0[currentLoopIndex];
                     int right_join_key = orders_vc_1.get(selected_record_index);
                     long right_join_key_pre_hash = pre_hash_vector_1[selected_record_index];
                     int records_to_join_index = join_map_1.getIndex(right_join_key, right_join_key_pre_hash);
@@ -350,37 +350,25 @@ public class VectorisedNonSimdReducedSelVecUse {
         // ArrowTableReader lineitem = cCtx.getArrowReader(2);
         while (lineitem.loadNextBatch()) {
             org.apache.arrow.vector.IntVector lineitem_vc_0 = ((org.apache.arrow.vector.IntVector) lineitem.getVector(0));
-            org.apache.arrow.vector.IntVector lineitem_vc_1 = ((org.apache.arrow.vector.IntVector) lineitem.getVector(1));
-            org.apache.arrow.vector.IntVector lineitem_vc_2 = ((org.apache.arrow.vector.IntVector) lineitem.getVector(2));
-            org.apache.arrow.vector.IntVector lineitem_vc_3 = ((org.apache.arrow.vector.IntVector) lineitem.getVector(3));
-            org.apache.arrow.vector.Float8Vector lineitem_vc_4 = ((org.apache.arrow.vector.Float8Vector) lineitem.getVector(4));
-            org.apache.arrow.vector.Float8Vector lineitem_vc_5 = ((org.apache.arrow.vector.Float8Vector) lineitem.getVector(5));
-            org.apache.arrow.vector.Float8Vector lineitem_vc_6 = ((org.apache.arrow.vector.Float8Vector) lineitem.getVector(6));
-            org.apache.arrow.vector.Float8Vector lineitem_vc_7 = ((org.apache.arrow.vector.Float8Vector) lineitem.getVector(7));
-            org.apache.arrow.vector.FixedSizeBinaryVector lineitem_vc_8 = ((org.apache.arrow.vector.FixedSizeBinaryVector) lineitem.getVector(8));
-            org.apache.arrow.vector.FixedSizeBinaryVector lineitem_vc_9 = ((org.apache.arrow.vector.FixedSizeBinaryVector) lineitem.getVector(9));
-            org.apache.arrow.vector.DateDayVector lineitem_vc_10 = ((org.apache.arrow.vector.DateDayVector) lineitem.getVector(10));
-            org.apache.arrow.vector.DateDayVector lineitem_vc_11 = ((org.apache.arrow.vector.DateDayVector) lineitem.getVector(11));
-            org.apache.arrow.vector.DateDayVector lineitem_vc_12 = ((org.apache.arrow.vector.DateDayVector) lineitem.getVector(12));
-            org.apache.arrow.vector.FixedSizeBinaryVector lineitem_vc_13 = ((org.apache.arrow.vector.FixedSizeBinaryVector) lineitem.getVector(13));
-            org.apache.arrow.vector.FixedSizeBinaryVector lineitem_vc_14 = ((org.apache.arrow.vector.FixedSizeBinaryVector) lineitem.getVector(14));
-            org.apache.arrow.vector.VarCharVector lineitem_vc_15 = ((org.apache.arrow.vector.VarCharVector) lineitem.getVector(15));
-            int ordinal_8_sel_vec_length = VectorisedFilterOperators.eq(lineitem_vc_8, new byte[] { 82 }, ordinal_8_sel_vec);
+            org.apache.arrow.vector.Float8Vector lineitem_vc_1 = ((org.apache.arrow.vector.Float8Vector) lineitem.getVector(5));
+            org.apache.arrow.vector.Float8Vector lineitem_vc_2 = ((org.apache.arrow.vector.Float8Vector) lineitem.getVector(6));
+            org.apache.arrow.vector.FixedSizeBinaryVector lineitem_vc_3 = ((org.apache.arrow.vector.FixedSizeBinaryVector) lineitem.getVector(8));
+            int ordinal_3_sel_vec_length = VectorisedFilterOperators.eq(lineitem_vc_3, new byte[] { 82 }, ordinal_3_sel_vec);
             int projection_literal = 1;
             int projection_computation_result_length;
             // DIFF: removed selection vector
-            projection_computation_result_length = VectorisedArithmeticOperators.subtract(projection_literal, lineitem_vc_6, projection_computation_result);
+            projection_computation_result_length = VectorisedArithmeticOperators.subtract(projection_literal, lineitem_vc_2, projection_computation_result);
             int projection_computation_result_0_length;
             // DIFF: removed selection vector
-            projection_computation_result_0_length = VectorisedArithmeticOperators.multiply(lineitem_vc_5, projection_computation_result, projection_computation_result_length, projection_computation_result_0);
+            projection_computation_result_0_length = VectorisedArithmeticOperators.multiply(lineitem_vc_1, projection_computation_result, projection_computation_result_length, projection_computation_result_0);
             // DIFF: removed selection vector
             VectorisedHashOperators.constructPreHashKeyVector(pre_hash_vector_0, lineitem_vc_0, false);
-            int recordCount = ordinal_8_sel_vec_length;
+            int recordCount = ordinal_3_sel_vec_length;
             int currentLoopIndex = 0;
             while ((currentLoopIndex < recordCount)) {
                 int currentResultIndex = 0;
                 while ((currentLoopIndex < recordCount)) {
-                    int selected_record_index = ordinal_8_sel_vec[currentLoopIndex];
+                    int selected_record_index = ordinal_3_sel_vec[currentLoopIndex];
                     int right_join_key = lineitem_vc_0.get(selected_record_index);
                     long right_join_key_pre_hash = pre_hash_vector_0[selected_record_index];
                     int records_to_join_index = join_map_0.getIndex(right_join_key, right_join_key_pre_hash);
@@ -548,9 +536,9 @@ public class VectorisedNonSimdReducedSelVecUse {
         this.allocationManager.release(groupKeyVector_6);
         this.allocationManager.release(agg_G_SUM_0_vector);
         this.allocationManager.release(groupKeyPreHashVector);
-        this.allocationManager.release(ordinal_4_sel_vec);
-        this.allocationManager.release(ordinal_4_sel_vec_0);
-        this.allocationManager.release(ordinal_8_sel_vec);
+        this.allocationManager.release(ordinal_2_sel_vec);
+        this.allocationManager.release(ordinal_2_sel_vec_0);
+        this.allocationManager.release(ordinal_3_sel_vec);
         this.allocationManager.release(projection_computation_result);
         this.allocationManager.release(projection_computation_result_0);
 

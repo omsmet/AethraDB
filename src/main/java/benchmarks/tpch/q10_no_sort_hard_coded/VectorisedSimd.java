@@ -10,6 +10,7 @@ import evaluation.vector_support.VectorisedFilterOperators;
 import evaluation.vector_support.VectorisedHashOperators;
 import evaluation.vector_support.VectorisedOperators;
 import org.apache.arrow.memory.RootAllocator;
+import org.apache.calcite.util.ImmutableIntList;
 import org.openjdk.jmh.annotations.Benchmark;
 import org.openjdk.jmh.annotations.BenchmarkMode;
 import org.openjdk.jmh.annotations.Fork;
@@ -118,10 +119,14 @@ public class VectorisedSimd {
     public void trialSetup() throws Exception {
         // Setup the database
         this.rootAllocator = new RootAllocator();
-        this.customer = new ABQArrowTableReader(new File(this.tpchInstance + "/customer.arrow"), this.rootAllocator);
-        this.orders = new ABQArrowTableReader(new File(this.tpchInstance + "/orders.arrow"), this.rootAllocator);
-        this.lineitem = new ABQArrowTableReader(new File(this.tpchInstance + "/lineitem.arrow"), this.rootAllocator);
-        this.nation = new ABQArrowTableReader(new File(this.tpchInstance + "/nation.arrow"), this.rootAllocator);
+        this.customer = new ABQArrowTableReader(
+                new File(this.tpchInstance + "/customer.arrow"), this.rootAllocator, ImmutableIntList.of(0, 1, 2, 3, 4, 5, 7));
+        this.orders = new ABQArrowTableReader(
+                new File(this.tpchInstance + "/orders.arrow"), this.rootAllocator, ImmutableIntList.of(0, 1, 4));
+        this.lineitem = new ABQArrowTableReader(
+                new File(this.tpchInstance + "/lineitem.arrow"), this.rootAllocator, ImmutableIntList.of(0, 5, 6, 8));
+        this.nation = new ABQArrowTableReader(
+                new File(this.tpchInstance + "/nation.arrow"), this.rootAllocator, ImmutableIntList.of(0, 1));
 
         // Setup the allocation manager
         this.allocationManager = new BufferPoolAllocationManager(32);
@@ -228,19 +233,19 @@ public class VectorisedSimd {
             "-Xms16g"
     })
     public void executeQuery(Blackhole bh) throws IOException {
-        // DIFF: all allocation manager references are hard-coded
-        boolean[] ordinal_4_val_mask = this.allocationManager.getBooleanVector();
-        boolean[] ordinal_4_val_mask_0 = this.allocationManager.getBooleanVector();
-        boolean[] ordinal_8_val_mask = this.allocationManager.getBooleanVector();
+        // DIFF: hard-coded allocation manager in whole query
+        boolean[] ordinal_2_val_mask = this.allocationManager.getBooleanVector();
+        boolean[] ordinal_2_val_mask_0 = this.allocationManager.getBooleanVector();
+        boolean[] ordinal_3_val_mask = this.allocationManager.getBooleanVector();
         double[] projection_computation_result = this.allocationManager.getDoubleVector();
         double[] projection_computation_result_0 = this.allocationManager.getDoubleVector();
         long[] groupKeyPreHashVector = this.allocationManager.getLongVector();
 
         // DIFF: hard-coded
-        // KeyValueMap_1694102613 aggregation_state_map = new KeyValueMap_1694102613();
-        // KeyMultiRecordMap_1406763631 join_map = new KeyMultiRecordMap_1406763631();
-        // KeyMultiRecordMap_1772780918 join_map_0 = new KeyMultiRecordMap_1772780918();
-        // KeyMultiRecordMap_1082640380 join_map_1 = new KeyMultiRecordMap_1082640380();
+        // KeyValueMap_766089249 aggregation_state_map = new KeyValueMap_766089249();
+        // KeyMultiRecordMap_1419958638 join_map = new KeyMultiRecordMap_1419958638();
+        // KeyMultiRecordMap_1583082378 join_map_0 = new KeyMultiRecordMap_1583082378();
+        // KeyMultiRecordMap_2066533285 join_map_1 = new KeyMultiRecordMap_2066533285();
 
         long[] pre_hash_vector = this.allocationManager.getLongVector();
         long[] pre_hash_vector_0 = this.allocationManager.getLongVector();
@@ -277,22 +282,16 @@ public class VectorisedSimd {
         while (orders.loadNextBatch()) {
             org.apache.arrow.vector.IntVector orders_vc_0 = ((org.apache.arrow.vector.IntVector) orders.getVector(0));
             org.apache.arrow.vector.IntVector orders_vc_1 = ((org.apache.arrow.vector.IntVector) orders.getVector(1));
-            org.apache.arrow.vector.FixedSizeBinaryVector orders_vc_2 = ((org.apache.arrow.vector.FixedSizeBinaryVector) orders.getVector(2));
-            org.apache.arrow.vector.Float8Vector orders_vc_3 = ((org.apache.arrow.vector.Float8Vector) orders.getVector(3));
-            org.apache.arrow.vector.DateDayVector orders_vc_4 = ((org.apache.arrow.vector.DateDayVector) orders.getVector(4));
-            org.apache.arrow.vector.FixedSizeBinaryVector orders_vc_5 = ((org.apache.arrow.vector.FixedSizeBinaryVector) orders.getVector(5));
-            org.apache.arrow.vector.FixedSizeBinaryVector orders_vc_6 = ((org.apache.arrow.vector.FixedSizeBinaryVector) orders.getVector(6));
-            org.apache.arrow.vector.IntVector orders_vc_7 = ((org.apache.arrow.vector.IntVector) orders.getVector(7));
-            org.apache.arrow.vector.VarCharVector orders_vc_8 = ((org.apache.arrow.vector.VarCharVector) orders.getVector(8));
-            int ordinal_4_val_mask_length = VectorisedFilterOperators.geSIMD(orders_vc_4, 8674, ordinal_4_val_mask);
-            int ordinal_4_val_mask_0_length = VectorisedFilterOperators.ltSIMD(orders_vc_4, 8766, ordinal_4_val_mask_0, ordinal_4_val_mask, ordinal_4_val_mask_length);
-            VectorisedHashOperators.constructPreHashKeyVectorSIMD(pre_hash_vector_1, orders_vc_1, ordinal_4_val_mask_0, ordinal_4_val_mask_0_length, false);
+            org.apache.arrow.vector.DateDayVector orders_vc_2 = ((org.apache.arrow.vector.DateDayVector) orders.getVector(4));
+            int ordinal_2_val_mask_length = VectorisedFilterOperators.geSIMD(orders_vc_2, 8674, ordinal_2_val_mask);
+            int ordinal_2_val_mask_0_length = VectorisedFilterOperators.ltSIMD(orders_vc_2, 8766, ordinal_2_val_mask_0, ordinal_2_val_mask, ordinal_2_val_mask_length);
+            VectorisedHashOperators.constructPreHashKeyVectorSIMD(pre_hash_vector_1, orders_vc_1, ordinal_2_val_mask_0, ordinal_2_val_mask_0_length, false);
             int recordCount = orders_vc_1.getValueCount();
             int currentLoopIndex = 0;
             while ((currentLoopIndex < recordCount)) {
                 int currentResultIndex = 0;
                 while ((currentLoopIndex < recordCount)) {
-                    if (!(ordinal_4_val_mask_0[currentLoopIndex])) {
+                    if (!(ordinal_2_val_mask_0[currentLoopIndex])) {
                         currentLoopIndex++;
                         continue;
                     }
@@ -353,34 +352,22 @@ public class VectorisedSimd {
         // ArrowTableReader lineitem = cCtx.getArrowReader(2);
         while (lineitem.loadNextBatch()) {
             org.apache.arrow.vector.IntVector lineitem_vc_0 = ((org.apache.arrow.vector.IntVector) lineitem.getVector(0));
-            org.apache.arrow.vector.IntVector lineitem_vc_1 = ((org.apache.arrow.vector.IntVector) lineitem.getVector(1));
-            org.apache.arrow.vector.IntVector lineitem_vc_2 = ((org.apache.arrow.vector.IntVector) lineitem.getVector(2));
-            org.apache.arrow.vector.IntVector lineitem_vc_3 = ((org.apache.arrow.vector.IntVector) lineitem.getVector(3));
-            org.apache.arrow.vector.Float8Vector lineitem_vc_4 = ((org.apache.arrow.vector.Float8Vector) lineitem.getVector(4));
-            org.apache.arrow.vector.Float8Vector lineitem_vc_5 = ((org.apache.arrow.vector.Float8Vector) lineitem.getVector(5));
-            org.apache.arrow.vector.Float8Vector lineitem_vc_6 = ((org.apache.arrow.vector.Float8Vector) lineitem.getVector(6));
-            org.apache.arrow.vector.Float8Vector lineitem_vc_7 = ((org.apache.arrow.vector.Float8Vector) lineitem.getVector(7));
-            org.apache.arrow.vector.FixedSizeBinaryVector lineitem_vc_8 = ((org.apache.arrow.vector.FixedSizeBinaryVector) lineitem.getVector(8));
-            org.apache.arrow.vector.FixedSizeBinaryVector lineitem_vc_9 = ((org.apache.arrow.vector.FixedSizeBinaryVector) lineitem.getVector(9));
-            org.apache.arrow.vector.DateDayVector lineitem_vc_10 = ((org.apache.arrow.vector.DateDayVector) lineitem.getVector(10));
-            org.apache.arrow.vector.DateDayVector lineitem_vc_11 = ((org.apache.arrow.vector.DateDayVector) lineitem.getVector(11));
-            org.apache.arrow.vector.DateDayVector lineitem_vc_12 = ((org.apache.arrow.vector.DateDayVector) lineitem.getVector(12));
-            org.apache.arrow.vector.FixedSizeBinaryVector lineitem_vc_13 = ((org.apache.arrow.vector.FixedSizeBinaryVector) lineitem.getVector(13));
-            org.apache.arrow.vector.FixedSizeBinaryVector lineitem_vc_14 = ((org.apache.arrow.vector.FixedSizeBinaryVector) lineitem.getVector(14));
-            org.apache.arrow.vector.VarCharVector lineitem_vc_15 = ((org.apache.arrow.vector.VarCharVector) lineitem.getVector(15));
-            int ordinal_8_val_mask_length = VectorisedFilterOperators.eqSIMD(lineitem_vc_8, new byte[] { 82 }, ordinal_8_val_mask);
+            org.apache.arrow.vector.Float8Vector lineitem_vc_1 = ((org.apache.arrow.vector.Float8Vector) lineitem.getVector(5));
+            org.apache.arrow.vector.Float8Vector lineitem_vc_2 = ((org.apache.arrow.vector.Float8Vector) lineitem.getVector(6));
+            org.apache.arrow.vector.FixedSizeBinaryVector lineitem_vc_3 = ((org.apache.arrow.vector.FixedSizeBinaryVector) lineitem.getVector(8));
+            int ordinal_3_val_mask_length = VectorisedFilterOperators.eqSIMD(lineitem_vc_3, new byte[] { 82 }, ordinal_3_val_mask);
             int projection_literal = 1;
             int projection_computation_result_length;
-            projection_computation_result_length = VectorisedArithmeticOperators.subtractSIMD(projection_literal, lineitem_vc_6, ordinal_8_val_mask, ordinal_8_val_mask_length, projection_computation_result);
+            projection_computation_result_length = VectorisedArithmeticOperators.subtractSIMD(projection_literal, lineitem_vc_2, ordinal_3_val_mask, ordinal_3_val_mask_length, projection_computation_result);
             int projection_computation_result_0_length;
-            projection_computation_result_0_length = VectorisedArithmeticOperators.multiplySIMD(lineitem_vc_5, projection_computation_result, projection_computation_result_length, ordinal_8_val_mask, ordinal_8_val_mask_length, projection_computation_result_0);
-            VectorisedHashOperators.constructPreHashKeyVectorSIMD(pre_hash_vector_0, lineitem_vc_0, ordinal_8_val_mask, ordinal_8_val_mask_length, false);
+            projection_computation_result_0_length = VectorisedArithmeticOperators.multiplySIMD(lineitem_vc_1, projection_computation_result, projection_computation_result_length, ordinal_3_val_mask, ordinal_3_val_mask_length, projection_computation_result_0);
+            VectorisedHashOperators.constructPreHashKeyVectorSIMD(pre_hash_vector_0, lineitem_vc_0, ordinal_3_val_mask, ordinal_3_val_mask_length, false);
             int recordCount = lineitem_vc_0.getValueCount();
             int currentLoopIndex = 0;
             while ((currentLoopIndex < recordCount)) {
                 int currentResultIndex = 0;
                 while ((currentLoopIndex < recordCount)) {
-                    if (!(ordinal_8_val_mask[currentLoopIndex])) {
+                    if (!(ordinal_3_val_mask[currentLoopIndex])) {
                         currentLoopIndex++;
                         continue;
                     }
@@ -551,9 +538,9 @@ public class VectorisedSimd {
         this.allocationManager.release(groupKeyVector_6);
         this.allocationManager.release(agg_G_SUM_0_vector);
         this.allocationManager.release(groupKeyPreHashVector);
-        this.allocationManager.release(ordinal_4_val_mask);
-        this.allocationManager.release(ordinal_4_val_mask_0);
-        this.allocationManager.release(ordinal_8_val_mask);
+        this.allocationManager.release(ordinal_2_val_mask);
+        this.allocationManager.release(ordinal_2_val_mask_0);
+        this.allocationManager.release(ordinal_3_val_mask);
         this.allocationManager.release(projection_computation_result);
         this.allocationManager.release(projection_computation_result_0);
 

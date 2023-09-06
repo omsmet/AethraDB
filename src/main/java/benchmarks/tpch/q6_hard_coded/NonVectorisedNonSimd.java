@@ -3,6 +3,7 @@ package benchmarks.tpch.q6_hard_coded;
 import evaluation.codegen.infrastructure.data.ABQArrowTableReader;
 import evaluation.codegen.infrastructure.data.ArrowTableReader;
 import org.apache.arrow.memory.RootAllocator;
+import org.apache.calcite.util.ImmutableIntList;
 import org.openjdk.jmh.annotations.Benchmark;
 import org.openjdk.jmh.annotations.BenchmarkMode;
 import org.openjdk.jmh.annotations.Fork;
@@ -64,7 +65,7 @@ public class NonVectorisedNonSimd {
         // Setup the database
         this.rootAllocator = new RootAllocator();
         this.lineitem_table = new ABQArrowTableReader(
-                new File(this.tpchInstance + "/lineitem.arrow"), this.rootAllocator);
+                new File(this.tpchInstance + "/lineitem.arrow"), this.rootAllocator, ImmutableIntList.of(4, 5, 6, 10));
 
         // Initialise the result
         this.sumResult = -1d;

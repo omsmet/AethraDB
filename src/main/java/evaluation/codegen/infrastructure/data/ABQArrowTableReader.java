@@ -12,6 +12,7 @@ import org.apache.arrow.vector.LargeVarCharVector;
 import org.apache.arrow.vector.VarCharVector;
 import org.apache.arrow.vector.VectorSchemaRoot;
 import org.apache.arrow.vector.ipc.ArrowFileReader;
+import org.apache.calcite.util.ImmutableIntList;
 
 import java.io.Closeable;
 import java.io.File;
@@ -61,13 +62,14 @@ public class ABQArrowTableReader extends ArrowTableReader {
      * Creates a new {@link ABQArrowTableReader} instance.
      * @param arrowFile The Arrow IPC file representing the table.
      * @param rootAllocator The {@link RootAllocator} used for Arrow operations.
+     * @param columnsToProject The columns of the {@code arrowFile} to actually project out.
      * @throws FileNotFoundException When the specified Arrow file cannot be found.
      */
-    public ABQArrowTableReader(File arrowFile, RootAllocator rootAllocator) throws Exception {
-        super(arrowFile, rootAllocator);
+    public ABQArrowTableReader(File arrowFile, RootAllocator rootAllocator, ImmutableIntList columnsToProject) throws Exception {
+        super(arrowFile, rootAllocator, columnsToProject);
         this.loadNextBatchResultQueue = new ArrayBlockingQueue<>(QUEUE_CAPACITY);
         this.fieldVectorQueue = new ArrayBlockingQueue<>(QUEUE_CAPACITY);
-        this.readerThread = new ReaderThread(this.arrowFile, this.tableAllocator, this.loadNextBatchResultQueue, this.fieldVectorQueue);
+        this.readerThread = new ReaderThread(this.arrowFile, this.tableAllocator, this.columnsToProject, this.loadNextBatchResultQueue, this.fieldVectorQueue);
     }
 
     @Override
@@ -80,7 +82,12 @@ public class ABQArrowTableReader extends ArrowTableReader {
         this.fieldVectorQueue.clear();
 
         // Then create a new one
-        this.readerThread = new ReaderThread(this.arrowFile, this.tableAllocator, this.loadNextBatchResultQueue, this.fieldVectorQueue);
+        this.readerThread = new ReaderThread(
+                this.arrowFile,
+                this.tableAllocator,
+                this.columnsToProject,
+                this.loadNextBatchResultQueue,
+                this.fieldVectorQueue);
         this.readerThreadActive = false;
     }
 
@@ -93,8 +100,10 @@ public class ABQArrowTableReader extends ArrowTableReader {
 
         } else {
             // Otherwise the currentBatch is already populated and should be closed
-            for (int i = 0; i < this.currentBatch.length; i++)
-                this.currentBatch[i].close();
+            // Note that only the "projected" columns are valid entries, so only those need to be closed
+            for (int projectedColumnIndex : this.columnsToProject) {
+                this.currentBatch[projectedColumnIndex].close();
+            }
         }
 
         // Get the next batch
@@ -150,9 +159,14 @@ public class ABQArrowTableReader extends ArrowTableReader {
         private final VectorSchemaRoot schemaRoot;
 
         /**
-         * The number of columns in the input table.
+         * The number of columns in the input table file.
          */
         private final int columnCount;
+
+        /**
+         * The columns of the input file to project out. (i.e. to read from the file)
+         */
+        private final int[] columnsToProject;
 
         /**
          * The {@link ArrayBlockingQueue} to store the result for {@code loadNextBatch} calls.
@@ -168,6 +182,7 @@ public class ABQArrowTableReader extends ArrowTableReader {
          * Creates a new instance of the {@link ReaderThread} class.
          * @param arrowFile The table file to be read by the created instance.
          * @param tableAllocator The {@link BufferAllocator} to use for reading the table.
+         * @param columnsToProject The actual columns to project out.
          * @param loadNextBatchTargetQueue  The queue into which to buffer the result for {@code loadNextBatch} calls.
          * @param fieldVectorTargetQueue The queue into which to buffer the {@link FieldVector}s that have been read.
          * @throws FileNotFoundException If the {@code arrowFile} cannot be found.
@@ -176,6 +191,7 @@ public class ABQArrowTableReader extends ArrowTableReader {
         public ReaderThread(
                 File arrowFile,
                 BufferAllocator tableAllocator,
+                int[] columnsToProject,
                 ArrayBlockingQueue<Boolean> loadNextBatchTargetQueue,
                 ArrayBlockingQueue<FieldVector[]> fieldVectorTargetQueue
         ) throws IOException {
@@ -184,6 +200,7 @@ public class ABQArrowTableReader extends ArrowTableReader {
             this.tableFileReader = new ArrowFileReader(this.tableInputStream.getChannel(), this.tableAllocator);
             this.schemaRoot = this.tableFileReader.getVectorSchemaRoot();
             this.columnCount = schemaRoot.getFieldVectors().size();
+            this.columnsToProject = columnsToProject;
             this.loadNextBatchTargetQueue = loadNextBatchTargetQueue;
             this.fieldVectorTargetQueue = fieldVectorTargetQueue;
         }
@@ -194,8 +211,8 @@ public class ABQArrowTableReader extends ArrowTableReader {
                 while (tableFileReader.loadNextBatch()) {
                     FieldVector[] vectorBatch = new FieldVector[columnCount];
 
-                    // Buffer the actual batch
-                    for (int i = 0; i < columnCount; i++) {
+                    // Buffer the actual batch as indicated by the columns to project
+                    for (int i : this.columnsToProject) {
                         FieldVector fv_cvi_i = schemaRoot.getVector(i);
                         if (fv_cvi_i instanceof IntVector int_fv_cvi_i) {
                             vectorBatch[i] = new IntVector(int_fv_cvi_i.getField(), this.tableAllocator);

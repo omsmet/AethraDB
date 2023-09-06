@@ -4,6 +4,7 @@ import evaluation.codegen.infrastructure.data.ABQArrowTableReader;
 import evaluation.codegen.infrastructure.data.ArrowTableReader;
 import evaluation.general_support.hashmaps.Int_Hash_Function;
 import org.apache.arrow.memory.RootAllocator;
+import org.apache.calcite.util.ImmutableIntList;
 import org.openjdk.jmh.annotations.Benchmark;
 import org.openjdk.jmh.annotations.BenchmarkMode;
 import org.openjdk.jmh.annotations.Fork;
@@ -93,9 +94,12 @@ public class NonVectorisedNonSimd {
     public void trialSetup() throws Exception {
         // Setup the database
         this.rootAllocator = new RootAllocator();
-        this.customer = new ABQArrowTableReader(new File(this.tpchInstance + "/customer.arrow"), this.rootAllocator);
-        this.orders = new ABQArrowTableReader(new File(this.tpchInstance + "/orders.arrow"), this.rootAllocator);
-        this.lineitem = new ABQArrowTableReader(new File(this.tpchInstance + "/lineitem.arrow"), this.rootAllocator);
+        this.customer = new ABQArrowTableReader(
+                new File(this.tpchInstance + "/customer.arrow"), this.rootAllocator, ImmutableIntList.of(0, 6));
+        this.orders = new ABQArrowTableReader(
+                new File(this.tpchInstance + "/orders.arrow"), this.rootAllocator, ImmutableIntList.of(0, 1, 4, 7));
+        this.lineitem = new ABQArrowTableReader(
+                new File(this.tpchInstance + "/lineitem.arrow"), this.rootAllocator, ImmutableIntList.of(0, 5, 6, 10));
 
         // Initialise the hash-table
         this.aggregation_state_map = new AggregationMap();
@@ -180,24 +184,16 @@ public class NonVectorisedNonSimd {
         // java.time.LocalDate day_zero = java.time.LocalDate.parse("1970-01-01", dateTimeFormatter);
 
         // DIFF: hard-coded
-        // KeyValueMap_731979931 aggregation_state_map = new KeyValueMap_731979931();
-        // KeyMultiRecordMap_697001207 join_map = new KeyMultiRecordMap_697001207();
-        // KeyMultiRecordMap_388005723 join_map_0 = new KeyMultiRecordMap_388005723();
-
-        // DIFF: hard-coded
+        // KeyValueMap_1897372527 aggregation_state_map = new KeyValueMap_1897372527();
+        // KeyMultiRecordMap_1597400455 join_map = new KeyMultiRecordMap_1597400455();
+        // KeyMultiRecordMap_1699637904 join_map_0 = new KeyMultiRecordMap_1699637904();
         // ArrowTableReader customer = cCtx.getArrowReader(0);
         while (customer.loadNextBatch()) {
             org.apache.arrow.vector.IntVector customer_vc_0 = ((org.apache.arrow.vector.IntVector) customer.getVector(0));
-            org.apache.arrow.vector.VarCharVector customer_vc_1 = ((org.apache.arrow.vector.VarCharVector) customer.getVector(1));
-            org.apache.arrow.vector.VarCharVector customer_vc_2 = ((org.apache.arrow.vector.VarCharVector) customer.getVector(2));
-            org.apache.arrow.vector.IntVector customer_vc_3 = ((org.apache.arrow.vector.IntVector) customer.getVector(3));
-            org.apache.arrow.vector.FixedSizeBinaryVector customer_vc_4 = ((org.apache.arrow.vector.FixedSizeBinaryVector) customer.getVector(4));
-            org.apache.arrow.vector.Float8Vector customer_vc_5 = ((org.apache.arrow.vector.Float8Vector) customer.getVector(5));
-            org.apache.arrow.vector.FixedSizeBinaryVector customer_vc_6 = ((org.apache.arrow.vector.FixedSizeBinaryVector) customer.getVector(6));
-            org.apache.arrow.vector.VarCharVector customer_vc_7 = ((org.apache.arrow.vector.VarCharVector) customer.getVector(7));
+            org.apache.arrow.vector.FixedSizeBinaryVector customer_vc_1 = ((org.apache.arrow.vector.FixedSizeBinaryVector) customer.getVector(6));
             int recordCount = customer_vc_0.getValueCount();
             for (int aviv = 0; aviv < recordCount; aviv++) {
-                byte[] ordinal_value = customer_vc_6.get(aviv);
+                byte[] ordinal_value = customer_vc_1.get(aviv);
                 if (!(Arrays.equals(ordinal_value, new byte[] { 66, 85, 73, 76, 68, 73, 78, 71, 32, 32 }))) {
                     continue;
                 }
@@ -211,16 +207,11 @@ public class NonVectorisedNonSimd {
         while (orders.loadNextBatch()) {
             org.apache.arrow.vector.IntVector orders_vc_0 = ((org.apache.arrow.vector.IntVector) orders.getVector(0));
             org.apache.arrow.vector.IntVector orders_vc_1 = ((org.apache.arrow.vector.IntVector) orders.getVector(1));
-            org.apache.arrow.vector.FixedSizeBinaryVector orders_vc_2 = ((org.apache.arrow.vector.FixedSizeBinaryVector) orders.getVector(2));
-            org.apache.arrow.vector.Float8Vector orders_vc_3 = ((org.apache.arrow.vector.Float8Vector) orders.getVector(3));
-            org.apache.arrow.vector.DateDayVector orders_vc_4 = ((org.apache.arrow.vector.DateDayVector) orders.getVector(4));
-            org.apache.arrow.vector.FixedSizeBinaryVector orders_vc_5 = ((org.apache.arrow.vector.FixedSizeBinaryVector) orders.getVector(5));
-            org.apache.arrow.vector.FixedSizeBinaryVector orders_vc_6 = ((org.apache.arrow.vector.FixedSizeBinaryVector) orders.getVector(6));
-            org.apache.arrow.vector.IntVector orders_vc_7 = ((org.apache.arrow.vector.IntVector) orders.getVector(7));
-            org.apache.arrow.vector.VarCharVector orders_vc_8 = ((org.apache.arrow.vector.VarCharVector) orders.getVector(8));
+            org.apache.arrow.vector.DateDayVector orders_vc_2 = ((org.apache.arrow.vector.DateDayVector) orders.getVector(4));
+            org.apache.arrow.vector.IntVector orders_vc_3 = ((org.apache.arrow.vector.IntVector) orders.getVector(7));
             int recordCount = orders_vc_0.getValueCount();
             for (int aviv = 0; aviv < recordCount; aviv++) {
-                int ordinal_value = orders_vc_4.get(aviv);
+                int ordinal_value = orders_vc_2.get(aviv);
                 if (!((ordinal_value < 9204))) {
                     continue;
                 }
@@ -231,7 +222,7 @@ public class NonVectorisedNonSimd {
                     continue;
                 }
                 int ordinal_value_1 = orders_vc_0.get(aviv);
-                int ordinal_value_2 = orders_vc_7.get(aviv);
+                int ordinal_value_2 = orders_vc_3.get(aviv);
                 int left_join_record_count = join_map_0.keysRecordCount[records_to_join_index];
                 for (int i = 0; i < left_join_record_count; i++) {
                     int left_join_ord_0 = join_map_0.values_record_ord_0[records_to_join_index][i];
@@ -244,30 +235,18 @@ public class NonVectorisedNonSimd {
         // ArrowTableReader lineitem = cCtx.getArrowReader(2);
         while (lineitem.loadNextBatch()) {
             org.apache.arrow.vector.IntVector lineitem_vc_0 = ((org.apache.arrow.vector.IntVector) lineitem.getVector(0));
-            org.apache.arrow.vector.IntVector lineitem_vc_1 = ((org.apache.arrow.vector.IntVector) lineitem.getVector(1));
-            org.apache.arrow.vector.IntVector lineitem_vc_2 = ((org.apache.arrow.vector.IntVector) lineitem.getVector(2));
-            org.apache.arrow.vector.IntVector lineitem_vc_3 = ((org.apache.arrow.vector.IntVector) lineitem.getVector(3));
-            org.apache.arrow.vector.Float8Vector lineitem_vc_4 = ((org.apache.arrow.vector.Float8Vector) lineitem.getVector(4));
-            org.apache.arrow.vector.Float8Vector lineitem_vc_5 = ((org.apache.arrow.vector.Float8Vector) lineitem.getVector(5));
-            org.apache.arrow.vector.Float8Vector lineitem_vc_6 = ((org.apache.arrow.vector.Float8Vector) lineitem.getVector(6));
-            org.apache.arrow.vector.Float8Vector lineitem_vc_7 = ((org.apache.arrow.vector.Float8Vector) lineitem.getVector(7));
-            org.apache.arrow.vector.FixedSizeBinaryVector lineitem_vc_8 = ((org.apache.arrow.vector.FixedSizeBinaryVector) lineitem.getVector(8));
-            org.apache.arrow.vector.FixedSizeBinaryVector lineitem_vc_9 = ((org.apache.arrow.vector.FixedSizeBinaryVector) lineitem.getVector(9));
-            org.apache.arrow.vector.DateDayVector lineitem_vc_10 = ((org.apache.arrow.vector.DateDayVector) lineitem.getVector(10));
-            org.apache.arrow.vector.DateDayVector lineitem_vc_11 = ((org.apache.arrow.vector.DateDayVector) lineitem.getVector(11));
-            org.apache.arrow.vector.DateDayVector lineitem_vc_12 = ((org.apache.arrow.vector.DateDayVector) lineitem.getVector(12));
-            org.apache.arrow.vector.FixedSizeBinaryVector lineitem_vc_13 = ((org.apache.arrow.vector.FixedSizeBinaryVector) lineitem.getVector(13));
-            org.apache.arrow.vector.FixedSizeBinaryVector lineitem_vc_14 = ((org.apache.arrow.vector.FixedSizeBinaryVector) lineitem.getVector(14));
-            org.apache.arrow.vector.VarCharVector lineitem_vc_15 = ((org.apache.arrow.vector.VarCharVector) lineitem.getVector(15));
+            org.apache.arrow.vector.Float8Vector lineitem_vc_1 = ((org.apache.arrow.vector.Float8Vector) lineitem.getVector(5));
+            org.apache.arrow.vector.Float8Vector lineitem_vc_2 = ((org.apache.arrow.vector.Float8Vector) lineitem.getVector(6));
+            org.apache.arrow.vector.DateDayVector lineitem_vc_3 = ((org.apache.arrow.vector.DateDayVector) lineitem.getVector(10));
             int recordCount = lineitem_vc_0.getValueCount();
             for (int aviv = 0; aviv < recordCount; aviv++) {
-                int ordinal_value = lineitem_vc_10.get(aviv);
+                int ordinal_value = lineitem_vc_3.get(aviv);
                 if (!((ordinal_value > 9204))) {
                     continue;
                 }
                 int projection_literal = 1;
-                double projection_computation_result = (projection_literal - lineitem_vc_6.get(aviv));
-                double projection_computation_result_0 = (lineitem_vc_5.get(aviv) * projection_computation_result);
+                double projection_computation_result = (projection_literal - lineitem_vc_2.get(aviv));
+                double projection_computation_result_0 = (lineitem_vc_1.get(aviv) * projection_computation_result);
                 int ordinal_value_0 = lineitem_vc_0.get(aviv);
                 long right_join_key_prehash = Int_Hash_Function.preHash(ordinal_value_0);
                 int records_to_join_index = join_map.getIndex(ordinal_value_0, right_join_key_prehash);

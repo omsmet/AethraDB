@@ -9,6 +9,7 @@ import evaluation.vector_support.VectorisedArithmeticOperators;
 import evaluation.vector_support.VectorisedFilterOperators;
 import evaluation.vector_support.VectorisedHashOperators;
 import org.apache.arrow.memory.RootAllocator;
+import org.apache.calcite.util.ImmutableIntList;
 import org.openjdk.jmh.annotations.Benchmark;
 import org.openjdk.jmh.annotations.BenchmarkMode;
 import org.openjdk.jmh.annotations.Fork;
@@ -90,8 +91,9 @@ public class VectorisedSimdReducedMaskUse {
     public void trialSetup() throws Exception {
         // Setup the database
         this.rootAllocator = new RootAllocator();
+        ImmutableIntList columnsToProject = ImmutableIntList.of(4, 5, 6, 7, 8, 9, 10);
         this.lineitem_table = new ABQArrowTableReader(
-                new File(this.tpchInstance + "/lineitem.arrow"), this.rootAllocator);
+                new File(this.tpchInstance + "/lineitem.arrow"), this.rootAllocator, columnsToProject);
 
         // Setup the allocation manager
         this.allocationManager = new BufferPoolAllocationManager(16);

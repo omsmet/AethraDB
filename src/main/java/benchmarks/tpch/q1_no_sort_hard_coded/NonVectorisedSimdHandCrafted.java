@@ -6,6 +6,7 @@ import evaluation.general_support.hashmaps.Char_Arr_Hash_Function;
 import jdk.incubator.vector.VectorOperators;
 import jdk.incubator.vector.VectorSpecies;
 import org.apache.arrow.memory.RootAllocator;
+import org.apache.calcite.util.ImmutableIntList;
 import org.openjdk.jmh.annotations.Benchmark;
 import org.openjdk.jmh.annotations.BenchmarkMode;
 import org.openjdk.jmh.annotations.Fork;
@@ -87,8 +88,9 @@ public class NonVectorisedSimdHandCrafted {
     public void trialSetup() throws Exception {
         // Setup the database
         this.rootAllocator = new RootAllocator();
+        ImmutableIntList columnsToProject = ImmutableIntList.of(4, 5, 6, 7, 8, 9, 10);
         this.lineitem_table = new ABQArrowTableReader(
-                new File(this.tpchInstance + "/lineitem.arrow"), this.rootAllocator);
+                new File(this.tpchInstance + "/lineitem.arrow"), this.rootAllocator, columnsToProject);
 
         // Initialise the hash-table
         this.aggregation_state_map = new AggregationMap();

@@ -16,7 +16,6 @@ public final class AggregationMap {
     public AggregationMap() {
         this(4);
     }
-
     public AggregationMap(int capacity) {
         if (!(((capacity > 1) && ((capacity & (capacity - 1)) == 0)))) {
             throw new java.lang.IllegalArgumentException("The map capacity is required to be a power of two");
@@ -37,13 +36,7 @@ public final class AggregationMap {
 
     public void incrementForKey(int key_ord_0, int key_ord_1, int key_ord_2, long preHash, double value_ord_0) {
         if ((key_ord_0 < 0)) {
-            throw new java.lang.IllegalArgumentException("The map expects non-negative keys");
-        }
-        if ((key_ord_1 < 0)) {
-            throw new java.lang.IllegalArgumentException("The map expects non-negative keys");
-        }
-        if ((key_ord_2 < 0)) {
-            throw new java.lang.IllegalArgumentException("The map expects non-negative keys");
+            throw new java.lang.IllegalArgumentException("The map expects the first key ordinal to be non-negative");
         }
         int index = this.find(key_ord_0, key_ord_1, key_ord_2, preHash);
         boolean newEntry = false;
@@ -63,7 +56,6 @@ public final class AggregationMap {
             this.putHashEntry(key_ord_0, key_ord_1, key_ord_2, preHash, index, rehashOnCollision);
         }
     }
-
     private int find(int key_ord_0, int key_ord_1, int key_ord_2, long preHash) {
         int htIndex = ((int) (preHash & (this.hashTable.length - 1)));
         int initialIndex = this.hashTable[htIndex];
@@ -81,7 +73,6 @@ public final class AggregationMap {
         }
         return currentIndex;
     }
-
     private void growArrays() {
         int currentSize = this.keys_ord_0.length;
         int newSize = (currentSize << 1);
@@ -108,7 +99,6 @@ public final class AggregationMap {
         System.arraycopy(this.values_ord_0, 0, new_values_ord_0, 0, currentSize);
         this.values_ord_0 = new_values_ord_0;
     }
-
     private void putHashEntry(int key_ord_0, int key_ord_1, int key_ord_2, long preHash, int index, boolean rehashOnCollision) {
         int htIndex = ((int) (preHash & (this.hashTable.length - 1)));
         int initialIndex = this.hashTable[htIndex];
@@ -126,7 +116,6 @@ public final class AggregationMap {
         }
         this.next[currentIndex] = index;
     }
-
     private void rehash() {
         int size = this.hashTable.length;
         while ((size <= this.numberOfRecords)) {
@@ -146,7 +135,6 @@ public final class AggregationMap {
             this.putHashEntry(key_ord_0, key_ord_1, key_ord_2, preHash, i, false);
         }
     }
-
     public void reset() {
         this.numberOfRecords = 0;
         Arrays.fill(this.keys_ord_0, -1);

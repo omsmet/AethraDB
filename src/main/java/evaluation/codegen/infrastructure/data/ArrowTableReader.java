@@ -3,6 +3,7 @@ package evaluation.codegen.infrastructure.data;
 import org.apache.arrow.memory.BufferAllocator;
 import org.apache.arrow.memory.RootAllocator;
 import org.apache.arrow.vector.FieldVector;
+import org.apache.calcite.util.ImmutableIntList;
 
 import java.io.File;
 import java.io.IOException;
@@ -24,14 +25,21 @@ public abstract class ArrowTableReader implements AutoCloseable {
     protected BufferAllocator tableAllocator;
 
     /**
+     * The list of columns to project.
+     */
+    protected int[] columnsToProject;
+
+    /**
      * Perform the basic initialisation required for any descendant of {@link ArrowTableReader}.
      * @param arrowFile The Arrow file to be read from.
      * @param rootAllocator The {@link RootAllocator} that is used for Arrow allocations.
+     * @param columnsToProject The columns of the {@code arrowFile} to actually project out.
      */
-    public ArrowTableReader(File arrowFile, RootAllocator rootAllocator) {
+    public ArrowTableReader(File arrowFile, RootAllocator rootAllocator, ImmutableIntList columnsToProject) {
         this.arrowFile = arrowFile;
         // Initialise a specific allocator for this table, at twice the file size to be on the safe side
         this.tableAllocator = rootAllocator.newChildAllocator(arrowFile.getName(), 0L, 2 * arrowFile.getTotalSpace());
+        this.columnsToProject = columnsToProject.toIntArray();
     }
 
     /**

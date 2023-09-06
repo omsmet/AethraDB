@@ -87,9 +87,11 @@ public class ArrowTableScanFilterProjectRule extends RelRule<ArrowTableScanFilte
         filterVisitor.visitCall(filterCall);
 
         // Combine the column lists
-        final List<Integer> columnsToProject = new ArrayList<>();
-        columnsToProject.addAll(projectionColumns);
-        columnsToProject.addAll(filterColumns);
+        final List<Integer> columnsToProject = new ArrayList<>(projectionColumns);
+        for (Integer filterColumn : filterColumns) {
+            if (!columnsToProject.contains(filterColumn))
+                columnsToProject.add(filterColumn);
+        }
         columnsToProject.sort(Integer::compare);
 
         // Setup the replacement arrow scan
