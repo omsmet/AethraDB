@@ -231,7 +231,7 @@ public class QueryCodeGenerator extends SimpleCompiler {
                 completedExecuteMethodBody
         );
 
-        System.out.println("Finished query code!");
+        System.out.println("Finished query code generation!");
         System.out.println();
 
         // Print the generated method body if requested

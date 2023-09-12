@@ -1,23 +1,22 @@
-package benchmarks.join_query_hard_coded.NonVectorisedSimdGenSupport;
+package benchmarks.join_query_hard_coded.NonVectorisedNonSimdOptimisedSupport;
 
 import evaluation.general_support.hashmaps.Int_Hash_Function;
 
 import java.util.Arrays;
 
-public final class KeyMultiRecordMap_169110289 {
+public final class InnerJoinMap {
     private int numberOfRecords;
     private int[] keys;
     public int[] keysRecordCount;
     public int[][] values_record_ord_0;
     public int[][] values_record_ord_1;
-    public int[][] values_record_ord_2;
     private int[] hashTable;
     private int[] next;
 
-    public KeyMultiRecordMap_169110289() {
+    public InnerJoinMap() {
         this(4);
     }
-    public KeyMultiRecordMap_169110289(int capacity) {
+    public InnerJoinMap(int capacity) {
         if (!(((capacity > 1) && ((capacity & (capacity - 1)) == 0)))) {
             throw new java.lang.IllegalArgumentException("The map capacity is required to be a power of two");
         }
@@ -27,14 +26,13 @@ public final class KeyMultiRecordMap_169110289 {
         this.keysRecordCount = new int[capacity];
         this.values_record_ord_0 = new int[capacity][8];
         this.values_record_ord_1 = new int[capacity][8];
-        this.values_record_ord_2 = new int[capacity][8];
         this.hashTable = new int[capacity];
         Arrays.fill(this.hashTable, -1);
         this.next = new int[capacity];
         Arrays.fill(this.next, -1);
     }
 
-    public void associate(int key, long preHash, int record_ord_0, int record_ord_1, int record_ord_2) {
+    public void associate(int key, long preHash, int record_ord_0, int record_ord_1) {
         if ((key < 0)) {
             throw new java.lang.IllegalArgumentException("The map expects non-negative keys");
         }
@@ -58,13 +56,9 @@ public final class KeyMultiRecordMap_169110289 {
             int[] temp_values_record_ord_1 = new int[newValueArraysSize];
             System.arraycopy(this.values_record_ord_1[index], 0, temp_values_record_ord_1, 0, currentValueArraysSize);
             this.values_record_ord_1[index] = temp_values_record_ord_1;
-            int[] temp_values_record_ord_2 = new int[newValueArraysSize];
-            System.arraycopy(this.values_record_ord_2[index], 0, temp_values_record_ord_2, 0, currentValueArraysSize);
-            this.values_record_ord_2[index] = temp_values_record_ord_2;
         }
         this.values_record_ord_0[index][insertionIndex] = record_ord_0;
         this.values_record_ord_1[index][insertionIndex] = record_ord_1;
-        this.values_record_ord_2[index][insertionIndex] = record_ord_2;
         this.keysRecordCount[index]++;
         if (newEntry) {
             boolean rehashOnCollision = (this.numberOfRecords > ((3 * this.hashTable.length) / 4));
@@ -78,7 +72,7 @@ public final class KeyMultiRecordMap_169110289 {
             return -1;
         }
         int currentIndex = initialIndex;
-        while (this.keys[currentIndex] != key) {
+        while ((this.keys[currentIndex] != key)) {
             int potentialNextIndex = this.next[currentIndex];
             if ((potentialNextIndex == -1)) {
                 return -1;
@@ -111,9 +105,6 @@ public final class KeyMultiRecordMap_169110289 {
         int[][] new_values_record_ord_1 = new int[newSize][8];
         System.arraycopy(this.values_record_ord_1, 0, new_values_record_ord_1, 0, currentSize);
         this.values_record_ord_1 = new_values_record_ord_1;
-        int[][] new_values_record_ord_2 = new int[newSize][8];
-        System.arraycopy(this.values_record_ord_2, 0, new_values_record_ord_2, 0, currentSize);
-        this.values_record_ord_2 = new_values_record_ord_2;
     }
     private void putHashEntry(int key, long preHash, int index, boolean rehashOnCollision) {
         int htIndex = ((int) (preHash & (this.hashTable.length - 1)));
@@ -127,14 +118,14 @@ public final class KeyMultiRecordMap_169110289 {
             return;
         }
         int currentIndex = initialIndex;
-        while (this.keys[currentIndex] != key && this.next[currentIndex] != -1) {
+        while (((this.keys[currentIndex] != key) && (this.next[currentIndex] != -1))) {
             currentIndex = this.next[currentIndex];
         }
         this.next[currentIndex] = index;
     }
     private void rehash() {
         int size = this.hashTable.length;
-        while (size <= this.numberOfRecords) {
+        while ((size <= this.numberOfRecords)) {
             size = (size << 1);
         }
         size = (size << 1);
