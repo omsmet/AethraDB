@@ -90,9 +90,8 @@ public class AethraDB {
 
         // Generate code for the query which prints the result to the standard output
         boolean useVectorisedProcessing = false;
-        boolean useSimdProcessing = false;
         QueryTranslator queryTranslator = new QueryTranslator();
-        CodeGenOperator<?> queryRootOperator = queryTranslator.translate(logicalQueryPlan, useSimdProcessing);
+        CodeGenOperator<?> queryRootOperator = queryTranslator.translate(logicalQueryPlan, false);
         CodeGenOperator<?> printOperator = new QueryResultPrinterOperator(queryRootOperator.getLogicalSubplan(), queryRootOperator);
         QueryCodeGenerator queryCodeGenerator = new QueryCodeGenerator(printOperator, useVectorisedProcessing);
 
