@@ -2,6 +2,7 @@ import evaluation.codegen.GeneratedQuery;
 import evaluation.codegen.QueryCodeGenerator;
 import evaluation.codegen.QueryTranslator;
 import evaluation.codegen.operators.CodeGenOperator;
+import evaluation.codegen.operators.QueryResultCountOperator;
 import evaluation.codegen.operators.QueryResultPrinterOperator;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.externalize.RelWriterImpl;
@@ -36,6 +37,21 @@ public class AethraDB {
     private static Option queryFilePath;
 
     /**
+     * Command line option for enabling verbose output.
+     */
+    private static Option verboseOutput;
+
+    /**
+     * Command line option for selecting the query processing paradigm.
+     */
+    private static Option processingParadigm;
+
+    /**
+     * Command line option to summarise the query result as the count of the number of result lines.
+     */
+    private static Option summariseAsCount;
+
+    /**
      * Main entry point of the application.
      * @param args A list of arguments influencing the behaviour of the engine.
      */
@@ -55,13 +71,31 @@ public class AethraDB {
             System.exit(0);
         }
 
+        // Check if verbose output is enabled
+        boolean verboseOutputEnabled = cmdArguments.hasOption(verboseOutput);
+
+        // Extract the query processing paradigm to use
+        String paradigmArgVal = cmdArguments.getOptionValue(processingParadigm);
+        boolean useVectorisedProcessing;
+        if (paradigmArgVal.equals("non-vectorised"))
+            useVectorisedProcessing = false;
+        else if (paradigmArgVal.equals("vectorised"))
+            useVectorisedProcessing = true;
+        else {
+            System.out.println("Unexpected paradigm option value");
+            cliHelpFormatter.printHelp("Usage:", cliOptions);
+            return;
+        }
+
         // Create the database instance
         ArrowDatabase database = new ArrowDatabase(cmdArguments.getOptionValue(dbDirectoryPath));
 
         // Print the schema for debug purposes
-        System.out.println("[Database schema]");
-        database.printSchema();
-        System.out.println();
+        if (verboseOutputEnabled) {
+            System.out.println("[Database schema]");
+            database.printSchema();
+            System.out.println();
+        }
 
         // Read the query
         File queryFile = new File(cmdArguments.getOptionValue(queryFilePath));
@@ -71,33 +105,42 @@ public class AethraDB {
 
         // Parse query into AST
         SqlNode parsedSqlQuery = database.parseQuery(textualSqlQuery);
-        System.out.println("[Parsed query]");
-        System.out.println(parsedSqlQuery.toString());
-        System.out.println();
+        if (verboseOutputEnabled) {
+            System.out.println("[Parsed query]");
+            System.out.println(parsedSqlQuery.toString());
+            System.out.println();
+        }
 
         // Validate the parsed query
         RelNode validatedSqlQuery = database.validateQuery(parsedSqlQuery);
-        System.out.println("[Validated query]");
-        System.out.println(validatedSqlQuery.toString());
-        System.out.println();
+        if (verboseOutputEnabled) {
+            System.out.println("[Validated query]");
+            System.out.println(validatedSqlQuery.toString());
+            System.out.println();
+        }
 
         // Plan the query
         RelNode logicalQueryPlan = database.planQuery(validatedSqlQuery);
-        System.out.println("[Optimised query]");
-        var relWriter = new RelWriterImpl(new PrintWriter(System.out, true), SqlExplainLevel.NON_COST_ATTRIBUTES, false);
-        logicalQueryPlan.explain(relWriter);
-        System.out.println();
+        if (verboseOutputEnabled) {
+            System.out.println("[Optimised query]");
+            var relWriter = new RelWriterImpl(new PrintWriter(System.out, true), SqlExplainLevel.NON_COST_ATTRIBUTES, false);
+            logicalQueryPlan.explain(relWriter);
+            System.out.println();
+        }
 
         // Generate code for the query which prints the result to the standard output
-        boolean useVectorisedProcessing = false;
+        // while summarising the result if necessary
+        boolean shouldSummarise = cmdArguments.hasOption(summariseAsCount);
         QueryTranslator queryTranslator = new QueryTranslator();
         CodeGenOperator<?> queryRootOperator = queryTranslator.translate(logicalQueryPlan, false);
+        if (shouldSummarise)
+            queryRootOperator = new QueryResultCountOperator(logicalQueryPlan, queryRootOperator);
         CodeGenOperator<?> printOperator = new QueryResultPrinterOperator(queryRootOperator.getLogicalSubplan(), queryRootOperator);
         QueryCodeGenerator queryCodeGenerator = new QueryCodeGenerator(printOperator, useVectorisedProcessing);
 
         GeneratedQuery generatedQuery;
         try {
-            generatedQuery = queryCodeGenerator.generateQuery(true);
+            generatedQuery = queryCodeGenerator.generateQuery(verboseOutputEnabled);
         } catch (Exception e) {
             throw new RuntimeException("Could not generate code for query", e);
         }
@@ -135,6 +178,36 @@ public class AethraDB {
                 .desc("The file containing the SQL query to be executed")
                 .build();
         options.addOption(queryFilePath);
+
+        // Define option for enabling verbose output
+        verboseOutput = Option
+                .builder("v")
+                .longOpt("verbose")
+                .hasArg(false)
+                .required(false)
+                .desc("Output verbose query processing information to the standard output")
+                .build();
+        options.addOption(verboseOutput);
+
+        // Define option for selecting the query processing paradigm
+        processingParadigm = Option
+                .builder("p")
+                .longOpt("paradigm")
+                .hasArg(true)
+                .required(true)
+                .desc("Supply the query processing paradigm to execute: [non-vectorised, vectorised]")
+                .build();
+        options.addOption(processingParadigm);
+
+        // Define option to summarise the query result as a count only
+        summariseAsCount = Option
+                .builder("s")
+                .longOpt("summarise")
+                .hasArg(false)
+                .required(false)
+                .desc("Summarise the result of a query as the number of rows in the result")
+                .build();
+        options.addOption(summariseAsCount);
 
         return options;
     }
