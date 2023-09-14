@@ -76,6 +76,7 @@ THE POSSIBILITY OF SUCH DAMAGE.
         <immutables.version>2.9.2</immutables.version>
         <janino.version>3.1.9</janino.version>
         <slf4j.version>2.0.9</slf4j.version>
+        <spark-sql.version>3.4.1</spark-sql.version>
 
         <!--
             Plugin Versions
@@ -188,6 +189,15 @@ THE POSSIBILITY OF SUCH DAMAGE.
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-nop</artifactId>
             <version>${slf4j.version}</version>
+        </dependency>
+
+        <!--
+            Spark Dependencies
+          -->
+        <dependency>
+            <groupId>org.apache.spark</groupId>
+            <artifactId>spark-sql_2.12</artifactId>
+            <version>${spark-sql.version}</version>
         </dependency>
     </dependencies>
 

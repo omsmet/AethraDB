@@ -40,7 +40,8 @@ public class VectorisedNonSimd {
      */
     @Param({
             "/nvtmp/AethraTestData/tpch/sf-1",
-            "/nvtmp/AethraTestData/tpch/sf-10"
+            "/nvtmp/AethraTestData/tpch/sf-10",
+            "/nvtmp/AethraTestData/tpch/sf-100"
     })
     private String tpchInstance;
 

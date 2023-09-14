@@ -2,9 +2,10 @@ package benchmarks.tpch.q1_no_sort_hard_coded;
 
 import evaluation.codegen.infrastructure.data.ABQArrowTableReader;
 import evaluation.codegen.infrastructure.data.ArrowTableReader;
-import evaluation.general_support.hashmaps.Char_Arr_Hash_Function;
 import org.apache.arrow.memory.RootAllocator;
 import org.apache.calcite.util.ImmutableIntList;
+import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
+import org.apache.spark.unsafe.KVIterator;
 import org.openjdk.jmh.annotations.Benchmark;
 import org.openjdk.jmh.annotations.BenchmarkMode;
 import org.openjdk.jmh.annotations.Fork;
@@ -28,7 +29,7 @@ import java.util.concurrent.TimeUnit;
  * generation without SIMD-ed operators, but while not actually invoking the code generator itself.
  */
 @State(Scope.Benchmark)
-public class NonVectorisedNonSimd {
+public class NonVectorisedNonSimdSparkified {
 
     /**
      * Different instances of the TPC-H database can be tested using this benchmark.
@@ -53,7 +54,7 @@ public class NonVectorisedNonSimd {
     /**
      * State: the hash-table which is used by the query to aggregate.
      */
-    private AggregationMap aggregation_state_map;
+    private SparkAggregationMap aggregation_state_map;
 
     /**
      * State: the result of the query.
@@ -86,7 +87,7 @@ public class NonVectorisedNonSimd {
                 new File(this.tpchInstance + "/lineitem.arrow"), this.rootAllocator, columnsToProject);
 
         // Initialise the hash-table
-        this.aggregation_state_map = new AggregationMap();
+        this.aggregation_state_map = new SparkAggregationMap();
 
         // Initialise the result verifier
         this.resultVerifier = new ResultVerifier(this.tpchInstance + "/q1_result.csv");
@@ -119,7 +120,7 @@ public class NonVectorisedNonSimd {
      * This method sets up the state at the start of each benchmark iteration.
      */
     @Setup(Level.Invocation)
-    public void invocationStetup() throws Exception {
+    public void invocationSetup() throws Exception {
         // Reset the table
         this.lineitem_table.reset();
 
@@ -128,10 +129,18 @@ public class NonVectorisedNonSimd {
     }
 
     /**
+     * This method clears up after this benchmark for has finished.
+     */
+    @TearDown(Level.Trial)
+    public void trialTeardown() {
+        this.aggregation_state_map.stop();
+    }
+
+    /**
      * This method verifies successful completion of the previous benchmark and cleans up after it.
      */
     @TearDown(Level.Invocation)
-    public void teardown() {
+    public void invocationTeardown() {
         // Verify the result
         if (!this.resultVerifier.resultCorrect(
                 this.resultReturnFlag,
@@ -174,12 +183,10 @@ public class NonVectorisedNonSimd {
             "-Darrow.enable_null_check_for_get=false",
             "--enable-preview",
             "-Xmx32g",
-            "-Xms16g"
+            "-Xms16g",
+            "--add-exports=java.base/sun.nio.ch=ALL-UNNAMED"
     })
     public void executeQuery(Blackhole bh) throws IOException {
-        // DIFF: hard-coded
-        // KeyValueMap_222927891 aggregation_state_map = new KeyValueMap_222927891();
-        // ArrowTableReader lineitem = cCtx.getArrowReader(0);
         while (lineitem_table.loadNextBatch()) {
             org.apache.arrow.vector.Float8Vector lineitem_vc_0 = ((org.apache.arrow.vector.Float8Vector) lineitem_table.getVector(4));
             org.apache.arrow.vector.Float8Vector lineitem_vc_1 = ((org.apache.arrow.vector.Float8Vector) lineitem_table.getVector(5));
@@ -194,48 +201,34 @@ public class NonVectorisedNonSimd {
                 if (!((ordinal_value <= 10471))) {
                     continue;
                 }
-                int projection_literal = 1;
-                double projection_computation_result = (projection_literal - lineitem_vc_2.get(aviv));
-                double projection_computation_result_0 = (lineitem_vc_1.get(aviv) * projection_computation_result);
-                int projection_literal_0 = 1;
-                double projection_computation_result_1 = (projection_literal_0 - lineitem_vc_2.get(aviv));
-                double projection_computation_result_2 = (lineitem_vc_1.get(aviv) * projection_computation_result_1);
-                int projection_literal_1 = 1;
-                double projection_computation_result_3 = (projection_literal_1 + lineitem_vc_3.get(aviv));
-                double projection_computation_result_4 = (projection_computation_result_2 * projection_computation_result_3);
                 byte[] ordinal_value_0 = lineitem_vc_4.get(aviv);
                 byte[] ordinal_value_1 = lineitem_vc_5.get(aviv);
-                long group_key_pre_hash = Char_Arr_Hash_Function.preHash(ordinal_value_0);
-                group_key_pre_hash ^= Char_Arr_Hash_Function.preHash(ordinal_value_1);
                 double ordinal_value_2 = lineitem_vc_0.get(aviv);
                 double ordinal_value_3 = lineitem_vc_1.get(aviv);
                 double ordinal_value_4 = lineitem_vc_2.get(aviv);
-                aggregation_state_map.incrementForKey(ordinal_value_0, ordinal_value_1, group_key_pre_hash, ordinal_value_2, ordinal_value_3, projection_computation_result_0, projection_computation_result_4, 1, ordinal_value_4);
+                double ordinal_value_5 = lineitem_vc_3.get(aviv);
+
+                this.aggregation_state_map.hashAgg_doConsume_0(ordinal_value_2, ordinal_value_3, ordinal_value_4, ordinal_value_5, ordinal_value_0[0], ordinal_value_1[0]);
             }
         }
-        for (int key_i = 0; key_i < aggregation_state_map.numberOfRecords; key_i++) {
-            byte[] groupKey_0 = aggregation_state_map.keys_ord_0[key_i];
-            byte[] groupKey_1 = aggregation_state_map.keys_ord_1[key_i];
-            double aggregation_0_value = aggregation_state_map.values_ord_0[key_i];
-            double aggregation_1_value = aggregation_state_map.values_ord_1[key_i];
-            double aggregation_2_value = aggregation_state_map.values_ord_2[key_i];
-            double aggregation_3_value = aggregation_state_map.values_ord_3[key_i];
-            int aggregation_4_value = aggregation_state_map.values_ord_4[key_i];
-            double aggregation_5_value = aggregation_state_map.values_ord_5[key_i];
-            double projection_computation_result = (aggregation_0_value / aggregation_4_value);
-            double projection_computation_result_0 = (aggregation_1_value / aggregation_4_value);
-            double projection_computation_result_1 = (aggregation_5_value / aggregation_4_value);
-            // DIFF: changed for result verification
-            // System.out.print(new java.lang.String(groupKey_0) + ", ");
-            // System.out.print(new java.lang.String(groupKey_1) + ", ");
-            // System.out.print(aggregation_0_value + ", ");
-            // System.out.print(aggregation_1_value + ", ");
-            // System.out.print(aggregation_2_value + ", ");
-            // System.out.print(aggregation_3_value + ", ");
-            // System.out.print(projection_computation_result + ", ");
-            // System.out.print(projection_computation_result_0 + ", ");
-            // System.out.print(projection_computation_result_1 + ", ");
-            // System.out.println(aggregation_4_value);
+
+        int key_i = 0;
+        KVIterator<UnsafeRow, UnsafeRow> resultIterator = this.aggregation_state_map.resultIterator();
+        while (resultIterator.next()) {
+            UnsafeRow resultKey = resultIterator.getKey();
+            UnsafeRow resultAggregationState = resultIterator.getValue();
+
+            byte[] groupKey_0 = new byte[] { resultKey.getByte(0) };
+            byte[] groupKey_1 = new byte[] { resultKey.getByte(1) };
+            double aggregation_0_value = resultAggregationState.getDouble(0);
+            double aggregation_1_value = resultAggregationState.getDouble(1);
+            double aggregation_2_value = resultAggregationState.getDouble(2);
+            double aggregation_3_value = resultAggregationState.getDouble(3);
+            double projection_computation_result = resultAggregationState.getDouble(4) / resultAggregationState.getLong(5);
+            double projection_computation_result_0 = resultAggregationState.getDouble(6) / resultAggregationState.getLong(7);
+            double projection_computation_result_1 = resultAggregationState.getDouble(8) / resultAggregationState.getLong(9);
+            int aggregation_4_value = (int) resultAggregationState.getLong(10);
+
             this.resultReturnFlag[key_i] = groupKey_0;
             this.resultLineStatus[key_i] = groupKey_1;
             this.resultSumQuantity[key_i] = aggregation_0_value;
@@ -246,6 +239,8 @@ public class NonVectorisedNonSimd {
             this.resultAvgPrice[key_i] = projection_computation_result_0;
             this.resultAvgDisc[key_i] = projection_computation_result_1;
             this.resultCountOrder[key_i] = aggregation_4_value;
+
+            key_i++;
         }
 
         // DIFF: prevent optimising the result away
