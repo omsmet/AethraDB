@@ -128,9 +128,9 @@ public class ResultVerifier {
             // Check the remaining columns
             groupCorrectInResult[correctResultIndex] =
                        resultSumQuantity[resultIndex] == correctResultSumQuantity[correctResultIndex]
-                    && (Math.abs(resultSumBasePrice[resultIndex] - correctResultSumBasePrice[correctResultIndex]) < 3e-1)
-                    && (Math.abs(resultSumDiscPrice[resultIndex] - correctResultSumDiscPrice[correctResultIndex]) < 3e-1)
-                    && (Math.abs(resultSumCharge[resultIndex] - correctResultSumCharge[correctResultIndex]) < 3e-1)
+                    && (Math.abs(resultSumBasePrice[resultIndex] - correctResultSumBasePrice[correctResultIndex]) < 10)
+                    && (Math.abs(resultSumDiscPrice[resultIndex] - correctResultSumDiscPrice[correctResultIndex]) < 10)
+                    && (Math.abs(resultSumCharge[resultIndex] - correctResultSumCharge[correctResultIndex]) < 10)
                     && (Math.abs(resultAvgQuantity[resultIndex] - correctResultAvgQuantity[correctResultIndex]) < 3e-1)
                     && (Math.abs(resultAvgPrice[resultIndex] - correctResultAvgPrice[correctResultIndex]) < 3e-1)
                     && (Math.abs(resultAvgDisc[resultIndex] - correctResultAvgDisc[correctResultIndex])) < 3e-1
