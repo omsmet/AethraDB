@@ -19,7 +19,6 @@ import org.apache.calcite.schema.Table;
 import org.apache.calcite.sql.SqlNode;
 import org.apache.calcite.sql.parser.SqlParseException;
 import org.apache.calcite.sql.parser.SqlParser;
-import org.apache.calcite.sql.type.BasicSqlType;
 import org.apache.calcite.tools.FrameworkConfig;
 import org.apache.calcite.tools.Frameworks;
 import org.apache.calcite.tools.Planner;
@@ -27,8 +26,6 @@ import org.apache.calcite.tools.RelConversionException;
 import org.apache.calcite.tools.ValidationException;
 
 import java.util.Objects;
-
-import static org.apache.calcite.sql.type.SqlTypeName.VARCHAR;
 
 /**
  * Class used for representing a database over a directory of Arrow files by exposing methods for

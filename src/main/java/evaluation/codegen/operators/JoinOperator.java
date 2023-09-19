@@ -266,92 +266,43 @@ public class JoinOperator extends CodeGenOperator<LogicalJoin> {
         // Check that we can handle the key type (casts valid due to pre-condition check in constructor)
         RexInputRef buildKey = (RexInputRef) this.joinCondition.getOperands().get(0);
         int buildKeyOrdinal = buildKey.getIndex();
-        List<AccessPath> currentOrdinalMapping = cCtx.getCurrentOrdinalMapping();
-        AccessPath buildKeyAP = currentOrdinalMapping.get(buildKeyOrdinal);
+        AccessPath buildKeyAP = cCtx.getCurrentOrdinalMapping().get(buildKeyOrdinal);
         QueryVariableType buildKeyOrdinalPrimitiveType = primitiveType(buildKeyAP.getType());
 
         if (buildKeyOrdinalPrimitiveType != P_INT)
             throw new UnsupportedOperationException("JoinOperator.consumeNonVecBuild only supports integer join key columns");
 
+        if (this.useSIMDNonVec(cCtx))
+            throw new UnsupportedOperationException("JoinOperator.consumeNonVecBuild no longer supports SIMD");
+
         // Idea: first perform hashing of the key-column, then perform hash-table inserts.
-        // In the case of SIMD-enabled pre-hashing, the SIMD data is flattened afterwards
-        // and hence the hash-table inserts can be done in a unified fashion.
-        ScalarVariableAccessPath leftJoinKeyPreHash;
-        Java.Rvalue[] recordColumnValues = new Java.Rvalue[currentOrdinalMapping.size()];
-        Java.Block hashInsertTarget;
+        // Obtain the local access path for the key column value
+        Java.Rvalue keyColumnRvalue = getRValueFromOrdinalAccessPathNonVec(cCtx, buildKeyOrdinal, codeGenResult);
+        buildKeyAP = cCtx.getCurrentOrdinalMapping().get(buildKeyOrdinal);
 
-        if (!this.useSIMDNonVec(cCtx)) {
-            // Obtain the local access path for the key column value
-            Java.Rvalue keyColumnRvalue = getRValueFromOrdinalAccessPathNonVec(cCtx, buildKeyOrdinal, codeGenResult);
-            buildKeyAP = cCtx.getCurrentOrdinalMapping().get(buildKeyOrdinal);
-
-            // Compute the pre-hash value in a local variable
-            leftJoinKeyPreHash = new ScalarVariableAccessPath(cCtx.defineVariable("left_join_key_prehash"), P_LONG);
-            codeGenResult.add(
-                    createLocalVariable(
-                            getLocation(),
-                            toJavaType(getLocation(), leftJoinKeyPreHash.getType()),
-                            leftJoinKeyPreHash.getVariableName(),
-                            createMethodInvocation(
-                                    getLocation(),
-                                    createAmbiguousNameRef(getLocation(), "Int_Hash_Function"),
-                                    "preHash",
-                                    new Java.Rvalue[] { keyColumnRvalue }
-                            )
-                    ));
-
-            // Get the values for the current row
-            currentOrdinalMapping = cCtx.getCurrentOrdinalMapping();
-            for (int i = 0; i < currentOrdinalMapping.size(); i++)
-                recordColumnValues[i] = getRValueFromOrdinalAccessPathNonVec(cCtx, i, codeGenResult);
-
-            // Set the correct target
-            hashInsertTarget = new Java.Block(getLocation());
-            codeGenResult.add(hashInsertTarget);
-
-        } else { // this.useSIMDNonVec(cCtx)
-            // Perform the SIMD-ed pre-hashing and flattening
-            var preHashAndFlattenResult = Int_Hash_Function.preHashAndFlattenSIMD(
-                    cCtx,
-                    buildKeyAP
-            );
-
-            buildKeyAP = preHashAndFlattenResult.keyColumnAccessPath;
-            leftJoinKeyPreHash = preHashAndFlattenResult.keyColumnPreHashAccessPath;
-            codeGenResult.addAll(preHashAndFlattenResult.generatedCode);
-            hashInsertTarget = preHashAndFlattenResult.flattenedForLoopBody;
-
-            // Obtain the record values to insert into the hash-map
-            currentOrdinalMapping = cCtx.getCurrentOrdinalMapping();
-            for (int i = 0; i < currentOrdinalMapping.size(); i++) {
-                AccessPath valueAP = currentOrdinalMapping.get(i);
-
-                if (valueAP instanceof SIMDLoopAccessPath valueAP_slap) {
-                    if (i == buildKeyOrdinal)
-                        recordColumnValues[i] = ((ScalarVariableAccessPath) buildKeyAP).read();
-                    else {
-                        // recordColumnValues[i] = [valueAP_slap.readArrowVector()].get([valueAP_slap.readArrowVectorOffset()] + [simd_vector_i]);
-                        recordColumnValues[i] = createMethodInvocation(
+        // Compute the pre-hash value in a local variable
+        ScalarVariableAccessPath leftJoinKeyPreHash = new ScalarVariableAccessPath(cCtx.defineVariable("left_join_key_prehash"), P_LONG);
+        codeGenResult.add(
+                createLocalVariable(
+                        getLocation(),
+                        toJavaType(getLocation(), leftJoinKeyPreHash.getType()),
+                        leftJoinKeyPreHash.getVariableName(),
+                        createMethodInvocation(
                                 getLocation(),
-                                valueAP_slap.readArrowVector(),
-                                "get",
-                                new Java.Rvalue[]{
-                                        plus(
-                                                getLocation(),
-                                                valueAP_slap.readArrowVectorOffset(),
-                                                preHashAndFlattenResult.simdVectorIAp.read()
-                                        )
-                                }
-                        );
-                    }
+                                createAmbiguousNameRef(getLocation(), "Int_Hash_Function"),
+                                "preHash",
+                                new Java.Rvalue[] { keyColumnRvalue }
+                        )
+                ));
 
-                } else {
-                    throw new UnsupportedOperationException(
-                            "JoinOperator.consumeNonVecBuild does not support this valueAP for hash-map insertion");
-                }
-
-            }
-
+        // Get the values for the current row (except for the key, as we dont need duplication)
+        var currentOrdinalMapping = cCtx.getCurrentOrdinalMapping();
+        Java.Rvalue[] recordColumnValues = new Java.Rvalue[currentOrdinalMapping.size() - 1];
+        int currentRecordColumnValueIndex = 0;
+        for (int i = 0; i < currentOrdinalMapping.size(); i++) {
+            if (i == buildKeyOrdinal)
+                continue;
+            recordColumnValues[currentRecordColumnValueIndex++] = getRValueFromOrdinalAccessPathNonVec(cCtx, i, codeGenResult);
         }
 
         // Insert the record for the current row into the join map
@@ -360,7 +311,7 @@ public class JoinOperator extends CodeGenOperator<LogicalJoin> {
         associateCallArguments[1] = leftJoinKeyPreHash.read();
         System.arraycopy(recordColumnValues, 0, associateCallArguments, 2, recordColumnValues.length);
 
-        hashInsertTarget.addStatement(
+        codeGenResult.add(
                 createMethodInvocationStm(
                         getLocation(),
                         this.joinMapAP.read(),
@@ -391,117 +342,45 @@ public class JoinOperator extends CodeGenOperator<LogicalJoin> {
         if (buildKeyOrdinalPrimitiveType != P_INT)
             throw new UnsupportedOperationException("JoinOperator.consumeNonVecProbe only supports integer join key columns");
 
+        if (this.useSIMDNonVec(cCtx))
+            throw new UnsupportedOperationException("JoinOperator.consumeNonVecProbe no longer supports SIMD");
+
         // Idea: first perform hashing of the key-column, then look up the join records in the hash-table
         // and finally expose the resulting records
-        // TODO: when SIMD processing is enabled, the result of this operator will not be constructed as a SIMD-enabled datastructure
-        // TODO: consider implementing that functionality when it becomes required
 
-        // We perform pre-hashing first, since in the case of SIMD-enabled pre-hashing, the SIMD data
-        // is flattened afterwards and hence the hash-table probes and result exposure can be done in a unified fashion.
-        // This way of unification also implies we need to prepare statements for obtaining the column values for the
-        // right-hand columns of the join at the same time.
-        ScalarVariableAccessPath rightJoinKeyPreHash;
-        Java.Block resultExposureTarget;
+        // Obtain the local access path for the key column value
+        Java.Rvalue keyColumnRvalue = getRValueFromOrdinalAccessPathNonVec(cCtx, buildKeyOrdinal, codeGenResult);
+        buildKeyAP = cCtx.getCurrentOrdinalMapping().get(buildKeyOrdinal);
+
+        // Compute the pre-hash value in a local variable
+        var rightJoinKeyPreHash = new ScalarVariableAccessPath(cCtx.defineVariable("right_join_key_prehash"), P_LONG);
+        codeGenResult.add(
+                createLocalVariable(
+                        getLocation(),
+                        toJavaType(getLocation(), rightJoinKeyPreHash.getType()),
+                        rightJoinKeyPreHash.getVariableName(),
+                        createMethodInvocation(
+                                getLocation(),
+                                createAmbiguousNameRef(getLocation(), "Int_Hash_Function"),
+                                "preHash",
+                                new Java.Rvalue[] { keyColumnRvalue }
+                        )
+                ));
+
+        // Prepare the statements for obtaining the local access paths for the right-hand join columns
         List<AccessPath> rightHandOrdinalMappings = cCtx.getCurrentOrdinalMapping();
         List<Java.Statement> localRightHandAPsInitialisationStatements = new ArrayList<>();
         List<AccessPath> localRightHandAPs = new ArrayList<>(rightHandOrdinalMappings.size());
-
-        // Probe the hash-table based on the input type
-        if (!this.useSIMDNonVec(cCtx)) {
-            // Obtain the local access path for the key column value
-            Java.Rvalue keyColumnRvalue = getRValueFromOrdinalAccessPathNonVec(cCtx, buildKeyOrdinal, codeGenResult);
-            buildKeyAP = cCtx.getCurrentOrdinalMapping().get(buildKeyOrdinal);
-
-            // Compute the pre-hash value in a local variable
-            rightJoinKeyPreHash =
-                    new ScalarVariableAccessPath(cCtx.defineVariable("right_join_key_prehash"), P_LONG);
-            codeGenResult.add(
-                    createLocalVariable(
-                            getLocation(),
-                            toJavaType(getLocation(), rightJoinKeyPreHash.getType()),
-                            rightJoinKeyPreHash.getVariableName(),
-                            createMethodInvocation(
-                                    getLocation(),
-                                    createAmbiguousNameRef(getLocation(), "Int_Hash_Function"),
-                                    "preHash",
-                                    new Java.Rvalue[] { keyColumnRvalue }
-                            )
-                    ));
-
-            // Prepare the statements for obtaining the local access paths for the right-hand join columns
-            for (int i = 0; i < rightHandOrdinalMappings.size(); i++) {
-                getRValueFromOrdinalAccessPathNonVec(cCtx, i, localRightHandAPsInitialisationStatements);
-                localRightHandAPs.add(i, cCtx.getCurrentOrdinalMapping().get(i));
-            }
-
-            // Set the correct result exposure target
-            resultExposureTarget = new Java.Block(getLocation());
-            codeGenResult.add(resultExposureTarget);
-
-        } else { // this.useSIMDNonVec(cCtx)
-            // Perform the SIMD-ed pre-hashing and flattening
-            var preHashAndFlattenResult =
-                    Int_Hash_Function.preHashAndFlattenSIMD(cCtx, buildKeyAP);
-
-            buildKeyAP = preHashAndFlattenResult.keyColumnAccessPath;
-            rightJoinKeyPreHash = preHashAndFlattenResult.keyColumnPreHashAccessPath;
-            codeGenResult.addAll(preHashAndFlattenResult.generatedCode);
-            resultExposureTarget = preHashAndFlattenResult.flattenedForLoopBody;
-
-            // Prepare the statements for obtaining the local access paths for the right-hand join columns
-            for (int i = 0; i < rightHandOrdinalMappings.size(); i++) {
-                AccessPath valueAP = rightHandOrdinalMappings.get(i);
-
-                if (valueAP instanceof SIMDLoopAccessPath valueAP_slap) {
-                    if (i == buildKeyOrdinal)
-                        // If we have the key ordinal, we know a local variable has already been created, so use it
-                        localRightHandAPs.add(i, buildKeyAP);
-
-                    else {
-                        // Otherwise, we need to create the variable now
-                        // [type] right_join_ord_[i] = [valueAP_slap.readArrowVector()].get([valueAP_slap.readArrowVectorOffset()] + [simd_vector_i]);
-                        String rightJoinOrdIName = cCtx.defineVariable("right_join_ord_" + i);
-                        QueryVariableType rightJoinOrdType = primitiveType(valueAP_slap.getType());
-
-                        localRightHandAPsInitialisationStatements.add(
-                                createLocalVariable(
-                                        getLocation(),
-                                        toJavaType(getLocation(), rightJoinOrdType),
-                                        rightJoinOrdIName,
-                                        createMethodInvocation(
-                                                getLocation(),
-                                                valueAP_slap.readArrowVector(),
-                                                "get",
-                                                new Java.Rvalue[]{
-                                                        plus(
-                                                                getLocation(),
-                                                                valueAP_slap.readArrowVectorOffset(),
-                                                                preHashAndFlattenResult.simdVectorIAp.read()
-                                                        )
-                                                }
-                                        )
-                                )
-                        );
-
-                        // And store the access path to it
-                        localRightHandAPs.add(i, new ScalarVariableAccessPath(rightJoinOrdIName, rightJoinOrdType));
-
-                    }
-
-                } else {
-                    throw new UnsupportedOperationException(
-                            "JoinOperator.consumeNonVecProbe does not support this valueAP for hash-map probing");
-                }
-
-            }
-
+        for (int i = 0; i < rightHandOrdinalMappings.size(); i++) {
+            getRValueFromOrdinalAccessPathNonVec(cCtx, i, localRightHandAPsInitialisationStatements);
+            localRightHandAPs.add(i, cCtx.getCurrentOrdinalMapping().get(i));
         }
 
         // Obtain the index for the values for the left side of the join for the current key value
         ScalarVariableAccessPath joinRecordIndex = new ScalarVariableAccessPath(
                 cCtx.defineVariable("records_to_join_index"),
                 P_INT);
-        resultExposureTarget.addStatement(
+        codeGenResult.add(
                 createLocalVariable(
                         getLocation(),
                         toJavaType(getLocation(), joinRecordIndex.getType()),
@@ -521,7 +400,7 @@ public class JoinOperator extends CodeGenOperator<LogicalJoin> {
         // Use the index to check if the left side of the join contains records for the given key
         // otherwise continue
         // if ([records_to_join_index] == -1) continue;
-        resultExposureTarget.addStatement(
+        codeGenResult.add(
                 createIf(
                         getLocation(),
                         eq(
@@ -534,13 +413,13 @@ public class JoinOperator extends CodeGenOperator<LogicalJoin> {
         );
 
         // Get the column values for the right-hand side of the join in local variables
-        resultExposureTarget.addStatements(localRightHandAPsInitialisationStatements);
+        codeGenResult.addAll(localRightHandAPsInitialisationStatements);
 
         // Generate a for-loop to iterate over the join records from the left-hand side
         // int left_join_record_count = [joinMapAP].keysRecordCount[records_to_join_index];
         ScalarVariableAccessPath leftJoinRecordCount =
                 new ScalarVariableAccessPath(cCtx.defineVariable("left_join_record_count"), P_INT);
-        resultExposureTarget.addStatement(
+        codeGenResult.add(
                 createLocalVariable(
                         getLocation(),
                         toJavaType(getLocation(), leftJoinRecordCount.getType()),
@@ -563,7 +442,7 @@ public class JoinOperator extends CodeGenOperator<LogicalJoin> {
         ScalarVariableAccessPath joinLoopIndexVar =
                 new ScalarVariableAccessPath(cCtx.defineVariable("i"), P_INT);
         Java.Block joinLoopBody = new Java.Block(getLocation());
-        resultExposureTarget.addStatement(
+        codeGenResult.add(
                 createForLoop(
                         getLocation(),
                         createPrimitiveLocalVar(getLocation(), Java.Primitive.INT, joinLoopIndexVar.getVariableName(), "0"),
@@ -578,13 +457,22 @@ public class JoinOperator extends CodeGenOperator<LogicalJoin> {
         List<AccessPath> updatedOrdinalMapping =
                 new ArrayList<>(this.getLogicalSubplan().getRowType().getFieldCount());
 
+        int leftKeyOrdinalIndex = ((RexInputRef) this.joinCondition.getOperands().get(0)).getIndex();
         int numberOfLhsColumns = this.joinMapGenerator.valueVariableNames.length;
+        int currentLhsJoinMapValueColumnIndex = 0; // Need to account for the fact that the key is not duplicated in the map
         for (int i = 0; i < numberOfLhsColumns; i++) {
-            // Generate an access path
+
+            // For the key, simply use the existing ordinal value
+            if (i == leftKeyOrdinalIndex) {
+                updatedOrdinalMapping.add(i, buildKeyAP);
+                continue;
+            }
+
+            // For a value column, we need to generate an access path
             ScalarVariableAccessPath currentLeftSideColumnVar =
                     new ScalarVariableAccessPath(
-                            cCtx.defineVariable("left_join_ord_" + i),
-                            this.joinMapGenerator.valueTypes[i]
+                            cCtx.defineVariable("left_join_ord_" + currentLhsJoinMapValueColumnIndex),
+                            this.joinMapGenerator.valueTypes[currentLhsJoinMapValueColumnIndex]
                     );
             updatedOrdinalMapping.add(i, currentLeftSideColumnVar);
 
@@ -601,7 +489,7 @@ public class JoinOperator extends CodeGenOperator<LogicalJoin> {
                                             new Java.FieldAccessExpression(
                                                     getLocation(),
                                                     this.joinMapAP.read(),
-                                                    this.joinMapGenerator.valueVariableNames[i]
+                                                    this.joinMapGenerator.valueVariableNames[currentLhsJoinMapValueColumnIndex]
                                             ),
                                             joinRecordIndex.read()
                                     ),
@@ -609,6 +497,9 @@ public class JoinOperator extends CodeGenOperator<LogicalJoin> {
                             )
                     )
             );
+
+            // Go to the next value column
+            currentLhsJoinMapValueColumnIndex++;
         }
 
         // Update the right-hand part of the ordinal mapping
@@ -873,6 +764,7 @@ public class JoinOperator extends CodeGenOperator<LogicalJoin> {
             );
 
             // Insert the record into the hash-table
+            // Get the key value
             // int left_join_record_key = [buildKeyAVAP].get([i]);
             ScalarVariableAccessPath leftJoinRecordKeyAP = new ScalarVariableAccessPath(
                     cCtx.defineVariable("left_join_record_key"),
@@ -892,17 +784,19 @@ public class JoinOperator extends CodeGenOperator<LogicalJoin> {
                     )
             );
 
-            Java.Rvalue[] columnValues = new Java.Rvalue[currentOrdinalMapping.size()];
-            for (int i = 0; i < columnValues.length; i++) {
+            // Get the values for the remaining columns to prevent key duplication
+            Java.Rvalue[] columnValues = new Java.Rvalue[currentOrdinalMapping.size() - 1];
+            int currentValueColumnIndex = 0;
+            for (int i = 0; i < currentOrdinalMapping.size(); i++) {
                 if (i == buildKeyOrdinal)
-                    columnValues[i] = leftJoinRecordKeyAP.read();
-                else
-                    columnValues[i] = createMethodInvocation(
-                            getLocation(),
-                            ((ArrowVectorAccessPath) currentOrdinalMapping.get(i)).read(),
-                            "get",
-                            new Java.Rvalue[] { insertionLoopIndexVariable.read() }
-                    );
+                    continue;
+
+                columnValues[currentValueColumnIndex++] = createMethodInvocation(
+                        getLocation(),
+                        ((ArrowVectorAccessPath) currentOrdinalMapping.get(i)).read(),
+                        "get",
+                        new Java.Rvalue[] { insertionLoopIndexVariable.read() }
+                );
             }
 
             // [join_map].associate([left_join_record_key], [preHashVector][[i]], [columnValues])
@@ -998,6 +892,7 @@ public class JoinOperator extends CodeGenOperator<LogicalJoin> {
             );
 
             // Insert the record into the hash-table
+            // Get the key
             // int left_join_record_key = [buildKeyAVWSVAP].get([selected_record_index]);
             ScalarVariableAccessPath leftJoinRecordKeyAP = new ScalarVariableAccessPath(
                     cCtx.defineVariable("left_join_record_key"),
@@ -1017,17 +912,19 @@ public class JoinOperator extends CodeGenOperator<LogicalJoin> {
                     )
             );
 
-            Java.Rvalue[] columnValues = new Java.Rvalue[currentOrdinalMapping.size()];
+            // Get the values for the remaining columns to prevent key duplication
+            Java.Rvalue[] columnValues = new Java.Rvalue[currentOrdinalMapping.size() - 1];
+            int currentValueColumnIndex = 0;
             for (int i = 0; i < columnValues.length; i++) {
                 if (i == buildKeyOrdinal)
-                    columnValues[i] = leftJoinRecordKeyAP.read();
-                else
-                    columnValues[i] = createMethodInvocation(
-                            getLocation(),
-                            ((ArrowVectorWithSelectionVectorAccessPath) currentOrdinalMapping.get(i)).readArrowVector(),
-                            "get",
-                            new Java.Rvalue[] { selectedRecordIndexAP.read() }
-                    );
+                    continue;
+
+                columnValues[currentValueColumnIndex++] = createMethodInvocation(
+                        getLocation(),
+                        ((ArrowVectorWithSelectionVectorAccessPath) currentOrdinalMapping.get(i)).readArrowVector(),
+                        "get",
+                        new Java.Rvalue[] { selectedRecordIndexAP.read() }
+                );
             }
 
             // [join_map].associate([left_join_record_key], [preHashVector][[selectedRecordIndexAP]], [columnValues])
@@ -1122,6 +1019,7 @@ public class JoinOperator extends CodeGenOperator<LogicalJoin> {
             );
 
             // Insert the record into the hash-table
+            // Get the key
             // int left_join_record_key = [buildKeyAVWSVAP].get([selected_record_index]);
             ScalarVariableAccessPath leftJoinRecordKeyAP = new ScalarVariableAccessPath(
                     cCtx.defineVariable("left_join_record_key"),
@@ -1141,17 +1039,19 @@ public class JoinOperator extends CodeGenOperator<LogicalJoin> {
                     )
             );
 
-            Java.Rvalue[] columnValues = new Java.Rvalue[currentOrdinalMapping.size()];
+            // Get the values for the remaining columns to prevent key duplication
+            Java.Rvalue[] columnValues = new Java.Rvalue[currentOrdinalMapping.size() - 1];
+            int currentValueColumnIndex = 0;
             for (int i = 0; i < columnValues.length; i++) {
                 if (i == buildKeyOrdinal)
-                    columnValues[i] = leftJoinRecordKeyAP.read();
-                else
-                    columnValues[i] = createMethodInvocation(
-                            getLocation(),
-                            ((ArrowVectorWithValidityMaskAccessPath) currentOrdinalMapping.get(i)).readArrowVector(),
-                            "get",
-                            new Java.Rvalue[] { insertionLoopIndexVariable.read() }
-                    );
+                    continue;
+
+                columnValues[currentValueColumnIndex++] = createMethodInvocation(
+                        getLocation(),
+                        ((ArrowVectorWithValidityMaskAccessPath) currentOrdinalMapping.get(i)).readArrowVector(),
+                        "get",
+                        new Java.Rvalue[] { insertionLoopIndexVariable.read() }
+                );
             }
 
             // [join_map].associate([left_join_record_key], [preHashVector][[insertionLoopIndexVariable]], [columnValues])
@@ -1218,6 +1118,7 @@ public class JoinOperator extends CodeGenOperator<LogicalJoin> {
             );
 
             // Insert the record into the hash-table
+            // Get the key
             // int left_join_record_key = [buildKeyAVAP.read()][i];
             ScalarVariableAccessPath leftJoinRecordKeyAP = new ScalarVariableAccessPath(
                     cCtx.defineVariable("left_join_record_key"),
@@ -1236,17 +1137,19 @@ public class JoinOperator extends CodeGenOperator<LogicalJoin> {
                     )
             );
 
-            Java.Rvalue[] columnValues = new Java.Rvalue[currentOrdinalMapping.size()];
+            // Get the values for the remaining columns to prevent key duplication
+            Java.Rvalue[] columnValues = new Java.Rvalue[currentOrdinalMapping.size() - 1];
+            int currentValueColumnIndex = 0;
             for (int i = 0; i < columnValues.length; i++) {
                 ArrayVectorAccessPath columnAP = ((ArrayVectorAccessPath) currentOrdinalMapping.get(i));
                 if (i == buildKeyOrdinal)
-                    columnValues[i] = leftJoinRecordKeyAP.read();
-                else
-                    columnValues[i] = createArrayElementAccessExpr(
-                            getLocation(),
-                            columnAP.getVectorVariable().read(),
-                            insertionLoopIndexVariable.read()
-                    );
+                    continue;
+
+                columnValues[currentValueColumnIndex++] = createArrayElementAccessExpr(
+                        getLocation(),
+                        columnAP.getVectorVariable().read(),
+                        insertionLoopIndexVariable.read()
+                );
             }
 
             // [join_map].associate([left_join_record_key], [preHashVector][[i]], [columnValues])
@@ -1792,7 +1695,15 @@ public class JoinOperator extends CodeGenOperator<LogicalJoin> {
         // In the loop over the left join records, first add the statements to set the correct
         // values in the result vectors for the left side join columns
         int numberOfLhsColumns = this.joinMapGenerator.valueVariableNames.length;
+        // Need to account for the join key de-duplication:
+        // no need to construct the LHS key vector too, since it is a duplicate of the RHS key vector
+        int leftKeyIndex = ((RexInputRef) this.joinCondition.getOperands().get(0)).getIndex();
+        int currentLhsValueColumnIndex = 0;
         for (int i = 0; i < numberOfLhsColumns; i++) {
+            // Skip LHS key vector creation
+            if (i == leftKeyIndex)
+                continue;
+
             joinLoopBody.addStatement(
                     createVariableAssignmentStm(
                             getLocation(),
@@ -1808,7 +1719,7 @@ public class JoinOperator extends CodeGenOperator<LogicalJoin> {
                                             new Java.FieldAccessExpression(
                                                     getLocation(),
                                                     this.joinMapAP.read(),
-                                                    this.joinMapGenerator.valueVariableNames[i]
+                                                    this.joinMapGenerator.valueVariableNames[currentLhsValueColumnIndex++]
                                             ),
                                             joinRecordIndex.read()
                                     ),
@@ -1844,13 +1755,18 @@ public class JoinOperator extends CodeGenOperator<LogicalJoin> {
                 postIncrementStm(getLocation(), currentLoopIndexAP.write()));
 
         // End of the inner result vector construction loop
-        // Set-up the correct ordinal mapping
+        // Set-up the correct ordinal mapping, link the LHS key column to the RHS key column to avoid duplication
         List<AccessPath> resultVectorAPs = new ArrayList<>(this.resultVectorDefinitions.length);
         for (int i = 0; i < this.resultVectorDefinitions.length; i++) {
+            int resultVectorIndex = i;
+            if (i == leftKeyIndex) {
+                resultVectorIndex = buildKey.getIndex();
+            }
+
             AccessPath resultVectorAP = new ArrayVectorAccessPath(
-                    this.resultVectorDefinitions[i],
+                    this.resultVectorDefinitions[resultVectorIndex],
                     currentResultIndexAP,
-                    vectorTypeForPrimitiveArrayType(this.resultVectorDefinitions[i].getType())
+                    vectorTypeForPrimitiveArrayType(this.resultVectorDefinitions[resultVectorIndex].getType())
             );
             resultVectorAPs.add(i, resultVectorAP);
         }
@@ -1914,9 +1830,22 @@ public class JoinOperator extends CodeGenOperator<LogicalJoin> {
                 primitiveColumnTypes[i] = primitiveType(relationColumnType);
         }
 
+        // Extract the key column type
+        QueryVariableType keyColumnType = primitiveColumnTypes[keyIndex];
+
+        // Extract the value column types (so that the key is not included twice in the map)
+        QueryVariableType[] valueColumnTypes = new QueryVariableType[relationType.size() - 1];
+        int valueColumnIndex = 0;
+        for (int i = 0; i < primitiveColumnTypes.length; i++) {
+            if (i == keyIndex)
+                continue;
+
+            valueColumnTypes[valueColumnIndex++] = primitiveColumnTypes[i];
+        }
+
         return new KeyMultiRecordMapGenerator(
-                primitiveColumnTypes[keyIndex],
-                primitiveColumnTypes
+                keyColumnType,
+                valueColumnTypes
         );
     }
 
