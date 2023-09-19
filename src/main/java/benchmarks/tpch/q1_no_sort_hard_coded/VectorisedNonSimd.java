@@ -58,7 +58,7 @@ public class VectorisedNonSimd {
     /**
      * State: the {@link ArrowTableReader} used for reading the lineitem table.
      */
-    private ArrowTableReader lineitem_table;
+    private ArrowTableReader lineitem;
 
     /**
      * State: the hash-table which is used by the query to aggregate.
@@ -92,7 +92,7 @@ public class VectorisedNonSimd {
         // Setup the database
         this.rootAllocator = new RootAllocator();
         ImmutableIntList columnsToProject = ImmutableIntList.of(4, 5, 6, 7, 8, 9, 10);
-        this.lineitem_table = new ABQArrowTableReader(
+        this.lineitem = new ABQArrowTableReader(
                 new File(this.tpchInstance + "/lineitem.arrow"), this.rootAllocator, columnsToProject);
 
         // Setup the allocation manager
@@ -134,7 +134,7 @@ public class VectorisedNonSimd {
     @Setup(Level.Invocation)
     public void invocationStetup() throws Exception {
         // Reset the table
-        this.lineitem_table.reset();
+        this.lineitem.reset();
 
         // Perform allocation manager maintenance
         this.allocationManager.performMaintenance();
@@ -193,7 +193,7 @@ public class VectorisedNonSimd {
             "-Xms16g"
     })
     public void executeQuery(Blackhole bh) throws IOException {
-        // DIFF: hard-coded allocation manager
+        // DIFF: hard-coded allocation manager in whole query
         int[] ordinal_6_sel_vec = this.allocationManager.getIntVector();
         double[] projection_computation_result = this.allocationManager.getDoubleVector();
         double[] projection_computation_result_0 = this.allocationManager.getDoubleVector();
@@ -205,18 +205,17 @@ public class VectorisedNonSimd {
         double[] projection_computation_result_6 = this.allocationManager.getDoubleVector();
         double[] projection_computation_result_7 = this.allocationManager.getDoubleVector();
         long[] groupKeyPreHashVector = this.allocationManager.getLongVector();
-
         // DIFF: hard-coded
-        // KeyValueMap_1456006896 aggregation_state_map = new KeyValueMap_1456006896();
+        // KeyValueMap_1819552644 aggregation_state_map = new KeyValueMap_1819552644();
         // ArrowTableReader lineitem = cCtx.getArrowReader(0);
-        while (lineitem_table.loadNextBatch()) {
-            org.apache.arrow.vector.Float8Vector lineitem_vc_0 = ((org.apache.arrow.vector.Float8Vector) lineitem_table.getVector(4));
-            org.apache.arrow.vector.Float8Vector lineitem_vc_1 = ((org.apache.arrow.vector.Float8Vector) lineitem_table.getVector(5));
-            org.apache.arrow.vector.Float8Vector lineitem_vc_2 = ((org.apache.arrow.vector.Float8Vector) lineitem_table.getVector(6));
-            org.apache.arrow.vector.Float8Vector lineitem_vc_3 = ((org.apache.arrow.vector.Float8Vector) lineitem_table.getVector(7));
-            org.apache.arrow.vector.FixedSizeBinaryVector lineitem_vc_4 = ((org.apache.arrow.vector.FixedSizeBinaryVector) lineitem_table.getVector(8));
-            org.apache.arrow.vector.FixedSizeBinaryVector lineitem_vc_5 = ((org.apache.arrow.vector.FixedSizeBinaryVector) lineitem_table.getVector(9));
-            org.apache.arrow.vector.DateDayVector lineitem_vc_6 = ((org.apache.arrow.vector.DateDayVector) lineitem_table.getVector(10));
+        while (lineitem.loadNextBatch()) {
+            org.apache.arrow.vector.Float8Vector lineitem_vc_0 = ((org.apache.arrow.vector.Float8Vector) lineitem.getVector(4));
+            org.apache.arrow.vector.Float8Vector lineitem_vc_1 = ((org.apache.arrow.vector.Float8Vector) lineitem.getVector(5));
+            org.apache.arrow.vector.Float8Vector lineitem_vc_2 = ((org.apache.arrow.vector.Float8Vector) lineitem.getVector(6));
+            org.apache.arrow.vector.Float8Vector lineitem_vc_3 = ((org.apache.arrow.vector.Float8Vector) lineitem.getVector(7));
+            org.apache.arrow.vector.FixedSizeBinaryVector lineitem_vc_4 = ((org.apache.arrow.vector.FixedSizeBinaryVector) lineitem.getVector(8));
+            org.apache.arrow.vector.FixedSizeBinaryVector lineitem_vc_5 = ((org.apache.arrow.vector.FixedSizeBinaryVector) lineitem.getVector(9));
+            org.apache.arrow.vector.DateDayVector lineitem_vc_6 = ((org.apache.arrow.vector.DateDayVector) lineitem.getVector(10));
             int ordinal_6_sel_vec_length = VectorisedFilterOperators.le(lineitem_vc_6, 10471, ordinal_6_sel_vec);
             int projection_literal = 1;
             int projection_computation_result_length;
@@ -242,7 +241,6 @@ public class VectorisedNonSimd {
             }
         }
         int aggregationResultVectorLength;
-        // DIFF: hard-coded allocation manager
         byte[][] groupKeyVector_0 = this.allocationManager.getNestedByteVector();
         byte[][] groupKeyVector_1 = this.allocationManager.getNestedByteVector();
         double[] agg_G_SUM_0_vector = this.allocationManager.getDoubleVector();
@@ -253,7 +251,7 @@ public class VectorisedNonSimd {
         double[] agg_G_SUM_5_vector = this.allocationManager.getDoubleVector();
         int current_key_offset = 0;
         int number_of_records = aggregation_state_map.numberOfRecords;
-        while (current_key_offset < number_of_records) {
+        while ((current_key_offset < number_of_records)) {
             aggregationResultVectorLength = VectorisedAggregationOperators.constructVector(groupKeyVector_0, aggregation_state_map.keys_ord_0, number_of_records, current_key_offset);
             VectorisedAggregationOperators.constructVector(groupKeyVector_1, aggregation_state_map.keys_ord_1, number_of_records, current_key_offset);
             VectorisedAggregationOperators.constructVector(agg_G_SUM_0_vector, aggregation_state_map.values_ord_0, number_of_records, current_key_offset);
@@ -268,7 +266,7 @@ public class VectorisedNonSimd {
             projection_computation_result_6_length = VectorisedArithmeticOperators.divide(agg_G_SUM_1_vector, aggregationResultVectorLength, agg_G_COUNT_4_vector, aggregationResultVectorLength, projection_computation_result_6);
             int projection_computation_result_7_length;
             projection_computation_result_7_length = VectorisedArithmeticOperators.divide(agg_G_SUM_5_vector, aggregationResultVectorLength, agg_G_COUNT_4_vector, aggregationResultVectorLength, projection_computation_result_7);
-            // DIFF: changed for result verification
+            // DIFF: replaced by result verification
             // VectorisedPrintOperators.print(groupKeyVector_0, aggregationResultVectorLength);
             // VectorisedPrintOperators.print(groupKeyVector_1, aggregationResultVectorLength);
             // VectorisedPrintOperators.print(agg_G_SUM_0_vector, aggregationResultVectorLength);
@@ -293,7 +291,6 @@ public class VectorisedNonSimd {
             // DIFF: moved around
             current_key_offset += aggregationResultVectorLength;
         }
-        // DIFF: hard-coded allocation manager
         this.allocationManager.release(groupKeyVector_0);
         this.allocationManager.release(groupKeyVector_1);
         this.allocationManager.release(agg_G_SUM_0_vector);

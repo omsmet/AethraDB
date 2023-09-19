@@ -55,7 +55,7 @@ public class VectorisedNonSimd {
     /**
      * State: the {@link ArrowTableReader} used for reading the lineitem table.
      */
-    private ArrowTableReader lineitem_table;
+    private ArrowTableReader lineitem;
 
     /**
      * State: the result of the query.
@@ -74,7 +74,7 @@ public class VectorisedNonSimd {
     public void trialSetup() throws Exception {
         // Setup the database
         this.rootAllocator = new RootAllocator();
-        this.lineitem_table = new ABQArrowTableReader(
+        this.lineitem = new ABQArrowTableReader(
                 new File(this.tpchInstance + "/lineitem.arrow"), this.rootAllocator, ImmutableIntList.of(4, 5, 6, 10));
 
         // Setup the allocation manager
@@ -100,7 +100,7 @@ public class VectorisedNonSimd {
     @Setup(Level.Invocation)
     public void invocationStetup() throws Exception {
         // Reset the table
-        this.lineitem_table.reset();
+        this.lineitem.reset();
 
         // Perform allocation manager maintenance
         this.allocationManager.performMaintenance();
@@ -147,11 +147,11 @@ public class VectorisedNonSimd {
         long count = 0;
         // DIFF: hard-coded
         // ArrowTableReader lineitem = cCtx.getArrowReader(0);
-        while (this.lineitem_table.loadNextBatch()) {
-            org.apache.arrow.vector.Float8Vector lineitem_vc_0 = ((org.apache.arrow.vector.Float8Vector) this.lineitem_table.getVector(4));
-            org.apache.arrow.vector.Float8Vector lineitem_vc_1 = ((org.apache.arrow.vector.Float8Vector) this.lineitem_table.getVector(5));
-            org.apache.arrow.vector.Float8Vector lineitem_vc_2 = ((org.apache.arrow.vector.Float8Vector) this.lineitem_table.getVector(6));
-            org.apache.arrow.vector.DateDayVector lineitem_vc_3 = ((org.apache.arrow.vector.DateDayVector) this.lineitem_table.getVector(10));
+        while (lineitem.loadNextBatch()) {
+            org.apache.arrow.vector.Float8Vector lineitem_vc_0 = ((org.apache.arrow.vector.Float8Vector) lineitem.getVector(4));
+            org.apache.arrow.vector.Float8Vector lineitem_vc_1 = ((org.apache.arrow.vector.Float8Vector) lineitem.getVector(5));
+            org.apache.arrow.vector.Float8Vector lineitem_vc_2 = ((org.apache.arrow.vector.Float8Vector) lineitem.getVector(6));
+            org.apache.arrow.vector.DateDayVector lineitem_vc_3 = ((org.apache.arrow.vector.DateDayVector) lineitem.getVector(10));
             int ordinal_3_sel_vec_length = VectorisedFilterOperators.ge(lineitem_vc_3, 8766, ordinal_3_sel_vec);
             int ordinal_3_sel_vec_0_length = VectorisedFilterOperators.lt(lineitem_vc_3, 9131, ordinal_3_sel_vec_0, ordinal_3_sel_vec, ordinal_3_sel_vec_length);
             int ordinal_2_sel_vec_length = VectorisedFilterOperators.ge(lineitem_vc_2, 0.05, ordinal_2_sel_vec, ordinal_3_sel_vec_0, ordinal_3_sel_vec_0_length);
@@ -165,17 +165,17 @@ public class VectorisedNonSimd {
         double projection_literal = Double.NaN;
         int projection_literal_0 = 0;
         double projection_computation_result_0 = (count == projection_literal_0) ? projection_literal : sum;
+
         // DIFF: replaced by result verification
-        // System.out.println(projection_computation_result_0);
+        // System.out.println(String.format("%.2f", projection_computation_result_0));
         this.sumResult = projection_computation_result_0;
-        // DIFF: hard-coded allocation manager
+
         this.allocationManager.release(ordinal_3_sel_vec);
         this.allocationManager.release(ordinal_3_sel_vec_0);
         this.allocationManager.release(ordinal_2_sel_vec);
         this.allocationManager.release(ordinal_2_sel_vec_0);
         this.allocationManager.release(ordinal_0_sel_vec);
         this.allocationManager.release(projection_computation_result);
-
         // DIFF: prevent optimising the result away
         bh.consume(this.sumResult);
     }

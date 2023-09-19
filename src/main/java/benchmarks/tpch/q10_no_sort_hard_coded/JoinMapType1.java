@@ -8,8 +8,7 @@ public final class JoinMapType1 {
     private int numberOfRecords;
     private int[] keys;
     public int[] keysRecordCount;
-    public int[][] values_record_ord_0;
-    public byte[][][] values_record_ord_1;
+    public byte[][][] values_record_ord_0;
     private int[] hashTable;
     private int[] next;
 
@@ -24,15 +23,14 @@ public final class JoinMapType1 {
         this.keys = new int[capacity];
         Arrays.fill(this.keys, -1);
         this.keysRecordCount = new int[capacity];
-        this.values_record_ord_0 = new int[capacity][8];
-        this.values_record_ord_1 = new byte[capacity][8][];
+        this.values_record_ord_0 = new byte[capacity][8][];
         this.hashTable = new int[capacity];
         Arrays.fill(this.hashTable, -1);
         this.next = new int[capacity];
         Arrays.fill(this.next, -1);
     }
 
-    public void associate(int key, long preHash, int record_ord_0, byte[] record_ord_1) {
+    public void associate(int key, long preHash, byte[] record_ord_0) {
         if ((key < 0)) {
             throw new java.lang.IllegalArgumentException("The map expects non-negative keys");
         }
@@ -50,15 +48,14 @@ public final class JoinMapType1 {
         if (!((insertionIndex < this.values_record_ord_0[index].length))) {
             int currentValueArraysSize = this.values_record_ord_0[index].length;
             int newValueArraysSize = (2 * currentValueArraysSize);
-            int[] temp_values_record_ord_0 = new int[newValueArraysSize];
+            byte[][] temp_values_record_ord_0 = new byte[newValueArraysSize][];
             System.arraycopy(this.values_record_ord_0[index], 0, temp_values_record_ord_0, 0, currentValueArraysSize);
             this.values_record_ord_0[index] = temp_values_record_ord_0;
-            byte[][] temp_values_record_ord_1 = new byte[newValueArraysSize][];
-            System.arraycopy(this.values_record_ord_1[index], 0, temp_values_record_ord_1, 0, currentValueArraysSize);
-            this.values_record_ord_1[index] = temp_values_record_ord_1;
         }
-        this.values_record_ord_0[index][insertionIndex] = record_ord_0;
-        this.values_record_ord_1[index][insertionIndex] = record_ord_1;
+        int record_ord_0_length = record_ord_0.length;
+        byte[] record_ord_0_copy = new byte[record_ord_0_length];
+        System.arraycopy(record_ord_0, 0, record_ord_0_copy, 0, record_ord_0_length);
+        this.values_record_ord_0[index][insertionIndex] = record_ord_0_copy;
         this.keysRecordCount[index]++;
         if (newEntry) {
             boolean rehashOnCollision = (this.numberOfRecords > ((3 * this.hashTable.length) / 4));
@@ -99,12 +96,9 @@ public final class JoinMapType1 {
         System.arraycopy(this.next, 0, newNext, 0, currentSize);
         Arrays.fill(newNext, currentSize, newSize, -1);
         this.next = newNext;
-        int[][] new_values_record_ord_0 = new int[newSize][8];
+        byte[][][] new_values_record_ord_0 = new byte[newSize][8][];
         System.arraycopy(this.values_record_ord_0, 0, new_values_record_ord_0, 0, currentSize);
         this.values_record_ord_0 = new_values_record_ord_0;
-        byte[][][] new_values_record_ord_1 = new byte[newSize][8][];
-        System.arraycopy(this.values_record_ord_1, 0, new_values_record_ord_1, 0, currentSize);
-        this.values_record_ord_1 = new_values_record_ord_1;
     }
     private void putHashEntry(int key, long preHash, int index, boolean rehashOnCollision) {
         int htIndex = ((int) (preHash & (this.hashTable.length - 1)));

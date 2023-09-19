@@ -2,6 +2,7 @@ package benchmarks.tpch.q3_no_sort_hard_coded;
 
 import evaluation.codegen.infrastructure.data.ABQArrowTableReader;
 import evaluation.codegen.infrastructure.data.ArrowTableReader;
+import evaluation.general_support.ArrowOptimisations;
 import evaluation.general_support.hashmaps.Int_Hash_Function;
 import org.apache.arrow.memory.RootAllocator;
 import org.apache.calcite.util.ImmutableIntList;
@@ -179,27 +180,29 @@ public class NonVectorisedNonSimd {
             "-Xms16g"
     })
     public void executeQuery(Blackhole bh) throws IOException {
+        byte[] byte_array_cache = null;
+
         // DIFF: not necessary
         // java.time.format.DateTimeFormatter dateTimeFormatter = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd");
         // java.time.LocalDate day_zero = java.time.LocalDate.parse("1970-01-01", dateTimeFormatter);
 
         // DIFF: hard-coded
-        // KeyValueMap_1897372527 aggregation_state_map = new KeyValueMap_1897372527();
-        // KeyMultiRecordMap_1597400455 join_map = new KeyMultiRecordMap_1597400455();
-        // KeyMultiRecordMap_1699637904 join_map_0 = new KeyMultiRecordMap_1699637904();
+        // KeyValueMap_1296833449 aggregation_state_map = new KeyValueMap_1296833449();
+        // KeyMultiRecordMap_17222024 join_map = new KeyMultiRecordMap_17222024();
+        // KeyMultiRecordMap_1162595263 join_map_0 = new KeyMultiRecordMap_1162595263();
         // ArrowTableReader customer = cCtx.getArrowReader(0);
         while (customer.loadNextBatch()) {
             org.apache.arrow.vector.IntVector customer_vc_0 = ((org.apache.arrow.vector.IntVector) customer.getVector(0));
             org.apache.arrow.vector.FixedSizeBinaryVector customer_vc_1 = ((org.apache.arrow.vector.FixedSizeBinaryVector) customer.getVector(6));
             int recordCount = customer_vc_0.getValueCount();
             for (int aviv = 0; aviv < recordCount; aviv++) {
-                byte[] ordinal_value = customer_vc_1.get(aviv);
-                if (!(Arrays.equals(ordinal_value, new byte[] { 66, 85, 73, 76, 68, 73, 78, 71, 32, 32 }))) {
+                byte_array_cache = ArrowOptimisations.getFixedSizeBinaryValue(customer_vc_1, aviv, byte_array_cache);
+                if (!(Arrays.equals(byte_array_cache, new byte[] { 66, 85, 73, 76, 68, 73, 78, 71, 32, 32 }))) {
                     continue;
                 }
-                int ordinal_value_0 = customer_vc_0.get(aviv);
-                long left_join_key_prehash = Int_Hash_Function.preHash(ordinal_value_0);
-                join_map_0.associate(ordinal_value_0, left_join_key_prehash, ordinal_value_0);
+                int ordinal_value = customer_vc_0.get(aviv);
+                long left_join_key_prehash = Int_Hash_Function.preHash(ordinal_value);
+                join_map_0.associate(ordinal_value, left_join_key_prehash);
             }
         }
         // DIFF: hard-coded
@@ -225,9 +228,8 @@ public class NonVectorisedNonSimd {
                 int ordinal_value_2 = orders_vc_3.get(aviv);
                 int left_join_record_count = join_map_0.keysRecordCount[records_to_join_index];
                 for (int i = 0; i < left_join_record_count; i++) {
-                    int left_join_ord_0 = join_map_0.values_record_ord_0[records_to_join_index][i];
                     long left_join_key_prehash = Int_Hash_Function.preHash(ordinal_value_1);
-                    join_map.associate(ordinal_value_1, left_join_key_prehash, ordinal_value_1, ordinal_value, ordinal_value_2);
+                    join_map.associate(ordinal_value_1, left_join_key_prehash, ordinal_value, ordinal_value_2);
                 }
             }
         }
@@ -245,11 +247,13 @@ public class NonVectorisedNonSimd {
                     continue;
                 }
                 int projection_literal = 1;
-                double projection_computation_result = (projection_literal - lineitem_vc_2.get(aviv));
-                double projection_computation_result_0 = (lineitem_vc_1.get(aviv) * projection_computation_result);
-                int ordinal_value_0 = lineitem_vc_0.get(aviv);
-                long right_join_key_prehash = Int_Hash_Function.preHash(ordinal_value_0);
-                int records_to_join_index = join_map.getIndex(ordinal_value_0, right_join_key_prehash);
+                double ordinal_value_0 = lineitem_vc_2.get(aviv);
+                double projection_computation_result = (projection_literal - ordinal_value_0);
+                double ordinal_value_1 = lineitem_vc_1.get(aviv);
+                double projection_computation_result_0 = (ordinal_value_1 * projection_computation_result);
+                int ordinal_value_2 = lineitem_vc_0.get(aviv);
+                long right_join_key_prehash = Int_Hash_Function.preHash(ordinal_value_2);
+                int records_to_join_index = join_map.getIndex(ordinal_value_2, right_join_key_prehash);
                 if ((records_to_join_index == -1)) {
                     continue;
                 }
@@ -257,11 +261,10 @@ public class NonVectorisedNonSimd {
                 for (int i = 0; i < left_join_record_count; i++) {
                     int left_join_ord_0 = join_map.values_record_ord_0[records_to_join_index][i];
                     int left_join_ord_1 = join_map.values_record_ord_1[records_to_join_index][i];
-                    int left_join_ord_2 = join_map.values_record_ord_2[records_to_join_index][i];
-                    long group_key_pre_hash = Int_Hash_Function.preHash(ordinal_value_0);
+                    long group_key_pre_hash = Int_Hash_Function.preHash(ordinal_value_2);
+                    group_key_pre_hash ^= Int_Hash_Function.preHash(left_join_ord_0);
                     group_key_pre_hash ^= Int_Hash_Function.preHash(left_join_ord_1);
-                    group_key_pre_hash ^= Int_Hash_Function.preHash(left_join_ord_2);
-                    aggregation_state_map.incrementForKey(ordinal_value_0, left_join_ord_1, left_join_ord_2, group_key_pre_hash, projection_computation_result_0);
+                    aggregation_state_map.incrementForKey(ordinal_value_2, left_join_ord_0, left_join_ord_1, group_key_pre_hash, projection_computation_result_0);
                 }
             }
         }

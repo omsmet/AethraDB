@@ -1,10 +1,10 @@
-package benchmarks.join_query_hard_coded.OptimisedSupport;
+package benchmarks.join_query_hard_coded.UnoptimisedSupport;
 
 import evaluation.general_support.hashmaps.Int_Hash_Function;
 
 import java.util.Arrays;
 
-public final class InnerJoinMap {
+public final class JoinMapType {
     private int numberOfRecords;
     private int[] keys;
     public int[] keysRecordCount;
@@ -13,10 +13,10 @@ public final class InnerJoinMap {
     private int[] hashTable;
     private int[] next;
 
-    public InnerJoinMap() {
+    public JoinMapType() {
         this(4);
     }
-    public InnerJoinMap(int capacity) {
+    public JoinMapType(int capacity) {
         if (!(((capacity > 1) && ((capacity & (capacity - 1)) == 0)))) {
             throw new java.lang.IllegalArgumentException("The map capacity is required to be a power of two");
         }

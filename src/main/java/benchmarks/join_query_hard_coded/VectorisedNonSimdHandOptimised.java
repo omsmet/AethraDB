@@ -1,7 +1,7 @@
 package benchmarks.join_query_hard_coded;
 
-import benchmarks.join_query_hard_coded.OptimisedSupport.InnerJoinMap;
-import benchmarks.join_query_hard_coded.OptimisedSupport.OuterJoinMap;
+import benchmarks.join_query_hard_coded.OptimisedSupport.JoinMap0Type;
+import benchmarks.join_query_hard_coded.OptimisedSupport.JoinMapType;
 import evaluation.codegen.infrastructure.data.ABQArrowTableReader;
 import evaluation.codegen.infrastructure.data.AllocationManager;
 import evaluation.codegen.infrastructure.data.ArrowTableReader;
@@ -105,13 +105,13 @@ public class VectorisedNonSimdHandOptimised {
      * State: the table_C join map.
      * DIFF: usually part of the query execution itself.
      */
-    private OuterJoinMap join_map;
+    private JoinMapType join_map;
 
     /**
      * State: the table_A join map.
      * DIFF: usually part of the query execution itself.
      */
-    private InnerJoinMap join_map_0;
+    private JoinMap0Type join_map_0;
 
     /**
      * This method sets up the state at the start of each benchmark fork.
@@ -134,8 +134,8 @@ public class VectorisedNonSimdHandOptimised {
         hashTableSize = Integer.highestOneBit(hashTableSize) << 2;
 
         // Allocate the hash-tables
-        this.join_map = new OuterJoinMap(hashTableSize);
-        this.join_map_0 = new InnerJoinMap(hashTableSize);
+        this.join_map = new JoinMapType(hashTableSize);
+        this.join_map_0 = new JoinMap0Type(hashTableSize);
 
         // Setup the allocation manager
         this.allocationManager = new BufferPoolAllocationManager(16);
@@ -169,7 +169,7 @@ public class VectorisedNonSimdHandOptimised {
     @TearDown(Level.Invocation)
     public void teardown() {
         if (result != expectedResult)
-            throw new RuntimeException("The computed result is incorrect");
+            throw new RuntimeException("The computed result is incorrect " + result + " vs " + expectedResult);
         result = -1; // reset the result after verifying it
 
         // let the allocation manager perform maintenance
@@ -192,14 +192,16 @@ public class VectorisedNonSimdHandOptimised {
             "-Xms16g"
     })
     public void executeQuery() throws IOException {
-        // DIFF: hard-coded allocation manager in whole query
+        // DIFF: hand-optimised to count
         long count = 0;
+
+        // DIFF: hard-coded allocation manager in whole query
         long[] pre_hash_vector = this.allocationManager.getLongVector();
         long[] pre_hash_vector_0 = this.allocationManager.getLongVector();
 
         // DIFF: hard-coded
-        // KeyMultiRecordMap_2107105388 join_map = new KeyMultiRecordMap_2107105388();
-        // KeyMultiRecordMap_1290795133 join_map_0 = new KeyMultiRecordMap_1290795133();
+        // KeyMultiRecordMap_2127123542 join_map = new KeyMultiRecordMap_2127123542();
+        // KeyMultiRecordMap_2050715938 join_map_0 = new KeyMultiRecordMap_2050715938();
         // ArrowTableReader table_A = cCtx.getArrowReader(0);
         while (table_A.loadNextBatch()) {
             org.apache.arrow.vector.IntVector table_A_vc_0 = ((org.apache.arrow.vector.IntVector) table_A.getVector(0));
@@ -208,7 +210,7 @@ public class VectorisedNonSimdHandOptimised {
             int recordCount = table_A_vc_0.getValueCount();
             for (int i = 0; i < recordCount; i++) {
                 int left_join_record_key = table_A_vc_0.get(i);
-                join_map_0.associate(left_join_record_key, pre_hash_vector_0[i], left_join_record_key, table_A_vc_1.get(i));
+                join_map_0.associate(left_join_record_key, pre_hash_vector_0[i], table_A_vc_1.get(i));
             }
         }
         int[] join_result_vector_ord_0_0 = this.allocationManager.getIntVector();
@@ -236,8 +238,7 @@ public class VectorisedNonSimdHandOptimised {
                         break;
                     }
                     for (int i = 0; i < left_join_record_count; i++) {
-                        join_result_vector_ord_0_0[currentResultIndex] = join_map_0.values_record_ord_0[records_to_join_index][i];
-                        join_result_vector_ord_1_0[currentResultIndex] = join_map_0.values_record_ord_1[records_to_join_index][i];
+                        join_result_vector_ord_1_0[currentResultIndex] = join_map_0.values_record_ord_0[records_to_join_index][i];
                         join_result_vector_ord_2[currentResultIndex] = right_join_key;
                         currentResultIndex++;
                     }
@@ -246,7 +247,7 @@ public class VectorisedNonSimdHandOptimised {
                 VectorisedHashOperators.constructPreHashKeyVector(pre_hash_vector, join_result_vector_ord_1_0, currentResultIndex, false);
                 for (int i_0 = 0; i_0 < currentResultIndex; i_0++) {
                     int left_join_record_key = join_result_vector_ord_1_0[i_0];
-                    join_map.associate(left_join_record_key, pre_hash_vector[i_0], left_join_record_key);
+                    join_map.associate(left_join_record_key, pre_hash_vector[i_0]);
                 }
             }
         }
@@ -278,19 +279,20 @@ public class VectorisedNonSimdHandOptimised {
                         break;
                     }
                     for (int i = 0; i < left_join_record_count; i++) {
-                        join_result_vector_ord_0[currentResultIndex] = join_map.values_record_ord_0[records_to_join_index][i];
                         join_result_vector_ord_1[currentResultIndex] = right_join_key;
                         currentResultIndex++;
                     }
                     currentLoopIndex++;
                 }
+                // DIFF: replaced by count
+                // VectorisedPrintOperators.print(join_result_vector_ord_1, currentResultIndex);
+                // System.out.println();
                 count += currentResultIndex;
             }
         }
         this.allocationManager.release(pre_hash_vector);
         this.allocationManager.release(join_result_vector_ord_0);
         this.allocationManager.release(join_result_vector_ord_1);
-        // System.out.println(count);                                                               // DIFF: removed
         this.result = count;                                                                        // DIFF: added
     }
 

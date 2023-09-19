@@ -240,16 +240,15 @@ public class VectorisedNonSimdReducedSelVecUse {
         double[] projection_computation_result = this.allocationManager.getDoubleVector();
         double[] projection_computation_result_0 = this.allocationManager.getDoubleVector();
         long[] groupKeyPreHashVector = this.allocationManager.getLongVector();
-
         long[] pre_hash_vector = this.allocationManager.getLongVector();
         long[] pre_hash_vector_0 = this.allocationManager.getLongVector();
         long[] pre_hash_vector_1 = this.allocationManager.getLongVector();
 
         // DIFF: hard-coded
-        // KeyValueMap_1870812438 aggregation_state_map = new KeyValueMap_1870812438();
-        // KeyMultiRecordMap_529893402 join_map = new KeyMultiRecordMap_529893402();
-        // KeyMultiRecordMap_857245202 join_map_0 = new KeyMultiRecordMap_857245202();
-        // KeyMultiRecordMap_1599728268 join_map_1 = new KeyMultiRecordMap_1599728268();
+        // KeyValueMap_104912388 aggregation_state_map = new KeyValueMap_104912388();
+        // KeyMultiRecordMap_748935206 join_map = new KeyMultiRecordMap_748935206();
+        // KeyMultiRecordMap_1839548688 join_map_0 = new KeyMultiRecordMap_1839548688();
+        // KeyMultiRecordMap_1500020749 join_map_1 = new KeyMultiRecordMap_1500020749();
         // ArrowTableReader nation = cCtx.getArrowReader(0);
         while (nation.loadNextBatch()) {
             org.apache.arrow.vector.IntVector nation_vc_0 = ((org.apache.arrow.vector.IntVector) nation.getVector(0));
@@ -258,7 +257,7 @@ public class VectorisedNonSimdReducedSelVecUse {
             int recordCount = nation_vc_0.getValueCount();
             for (int i = 0; i < recordCount; i++) {
                 int left_join_record_key = nation_vc_0.get(i);
-                join_map_1.associate(left_join_record_key, pre_hash_vector_1[i], left_join_record_key, nation_vc_1.get(i));
+                join_map_1.associate(left_join_record_key, pre_hash_vector_1[i], nation_vc_1.get(i));
             }
         }
         int[] join_result_vector_ord_0_1 = this.allocationManager.getIntVector();
@@ -304,8 +303,7 @@ public class VectorisedNonSimdReducedSelVecUse {
                     double right_join_ord_5 = customer_vc_5.get(currentLoopIndex);
                     byte[] right_join_ord_6 = customer_vc_6.get(currentLoopIndex);
                     for (int i = 0; i < left_join_record_count; i++) {
-                        join_result_vector_ord_0_1[currentResultIndex] = join_map_1.values_record_ord_0[records_to_join_index][i];
-                        join_result_vector_ord_1_1[currentResultIndex] = join_map_1.values_record_ord_1[records_to_join_index][i];
+                        join_result_vector_ord_1_1[currentResultIndex] = join_map_1.values_record_ord_0[records_to_join_index][i];
                         join_result_vector_ord_2_1[currentResultIndex] = right_join_ord_0;
                         join_result_vector_ord_3_1[currentResultIndex] = right_join_ord_1;
                         join_result_vector_ord_4_1[currentResultIndex] = right_join_ord_2;
@@ -320,7 +318,7 @@ public class VectorisedNonSimdReducedSelVecUse {
                 VectorisedHashOperators.constructPreHashKeyVector(pre_hash_vector_0, join_result_vector_ord_2_1, currentResultIndex, false);
                 for (int i_0 = 0; i_0 < currentResultIndex; i_0++) {
                     int left_join_record_key = join_result_vector_ord_2_1[i_0];
-                    join_map_0.associate(left_join_record_key, pre_hash_vector_0[i_0], join_result_vector_ord_1_1[i_0], left_join_record_key, join_result_vector_ord_3_1[i_0], join_result_vector_ord_4_1[i_0], join_result_vector_ord_6_1[i_0], join_result_vector_ord_7_1[i_0], join_result_vector_ord_8_1[i_0]);
+                    join_map_0.associate(left_join_record_key, pre_hash_vector_0[i_0], join_result_vector_ord_1_1[i_0], join_result_vector_ord_3_1[i_0], join_result_vector_ord_4_1[i_0], join_result_vector_ord_6_1[i_0], join_result_vector_ord_7_1[i_0], join_result_vector_ord_8_1[i_0]);
                 }
             }
         }
@@ -373,12 +371,11 @@ public class VectorisedNonSimdReducedSelVecUse {
                     int right_join_ord_0 = orders_vc_0.get(selected_record_index);
                     for (int i = 0; i < left_join_record_count; i++) {
                         join_result_vector_ord_0_0[currentResultIndex] = join_map_0.values_record_ord_0[records_to_join_index][i];
-                        join_result_vector_ord_1_0[currentResultIndex] = join_map_0.values_record_ord_1[records_to_join_index][i];
-                        join_result_vector_ord_2_0[currentResultIndex] = join_map_0.values_record_ord_2[records_to_join_index][i];
-                        join_result_vector_ord_3_0[currentResultIndex] = join_map_0.values_record_ord_3[records_to_join_index][i];
-                        join_result_vector_ord_4_0[currentResultIndex] = join_map_0.values_record_ord_4[records_to_join_index][i];
-                        join_result_vector_ord_5_0[currentResultIndex] = join_map_0.values_record_ord_5[records_to_join_index][i];
-                        join_result_vector_ord_6_0[currentResultIndex] = join_map_0.values_record_ord_6[records_to_join_index][i];
+                        join_result_vector_ord_2_0[currentResultIndex] = join_map_0.values_record_ord_1[records_to_join_index][i];
+                        join_result_vector_ord_3_0[currentResultIndex] = join_map_0.values_record_ord_2[records_to_join_index][i];
+                        join_result_vector_ord_4_0[currentResultIndex] = join_map_0.values_record_ord_3[records_to_join_index][i];
+                        join_result_vector_ord_5_0[currentResultIndex] = join_map_0.values_record_ord_4[records_to_join_index][i];
+                        join_result_vector_ord_6_0[currentResultIndex] = join_map_0.values_record_ord_5[records_to_join_index][i];
                         join_result_vector_ord_7_0[currentResultIndex] = right_join_ord_0;
                         join_result_vector_ord_8_0[currentResultIndex] = right_join_key;
                         currentResultIndex++;
@@ -388,7 +385,7 @@ public class VectorisedNonSimdReducedSelVecUse {
                 VectorisedHashOperators.constructPreHashKeyVector(pre_hash_vector, join_result_vector_ord_7_0, currentResultIndex, false);
                 for (int i_0 = 0; i_0 < currentResultIndex; i_0++) {
                     int left_join_record_key = join_result_vector_ord_7_0[i_0];
-                    join_map.associate(left_join_record_key, pre_hash_vector[i_0], join_result_vector_ord_0_0[i_0], join_result_vector_ord_1_0[i_0], join_result_vector_ord_2_0[i_0], join_result_vector_ord_3_0[i_0], join_result_vector_ord_4_0[i_0], join_result_vector_ord_5_0[i_0], join_result_vector_ord_6_0[i_0], left_join_record_key);
+                    join_map.associate(left_join_record_key, pre_hash_vector[i_0], join_result_vector_ord_0_0[i_0], join_result_vector_ord_8_0[i_0], join_result_vector_ord_2_0[i_0], join_result_vector_ord_3_0[i_0], join_result_vector_ord_4_0[i_0], join_result_vector_ord_5_0[i_0], join_result_vector_ord_6_0[i_0]);
                 }
             }
         }
@@ -455,7 +452,6 @@ public class VectorisedNonSimdReducedSelVecUse {
                         join_result_vector_ord_4[currentResultIndex] = join_map.values_record_ord_4[records_to_join_index][i];
                         join_result_vector_ord_5[currentResultIndex] = join_map.values_record_ord_5[records_to_join_index][i];
                         join_result_vector_ord_6[currentResultIndex] = join_map.values_record_ord_6[records_to_join_index][i];
-                        join_result_vector_ord_7[currentResultIndex] = join_map.values_record_ord_7[records_to_join_index][i];
                         join_result_vector_ord_8[currentResultIndex] = right_join_key;
                         join_result_vector_ord_9[currentResultIndex] = right_join_ord_1;
                         currentResultIndex++;

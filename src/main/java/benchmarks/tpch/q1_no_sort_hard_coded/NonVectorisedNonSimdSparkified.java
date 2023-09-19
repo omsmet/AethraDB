@@ -2,6 +2,7 @@ package benchmarks.tpch.q1_no_sort_hard_coded;
 
 import evaluation.codegen.infrastructure.data.ABQArrowTableReader;
 import evaluation.codegen.infrastructure.data.ArrowTableReader;
+import evaluation.general_support.ArrowOptimisations;
 import org.apache.arrow.memory.RootAllocator;
 import org.apache.calcite.util.ImmutableIntList;
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
@@ -187,6 +188,8 @@ public class NonVectorisedNonSimdSparkified {
             "--add-exports=java.base/sun.nio.ch=ALL-UNNAMED"
     })
     public void executeQuery(Blackhole bh) throws IOException {
+        byte[] byte_array_cache = null;
+        byte[] byte_array_cache_0 = null;
         while (lineitem_table.loadNextBatch()) {
             org.apache.arrow.vector.Float8Vector lineitem_vc_0 = ((org.apache.arrow.vector.Float8Vector) lineitem_table.getVector(4));
             org.apache.arrow.vector.Float8Vector lineitem_vc_1 = ((org.apache.arrow.vector.Float8Vector) lineitem_table.getVector(5));
@@ -201,14 +204,13 @@ public class NonVectorisedNonSimdSparkified {
                 if (!((ordinal_value <= 10471))) {
                     continue;
                 }
-                byte[] ordinal_value_0 = lineitem_vc_4.get(aviv);
-                byte[] ordinal_value_1 = lineitem_vc_5.get(aviv);
-                double ordinal_value_2 = lineitem_vc_0.get(aviv);
-                double ordinal_value_3 = lineitem_vc_1.get(aviv);
-                double ordinal_value_4 = lineitem_vc_2.get(aviv);
-                double ordinal_value_5 = lineitem_vc_3.get(aviv);
-
-                this.aggregation_state_map.hashAgg_doConsume_0(ordinal_value_2, ordinal_value_3, ordinal_value_4, ordinal_value_5, ordinal_value_0[0], ordinal_value_1[0]);
+                byte_array_cache = ArrowOptimisations.getFixedSizeBinaryValue(lineitem_vc_4, aviv, byte_array_cache);
+                byte_array_cache_0 = ArrowOptimisations.getFixedSizeBinaryValue(lineitem_vc_5, aviv, byte_array_cache_0);
+                double ordinal_value_5 = lineitem_vc_0.get(aviv);
+                double ordinal_value_6 = lineitem_vc_1.get(aviv);
+                double ordinal_value_7 = lineitem_vc_2.get(aviv);
+                double ordinal_value_8 = lineitem_vc_3.get(aviv);
+                this.aggregation_state_map.hashAgg_doConsume_0(ordinal_value_5, ordinal_value_6, ordinal_value_7, ordinal_value_8, byte_array_cache[0], byte_array_cache_0[0]);
             }
         }
 

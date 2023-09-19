@@ -710,161 +710,164 @@ public class KeyMultiRecordMapGenerator {
                 )
         );
 
-        // Check if there is enough room left in this key's value arrays to store the new record
-        // int insertionIndex = this.keysRecordCount[index];
-        // if (!(insertionIndex < this.values_record_ord_0[index].length)) [recordStoreExtendArrays]
-        ScalarVariableAccessPath insertionIndexAP =
-                new ScalarVariableAccessPath("insertionIndex", P_INT);
-        associateMethodBody.add(
-                createLocalVariable(
-                        getLocation(),
-                        toJavaType(getLocation(), insertionIndexAP.getType()),
-                        insertionIndexAP.getVariableName(),
-                        createArrayElementAccessExpr(
-                                getLocation(),
-                                createThisFieldAccess(getLocation(), keysRecordCountAP.getVariableName()),
-                                indexAP.read()
-                        )
-                )
-        );
+        // Register additional values if necessary
+        if (valueVariableNames.length > 0) {
+            // Check if there is enough room left in this key's value arrays to store the new record
+            // int insertionIndex = this.keysRecordCount[index];
+            // if (!(insertionIndex < this.values_record_ord_0[index].length)) [recordStoreExtendArrays]
+            ScalarVariableAccessPath insertionIndexAP =
+                    new ScalarVariableAccessPath("insertionIndex", P_INT);
+            associateMethodBody.add(
+                    createLocalVariable(
+                            getLocation(),
+                            toJavaType(getLocation(), insertionIndexAP.getType()),
+                            insertionIndexAP.getVariableName(),
+                            createArrayElementAccessExpr(
+                                    getLocation(),
+                                    createThisFieldAccess(getLocation(), keysRecordCountAP.getVariableName()),
+                                    indexAP.read()
+                            )
+                    )
+            );
 
-        Java.Block recordStoreExtendArrays = new Java.Block(getLocation());
-        associateMethodBody.add(
-                createIf(
-                        getLocation(),
-                        not(
-                                getLocation(),
-                                lt(
-                                        getLocation(),
-                                        insertionIndexAP.read(),
-                                        new Java.FieldAccessExpression(
-                                                getLocation(),
-                                                createArrayElementAccessExpr(
-                                                        getLocation(),
-                                                        createThisFieldAccess(getLocation(), valueVariableNames[0]),
-                                                        indexAP.read()
-                                                ),
-                                                "length"
-                                        )
-                                )
-                        ),
-                        recordStoreExtendArrays
-                )
-        );
+            Java.Block recordStoreExtendArrays = new Java.Block(getLocation());
+            associateMethodBody.add(
+                    createIf(
+                            getLocation(),
+                            not(
+                                    getLocation(),
+                                    lt(
+                                            getLocation(),
+                                            insertionIndexAP.read(),
+                                            new Java.FieldAccessExpression(
+                                                    getLocation(),
+                                                    createArrayElementAccessExpr(
+                                                            getLocation(),
+                                                            createThisFieldAccess(getLocation(), valueVariableNames[0]),
+                                                            indexAP.read()
+                                                    ),
+                                                    "length"
+                                            )
+                                    )
+                            ),
+                            recordStoreExtendArrays
+                    )
+            );
 
-        // Extend the value arrays for the current index by doubling their size
-        // int currentValueArraysSize = this.values_record_ord_0[index].length;
-        ScalarVariableAccessPath currentValueArraysSize =
-                new ScalarVariableAccessPath("currentValueArraysSize", P_INT);
-        recordStoreExtendArrays.addStatement(
-                createLocalVariable(
-                        getLocation(),
-                        toJavaType(getLocation(), currentValueArraysSize.getType()),
-                        currentValueArraysSize.getVariableName(),
-                        new Java.FieldAccessExpression(
-                                getLocation(),
-                                createArrayElementAccessExpr(
-                                        getLocation(),
-                                        createThisFieldAccess(getLocation(), this.valueVariableNames[0]),
-                                        indexAP.read()
-                                ),
-                                "length"
-                        )
-                )
-        );
-
-        // int newValueArraysSize = 2 * currentValueArraysSize;
-        ScalarVariableAccessPath newValueArraysSize =
-                new ScalarVariableAccessPath("newValueArraysSize", P_INT);
-        recordStoreExtendArrays.addStatement(
-                createLocalVariable(
-                        getLocation(),
-                        toJavaType(getLocation(), newValueArraysSize.getType()),
-                        newValueArraysSize.getVariableName(),
-                        mul(
-                                getLocation(),
-                                createIntegerLiteral(getLocation(), 2),
-                                currentValueArraysSize.read()
-                        )
-                )
-        );
-
-        for (int i = 0; i < this.valueVariableNames.length; i++) {
-            QueryVariableType valueVariableType = this.valueTypes[i];
-            String valueVariableName = this.valueVariableNames[i];
-            String tempVarName = "temp_" + valueVariableName;
-
-            Java.Type arrayType;
-            Java.NewArray theArray;
-            if (valueVariableType == S_FL_BIN || valueVariableType == S_VARCHAR) {
-                arrayType = createNestedPrimitiveArrayType(getLocation(), Java.Primitive.BYTE);
-                theArray = createNew2DPrimitiveArray(getLocation(), Java.Primitive.BYTE, newValueArraysSize.read());
-
-            } else {
-                arrayType = toJavaType(getLocation(), primitiveArrayTypeForPrimitive(valueVariableType));
-                theArray = createNewPrimitiveArray(getLocation(), toJavaPrimitive(valueVariableType), newValueArraysSize.read());
-
-            }
-
+            // Extend the value arrays for the current index by doubling their size
+            // int currentValueArraysSize = this.values_record_ord_0[index].length;
+            ScalarVariableAccessPath currentValueArraysSize =
+                    new ScalarVariableAccessPath("currentValueArraysSize", P_INT);
             recordStoreExtendArrays.addStatement(
                     createLocalVariable(
                             getLocation(),
-                            arrayType,
-                            tempVarName,
-                            theArray
+                            toJavaType(getLocation(), currentValueArraysSize.getType()),
+                            currentValueArraysSize.getVariableName(),
+                            new Java.FieldAccessExpression(
+                                    getLocation(),
+                                    createArrayElementAccessExpr(
+                                            getLocation(),
+                                            createThisFieldAccess(getLocation(), this.valueVariableNames[0]),
+                                            indexAP.read()
+                                    ),
+                                    "length"
+                            )
                     )
             );
 
+            // int newValueArraysSize = 2 * currentValueArraysSize;
+            ScalarVariableAccessPath newValueArraysSize =
+                    new ScalarVariableAccessPath("newValueArraysSize", P_INT);
             recordStoreExtendArrays.addStatement(
-                    createMethodInvocationStm(
+                    createLocalVariable(
                             getLocation(),
-                            createAmbiguousNameRef(getLocation(), "System"),
-                            "arraycopy",
-                            new Java.Rvalue[] {
-                                    createArrayElementAccessExpr(
-                                            getLocation(),
-                                            createThisFieldAccess(getLocation(), valueVariableName),
-                                            indexAP.read()
-                                    ),
-                                    createIntegerLiteral(getLocation(), 0),
-                                    createAmbiguousNameRef(getLocation(), tempVarName),
-                                    createIntegerLiteral(getLocation(), 0),
+                            toJavaType(getLocation(), newValueArraysSize.getType()),
+                            newValueArraysSize.getVariableName(),
+                            mul(
+                                    getLocation(),
+                                    createIntegerLiteral(getLocation(), 2),
                                     currentValueArraysSize.read()
-                            }
+                            )
                     )
             );
 
-            recordStoreExtendArrays.addStatement(
-                    createVariableAssignmentStm(
-                            getLocation(),
-                            createArrayElementAccessExpr(
-                                    getLocation(),
-                                    createThisFieldAccess(getLocation(), valueVariableName),
-                                    indexAP.read()
-                            ),
-                            createAmbiguousNameRef(getLocation(), tempVarName)
-                    )
-            );
-        }
+            for (int i = 0; i < this.valueVariableNames.length; i++) {
+                QueryVariableType valueVariableType = this.valueTypes[i];
+                String valueVariableName = this.valueVariableNames[i];
+                String tempVarName = "temp_" + valueVariableName;
 
-        // Insert the record values and increment the correct record count
-        // this.values_record_ord_i[index][insertion_index] = record_ord_i; <-- Need to take care with byte arrays
-        for (int i = 0; i < valueVariableNames.length; i++) {
-            associateMethodBody.add(
-                    createVariableAssignmentStm(
-                            getLocation(),
-                            createArrayElementAccessExpr(
-                                    getLocation(),
-                                    createArrayElementAccessExpr(
-                                            getLocation(),
-                                            createThisFieldAccess(getLocation(), valueVariableNames[i]),
-                                            indexAP.read()
-                                    ),
-                                    insertionIndexAP.read()
-                            ),
-                            createMapAssignmentRValue(this.valueTypes[i], formalParameters[i + 2].name, associateMethodBody)
-                    )
-            );
+                Java.Type arrayType;
+                Java.NewArray theArray;
+                if (valueVariableType == S_FL_BIN || valueVariableType == S_VARCHAR) {
+                    arrayType = createNestedPrimitiveArrayType(getLocation(), Java.Primitive.BYTE);
+                    theArray = createNew2DPrimitiveArray(getLocation(), Java.Primitive.BYTE, newValueArraysSize.read());
+
+                } else {
+                    arrayType = toJavaType(getLocation(), primitiveArrayTypeForPrimitive(valueVariableType));
+                    theArray = createNewPrimitiveArray(getLocation(), toJavaPrimitive(valueVariableType), newValueArraysSize.read());
+
+                }
+
+                recordStoreExtendArrays.addStatement(
+                        createLocalVariable(
+                                getLocation(),
+                                arrayType,
+                                tempVarName,
+                                theArray
+                        )
+                );
+
+                recordStoreExtendArrays.addStatement(
+                        createMethodInvocationStm(
+                                getLocation(),
+                                createAmbiguousNameRef(getLocation(), "System"),
+                                "arraycopy",
+                                new Java.Rvalue[]{
+                                        createArrayElementAccessExpr(
+                                                getLocation(),
+                                                createThisFieldAccess(getLocation(), valueVariableName),
+                                                indexAP.read()
+                                        ),
+                                        createIntegerLiteral(getLocation(), 0),
+                                        createAmbiguousNameRef(getLocation(), tempVarName),
+                                        createIntegerLiteral(getLocation(), 0),
+                                        currentValueArraysSize.read()
+                                }
+                        )
+                );
+
+                recordStoreExtendArrays.addStatement(
+                        createVariableAssignmentStm(
+                                getLocation(),
+                                createArrayElementAccessExpr(
+                                        getLocation(),
+                                        createThisFieldAccess(getLocation(), valueVariableName),
+                                        indexAP.read()
+                                ),
+                                createAmbiguousNameRef(getLocation(), tempVarName)
+                        )
+                );
+            }
+
+            // Insert the record values and increment the correct record count
+            // this.values_record_ord_i[index][insertion_index] = record_ord_i; <-- Need to take care with byte arrays
+            for (int i = 0; i < valueVariableNames.length; i++) {
+                associateMethodBody.add(
+                        createVariableAssignmentStm(
+                                getLocation(),
+                                createArrayElementAccessExpr(
+                                        getLocation(),
+                                        createArrayElementAccessExpr(
+                                                getLocation(),
+                                                createThisFieldAccess(getLocation(), valueVariableNames[i]),
+                                                indexAP.read()
+                                        ),
+                                        insertionIndexAP.read()
+                                ),
+                                createMapAssignmentRValue(this.valueTypes[i], formalParameters[i + 2].name, associateMethodBody)
+                        )
+                );
+            }
         }
 
         // this.keysRecordCount[index]++;

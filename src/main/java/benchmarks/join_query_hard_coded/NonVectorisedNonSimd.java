@@ -1,7 +1,7 @@
 package benchmarks.join_query_hard_coded;
 
-import benchmarks.join_query_hard_coded.NonVectorisedNonSimdGenSupport.KeyMultiRecordMap_1469235340;
-import benchmarks.join_query_hard_coded.NonVectorisedNonSimdGenSupport.KeyMultiRecordMap_600554759;
+import benchmarks.join_query_hard_coded.UnoptimisedSupport.JoinMap0Type;
+import benchmarks.join_query_hard_coded.UnoptimisedSupport.JoinMapType;
 import evaluation.codegen.infrastructure.data.ABQArrowTableReader;
 import evaluation.codegen.infrastructure.data.ArrowTableReader;
 import evaluation.general_support.hashmaps.Int_Hash_Function;
@@ -97,13 +97,13 @@ public class NonVectorisedNonSimd {
      * State: the table_C join map.
      * DIFF: usually part of the query execution itself.
      */
-    private KeyMultiRecordMap_600554759 join_map;
+    private JoinMapType join_map;
 
     /**
      * State: the table_A join map.
      * DIFF: usually part of the query execution itself.
      */
-    private KeyMultiRecordMap_1469235340 join_map_0;
+    private JoinMap0Type join_map_0;
 
     /**
      * This method sets up the state at the start of each benchmark fork.
@@ -126,8 +126,8 @@ public class NonVectorisedNonSimd {
         hashTableSize = Integer.highestOneBit(hashTableSize) << 2;
 
         // Allocate the hash-tables
-        this.join_map = new KeyMultiRecordMap_600554759(hashTableSize);
-        this.join_map_0 = new KeyMultiRecordMap_1469235340(hashTableSize);
+        this.join_map = new JoinMapType(hashTableSize);
+        this.join_map_0 = new JoinMap0Type(hashTableSize);
 
         // Initialise the result
         this.result = -1;
@@ -179,8 +179,9 @@ public class NonVectorisedNonSimd {
     })
     public void executeQuery() throws IOException {
         long count = 0;
-        // KeyMultiRecordMap_600554759 join_map = new KeyMultiRecordMap_600554759();                // DIFF: hard-coded
-        // ArrowTableReader table_C = cCtx.getArrowReader(0);                                       // DIFF: hard-coded
+        // DIFF: hard-coded
+        // KeyMultiRecordMap_1998224723 join_map = new KeyMultiRecordMap_1998224723();
+        // ArrowTableReader table_C = cCtx.getArrowReader(0);
         while (table_C.loadNextBatch()) {
             org.apache.arrow.vector.IntVector table_C_vc_0 = ((org.apache.arrow.vector.IntVector) table_C.getVector(0));
             org.apache.arrow.vector.IntVector table_C_vc_1 = ((org.apache.arrow.vector.IntVector) table_C.getVector(1));
@@ -191,12 +192,12 @@ public class NonVectorisedNonSimd {
                 long left_join_key_prehash = Int_Hash_Function.preHash(ordinal_value);
                 int ordinal_value_0 = table_C_vc_1.get(aviv);
                 int ordinal_value_1 = table_C_vc_2.get(aviv);
-                join_map.associate(ordinal_value, left_join_key_prehash, ordinal_value, ordinal_value_0, ordinal_value_1);
+                join_map.associate(ordinal_value, left_join_key_prehash, ordinal_value_0, ordinal_value_1);
             }
         }
-
-        // KeyMultiRecordMap_1469235340 join_map_0 = new KeyMultiRecordMap_1469235340();            // DIFF: hard-coded
-        // ArrowTableReader table_A = cCtx.getArrowReader(1);                                       // DIFF: hard-coded
+        // DIFF: hard-coded
+        // KeyMultiRecordMap_1086508626 join_map_0 = new KeyMultiRecordMap_1086508626();
+        // ArrowTableReader table_A = cCtx.getArrowReader(1);
         while (table_A.loadNextBatch()) {
             org.apache.arrow.vector.IntVector table_A_vc_0 = ((org.apache.arrow.vector.IntVector) table_A.getVector(0));
             org.apache.arrow.vector.IntVector table_A_vc_1 = ((org.apache.arrow.vector.IntVector) table_A.getVector(1));
@@ -207,10 +208,11 @@ public class NonVectorisedNonSimd {
                 long left_join_key_prehash = Int_Hash_Function.preHash(ordinal_value);
                 int ordinal_value_0 = table_A_vc_1.get(aviv);
                 int ordinal_value_1 = table_A_vc_2.get(aviv);
-                join_map_0.associate(ordinal_value, left_join_key_prehash, ordinal_value, ordinal_value_0, ordinal_value_1);
+                join_map_0.associate(ordinal_value, left_join_key_prehash, ordinal_value_0, ordinal_value_1);
             }
         }
-        // ArrowTableReader table_B = cCtx.getArrowReader(2);                                       // DIFF: hard-coded
+        // DIFF: hard-coded
+        // ArrowTableReader table_B = cCtx.getArrowReader(2);
         while (table_B.loadNextBatch()) {
             org.apache.arrow.vector.IntVector table_B_vc_0 = ((org.apache.arrow.vector.IntVector) table_B.getVector(0));
             org.apache.arrow.vector.IntVector table_B_vc_1 = ((org.apache.arrow.vector.IntVector) table_B.getVector(1));
@@ -229,9 +231,8 @@ public class NonVectorisedNonSimd {
                 for (int i = 0; i < left_join_record_count; i++) {
                     int left_join_ord_0 = join_map_0.values_record_ord_0[records_to_join_index][i];
                     int left_join_ord_1 = join_map_0.values_record_ord_1[records_to_join_index][i];
-                    int left_join_ord_2 = join_map_0.values_record_ord_2[records_to_join_index][i];
-                    long right_join_key_prehash_0 = Int_Hash_Function.preHash(left_join_ord_1);
-                    int records_to_join_index_0 = join_map.getIndex(left_join_ord_1, right_join_key_prehash_0);
+                    long right_join_key_prehash_0 = Int_Hash_Function.preHash(left_join_ord_0);
+                    int records_to_join_index_0 = join_map.getIndex(left_join_ord_0, right_join_key_prehash_0);
                     if ((records_to_join_index_0 == -1)) {
                         continue;
                     }
@@ -239,12 +240,12 @@ public class NonVectorisedNonSimd {
                     for (int i_0 = 0; i_0 < left_join_record_count_0; i_0++) {
                         int left_join_ord_0_0 = join_map.values_record_ord_0[records_to_join_index_0][i_0];
                         int left_join_ord_1_0 = join_map.values_record_ord_1[records_to_join_index_0][i_0];
-                        int left_join_ord_2_0 = join_map.values_record_ord_2[records_to_join_index_0][i_0];
                         count++;
                     }
                 }
             }
         }
+        // System.out.println(count);                                                               // DIFF: removed
         this.result = count;                                                                        // DIFF: added
     }
 

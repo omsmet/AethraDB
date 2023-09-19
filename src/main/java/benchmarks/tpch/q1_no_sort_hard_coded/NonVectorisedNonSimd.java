@@ -2,6 +2,7 @@ package benchmarks.tpch.q1_no_sort_hard_coded;
 
 import evaluation.codegen.infrastructure.data.ABQArrowTableReader;
 import evaluation.codegen.infrastructure.data.ArrowTableReader;
+import evaluation.general_support.ArrowOptimisations;
 import evaluation.general_support.hashmaps.Char_Arr_Hash_Function;
 import org.apache.arrow.memory.RootAllocator;
 import org.apache.calcite.util.ImmutableIntList;
@@ -48,7 +49,7 @@ public class NonVectorisedNonSimd {
     /**
      * State: the {@link ArrowTableReader} used for reading the lineitem table.
      */
-    private ArrowTableReader lineitem_table;
+    private ArrowTableReader lineitem;
 
     /**
      * State: the hash-table which is used by the query to aggregate.
@@ -82,7 +83,7 @@ public class NonVectorisedNonSimd {
         // Setup the database
         this.rootAllocator = new RootAllocator();
         ImmutableIntList columnsToProject = ImmutableIntList.of(4, 5, 6, 7, 8, 9, 10);
-        this.lineitem_table = new ABQArrowTableReader(
+        this.lineitem = new ABQArrowTableReader(
                 new File(this.tpchInstance + "/lineitem.arrow"), this.rootAllocator, columnsToProject);
 
         // Initialise the hash-table
@@ -121,7 +122,7 @@ public class NonVectorisedNonSimd {
     @Setup(Level.Invocation)
     public void invocationStetup() throws Exception {
         // Reset the table
-        this.lineitem_table.reset();
+        this.lineitem.reset();
 
         // Reset the aggregation map
         this.aggregation_state_map.reset();
@@ -177,17 +178,19 @@ public class NonVectorisedNonSimd {
             "-Xms16g"
     })
     public void executeQuery(Blackhole bh) throws IOException {
+        byte[] byte_array_cache = null;
+        byte[] byte_array_cache_0 = null;
         // DIFF: hard-coded
-        // KeyValueMap_222927891 aggregation_state_map = new KeyValueMap_222927891();
+        // KeyValueMap_2062888647 aggregation_state_map = new KeyValueMap_2062888647();
         // ArrowTableReader lineitem = cCtx.getArrowReader(0);
-        while (lineitem_table.loadNextBatch()) {
-            org.apache.arrow.vector.Float8Vector lineitem_vc_0 = ((org.apache.arrow.vector.Float8Vector) lineitem_table.getVector(4));
-            org.apache.arrow.vector.Float8Vector lineitem_vc_1 = ((org.apache.arrow.vector.Float8Vector) lineitem_table.getVector(5));
-            org.apache.arrow.vector.Float8Vector lineitem_vc_2 = ((org.apache.arrow.vector.Float8Vector) lineitem_table.getVector(6));
-            org.apache.arrow.vector.Float8Vector lineitem_vc_3 = ((org.apache.arrow.vector.Float8Vector) lineitem_table.getVector(7));
-            org.apache.arrow.vector.FixedSizeBinaryVector lineitem_vc_4 = ((org.apache.arrow.vector.FixedSizeBinaryVector) lineitem_table.getVector(8));
-            org.apache.arrow.vector.FixedSizeBinaryVector lineitem_vc_5 = ((org.apache.arrow.vector.FixedSizeBinaryVector) lineitem_table.getVector(9));
-            org.apache.arrow.vector.DateDayVector lineitem_vc_6 = ((org.apache.arrow.vector.DateDayVector) lineitem_table.getVector(10));
+        while (lineitem.loadNextBatch()) {
+            org.apache.arrow.vector.Float8Vector lineitem_vc_0 = ((org.apache.arrow.vector.Float8Vector) lineitem.getVector(4));
+            org.apache.arrow.vector.Float8Vector lineitem_vc_1 = ((org.apache.arrow.vector.Float8Vector) lineitem.getVector(5));
+            org.apache.arrow.vector.Float8Vector lineitem_vc_2 = ((org.apache.arrow.vector.Float8Vector) lineitem.getVector(6));
+            org.apache.arrow.vector.Float8Vector lineitem_vc_3 = ((org.apache.arrow.vector.Float8Vector) lineitem.getVector(7));
+            org.apache.arrow.vector.FixedSizeBinaryVector lineitem_vc_4 = ((org.apache.arrow.vector.FixedSizeBinaryVector) lineitem.getVector(8));
+            org.apache.arrow.vector.FixedSizeBinaryVector lineitem_vc_5 = ((org.apache.arrow.vector.FixedSizeBinaryVector) lineitem.getVector(9));
+            org.apache.arrow.vector.DateDayVector lineitem_vc_6 = ((org.apache.arrow.vector.DateDayVector) lineitem.getVector(10));
             int recordCount = lineitem_vc_0.getValueCount();
             for (int aviv = 0; aviv < recordCount; aviv++) {
                 int ordinal_value = lineitem_vc_6.get(aviv);
@@ -195,22 +198,27 @@ public class NonVectorisedNonSimd {
                     continue;
                 }
                 int projection_literal = 1;
-                double projection_computation_result = (projection_literal - lineitem_vc_2.get(aviv));
-                double projection_computation_result_0 = (lineitem_vc_1.get(aviv) * projection_computation_result);
+                double ordinal_value_0 = lineitem_vc_2.get(aviv);
+                double projection_computation_result = (projection_literal - ordinal_value_0);
+                double ordinal_value_1 = lineitem_vc_1.get(aviv);
+                double projection_computation_result_0 = (ordinal_value_1 * projection_computation_result);
                 int projection_literal_0 = 1;
-                double projection_computation_result_1 = (projection_literal_0 - lineitem_vc_2.get(aviv));
-                double projection_computation_result_2 = (lineitem_vc_1.get(aviv) * projection_computation_result_1);
-                int projection_literal_1 = 1;
-                double projection_computation_result_3 = (projection_literal_1 + lineitem_vc_3.get(aviv));
-                double projection_computation_result_4 = (projection_computation_result_2 * projection_computation_result_3);
-                byte[] ordinal_value_0 = lineitem_vc_4.get(aviv);
-                byte[] ordinal_value_1 = lineitem_vc_5.get(aviv);
-                long group_key_pre_hash = Char_Arr_Hash_Function.preHash(ordinal_value_0);
-                group_key_pre_hash ^= Char_Arr_Hash_Function.preHash(ordinal_value_1);
-                double ordinal_value_2 = lineitem_vc_0.get(aviv);
+                double ordinal_value_2 = lineitem_vc_2.get(aviv);
+                double projection_computation_result_1 = (projection_literal_0 - ordinal_value_2);
                 double ordinal_value_3 = lineitem_vc_1.get(aviv);
-                double ordinal_value_4 = lineitem_vc_2.get(aviv);
-                aggregation_state_map.incrementForKey(ordinal_value_0, ordinal_value_1, group_key_pre_hash, ordinal_value_2, ordinal_value_3, projection_computation_result_0, projection_computation_result_4, 1, ordinal_value_4);
+                double projection_computation_result_2 = (ordinal_value_3 * projection_computation_result_1);
+                int projection_literal_1 = 1;
+                double ordinal_value_4 = lineitem_vc_3.get(aviv);
+                double projection_computation_result_3 = (projection_literal_1 + ordinal_value_4);
+                double projection_computation_result_4 = (projection_computation_result_2 * projection_computation_result_3);
+                byte_array_cache = ArrowOptimisations.getFixedSizeBinaryValue(lineitem_vc_4, aviv, byte_array_cache);
+                byte_array_cache_0 = ArrowOptimisations.getFixedSizeBinaryValue(lineitem_vc_5, aviv, byte_array_cache_0);
+                long group_key_pre_hash = Char_Arr_Hash_Function.preHash(byte_array_cache);
+                group_key_pre_hash ^= Char_Arr_Hash_Function.preHash(byte_array_cache_0);
+                double ordinal_value_5 = lineitem_vc_0.get(aviv);
+                double ordinal_value_6 = lineitem_vc_1.get(aviv);
+                double ordinal_value_7 = lineitem_vc_2.get(aviv);
+                aggregation_state_map.incrementForKey(byte_array_cache, byte_array_cache_0, group_key_pre_hash, ordinal_value_5, ordinal_value_6, projection_computation_result_0, projection_computation_result_4, 1, ordinal_value_7);
             }
         }
         for (int key_i = 0; key_i < aggregation_state_map.numberOfRecords; key_i++) {
@@ -225,16 +233,16 @@ public class NonVectorisedNonSimd {
             double projection_computation_result = (aggregation_0_value / aggregation_4_value);
             double projection_computation_result_0 = (aggregation_1_value / aggregation_4_value);
             double projection_computation_result_1 = (aggregation_5_value / aggregation_4_value);
-            // DIFF: changed for result verification
-            // System.out.print(new java.lang.String(groupKey_0) + ", ");
-            // System.out.print(new java.lang.String(groupKey_1) + ", ");
-            // System.out.print(aggregation_0_value + ", ");
-            // System.out.print(aggregation_1_value + ", ");
-            // System.out.print(aggregation_2_value + ", ");
-            // System.out.print(aggregation_3_value + ", ");
-            // System.out.print(projection_computation_result + ", ");
-            // System.out.print(projection_computation_result_0 + ", ");
-            // System.out.print(projection_computation_result_1 + ", ");
+            // DIFF: replaced
+            // System.out.print((new java.lang.String(groupKey_0) + ", "));
+            // System.out.print((new java.lang.String(groupKey_1) + ", "));
+            // System.out.print((String.format("%.2f", aggregation_0_value) + ", "));
+            // System.out.print((String.format("%.2f", aggregation_1_value) + ", "));
+            // System.out.print((String.format("%.2f", aggregation_2_value) + ", "));
+            // System.out.print((String.format("%.2f", aggregation_3_value) + ", "));
+            // System.out.print((String.format("%.2f", projection_computation_result) + ", "));
+            // System.out.print((String.format("%.2f", projection_computation_result_0) + ", "));
+            // System.out.print((String.format("%.2f", projection_computation_result_1) + ", "));
             // System.out.println(aggregation_4_value);
             this.resultReturnFlag[key_i] = groupKey_0;
             this.resultLineStatus[key_i] = groupKey_1;

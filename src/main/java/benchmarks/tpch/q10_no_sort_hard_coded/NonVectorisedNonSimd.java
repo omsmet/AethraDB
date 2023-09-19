@@ -2,6 +2,7 @@ package benchmarks.tpch.q10_no_sort_hard_coded;
 
 import evaluation.codegen.infrastructure.data.ABQArrowTableReader;
 import evaluation.codegen.infrastructure.data.ArrowTableReader;
+import evaluation.general_support.ArrowOptimisations;
 import evaluation.general_support.hashmaps.Char_Arr_Hash_Function;
 import evaluation.general_support.hashmaps.Double_Hash_Function;
 import evaluation.general_support.hashmaps.Int_Hash_Function;
@@ -217,11 +218,18 @@ public class NonVectorisedNonSimd {
             "-Xms16g"
     })
     public void executeQuery(Blackhole bh) throws IOException {
+        byte[] byte_array_cache = null;
+        byte[][] byte_array_caches = new byte[200][];
+        byte[][] byte_array_caches_0 = new byte[200][];
+        byte[] byte_array_cache_0 = null;
+        byte[][] byte_array_caches_1 = new byte[200][];
+        byte[] byte_array_cache_1 = null;
+
         // DIFF: hard-coded
-        // KeyValueMap_1456250665 aggregation_state_map = new KeyValueMap_1456250665();
-        // KeyMultiRecordMap_1456006896 join_map = new KeyMultiRecordMap_1456006896();
-        // KeyMultiRecordMap_1825228532 join_map_0 = new KeyMultiRecordMap_1825228532();
-        // KeyMultiRecordMap_1353406178 join_map_1 = new KeyMultiRecordMap_1353406178();
+        // KeyValueMap_2093834526 aggregation_state_map = new KeyValueMap_2093834526();
+        // KeyMultiRecordMap_2007031139 join_map = new KeyMultiRecordMap_2007031139();
+        // KeyMultiRecordMap_1708786164 join_map_0 = new KeyMultiRecordMap_1708786164();
+        // KeyMultiRecordMap_1144653485 join_map_1 = new KeyMultiRecordMap_1144653485();
         // ArrowTableReader nation = cCtx.getArrowReader(0);
         while (nation.loadNextBatch()) {
             org.apache.arrow.vector.IntVector nation_vc_0 = ((org.apache.arrow.vector.IntVector) nation.getVector(0));
@@ -230,8 +238,8 @@ public class NonVectorisedNonSimd {
             for (int aviv = 0; aviv < recordCount; aviv++) {
                 int ordinal_value = nation_vc_0.get(aviv);
                 long left_join_key_prehash = Int_Hash_Function.preHash(ordinal_value);
-                byte[] ordinal_value_0 = nation_vc_1.get(aviv);
-                join_map_1.associate(ordinal_value, left_join_key_prehash, ordinal_value, ordinal_value_0);
+                byte_array_cache = ArrowOptimisations.getFixedSizeBinaryValue(nation_vc_1, aviv, byte_array_cache);
+                join_map_1.associate(ordinal_value, left_join_key_prehash, byte_array_cache);
             }
         }
         // DIFF: hard-coded
@@ -253,17 +261,16 @@ public class NonVectorisedNonSimd {
                     continue;
                 }
                 int ordinal_value_0 = customer_vc_0.get(aviv);
-                byte[] ordinal_value_1 = customer_vc_1.get(aviv);
-                byte[] ordinal_value_2 = customer_vc_2.get(aviv);
-                byte[] ordinal_value_3 = customer_vc_4.get(aviv);
-                double ordinal_value_4 = customer_vc_5.get(aviv);
-                byte[] ordinal_value_5 = customer_vc_6.get(aviv);
+                byte[] ordinal_value_1 = ArrowOptimisations.getVarCharBinaryValue(customer_vc_1, aviv, byte_array_caches);
+                byte[] ordinal_value_2 = ArrowOptimisations.getVarCharBinaryValue(customer_vc_2, aviv, byte_array_caches_0);
+                byte_array_cache_0 = ArrowOptimisations.getFixedSizeBinaryValue(customer_vc_4, aviv, byte_array_cache_0);
+                double ordinal_value_3 = customer_vc_5.get(aviv);
+                byte[] ordinal_value_4 = ArrowOptimisations.getVarCharBinaryValue(customer_vc_6, aviv, byte_array_caches_1);
                 int left_join_record_count = join_map_1.keysRecordCount[records_to_join_index];
                 for (int i = 0; i < left_join_record_count; i++) {
-                    int left_join_ord_0 = join_map_1.values_record_ord_0[records_to_join_index][i];
-                    byte[] left_join_ord_1 = join_map_1.values_record_ord_1[records_to_join_index][i];
+                    byte[] left_join_ord_0 = join_map_1.values_record_ord_0[records_to_join_index][i];
                     long left_join_key_prehash = Int_Hash_Function.preHash(ordinal_value_0);
-                    join_map_0.associate(ordinal_value_0, left_join_key_prehash, left_join_ord_1, ordinal_value_0, ordinal_value_1, ordinal_value_2, ordinal_value_3, ordinal_value_4, ordinal_value_5);
+                    join_map_0.associate(ordinal_value_0, left_join_key_prehash, left_join_ord_0, ordinal_value_1, ordinal_value_2, byte_array_cache_0, ordinal_value_3, ordinal_value_4);
                 }
             }
         }
@@ -292,14 +299,13 @@ public class NonVectorisedNonSimd {
                 int left_join_record_count = join_map_0.keysRecordCount[records_to_join_index];
                 for (int i = 0; i < left_join_record_count; i++) {
                     byte[] left_join_ord_0 = join_map_0.values_record_ord_0[records_to_join_index][i];
-                    int left_join_ord_1 = join_map_0.values_record_ord_1[records_to_join_index][i];
+                    byte[] left_join_ord_1 = join_map_0.values_record_ord_1[records_to_join_index][i];
                     byte[] left_join_ord_2 = join_map_0.values_record_ord_2[records_to_join_index][i];
                     byte[] left_join_ord_3 = join_map_0.values_record_ord_3[records_to_join_index][i];
-                    byte[] left_join_ord_4 = join_map_0.values_record_ord_4[records_to_join_index][i];
-                    double left_join_ord_5 = join_map_0.values_record_ord_5[records_to_join_index][i];
-                    byte[] left_join_ord_6 = join_map_0.values_record_ord_6[records_to_join_index][i];
+                    double left_join_ord_4 = join_map_0.values_record_ord_4[records_to_join_index][i];
+                    byte[] left_join_ord_5 = join_map_0.values_record_ord_5[records_to_join_index][i];
                     long left_join_key_prehash = Int_Hash_Function.preHash(ordinal_value_1);
-                    join_map.associate(ordinal_value_1, left_join_key_prehash, left_join_ord_0, left_join_ord_1, left_join_ord_2, left_join_ord_3, left_join_ord_4, left_join_ord_5, left_join_ord_6, ordinal_value_1);
+                    join_map.associate(ordinal_value_1, left_join_key_prehash, left_join_ord_0, ordinal_value_0, left_join_ord_1, left_join_ord_2, left_join_ord_3, left_join_ord_4, left_join_ord_5);
                 }
             }
         }
@@ -312,16 +318,18 @@ public class NonVectorisedNonSimd {
             org.apache.arrow.vector.FixedSizeBinaryVector lineitem_vc_3 = ((org.apache.arrow.vector.FixedSizeBinaryVector) lineitem.getVector(8));
             int recordCount = lineitem_vc_0.getValueCount();
             for (int aviv = 0; aviv < recordCount; aviv++) {
-                byte[] ordinal_value = lineitem_vc_3.get(aviv);
-                if (!(Arrays.equals(ordinal_value, new byte[] { 82 }))) {
+                byte_array_cache_1 = ArrowOptimisations.getFixedSizeBinaryValue(lineitem_vc_3, aviv, byte_array_cache_1);
+                if (!(Arrays.equals(byte_array_cache_1, new byte[] { 82 }))) {
                     continue;
                 }
                 int projection_literal = 1;
-                double projection_computation_result = (projection_literal - lineitem_vc_2.get(aviv));
-                double projection_computation_result_0 = (lineitem_vc_1.get(aviv) * projection_computation_result);
-                int ordinal_value_0 = lineitem_vc_0.get(aviv);
-                long right_join_key_prehash = Int_Hash_Function.preHash(ordinal_value_0);
-                int records_to_join_index = join_map.getIndex(ordinal_value_0, right_join_key_prehash);
+                double ordinal_value = lineitem_vc_2.get(aviv);
+                double projection_computation_result = (projection_literal - ordinal_value);
+                double ordinal_value_0 = lineitem_vc_1.get(aviv);
+                double projection_computation_result_0 = (ordinal_value_0 * projection_computation_result);
+                int ordinal_value_1 = lineitem_vc_0.get(aviv);
+                long right_join_key_prehash = Int_Hash_Function.preHash(ordinal_value_1);
+                int records_to_join_index = join_map.getIndex(ordinal_value_1, right_join_key_prehash);
                 if ((records_to_join_index == -1)) {
                     continue;
                 }
@@ -334,7 +342,6 @@ public class NonVectorisedNonSimd {
                     byte[] left_join_ord_4 = join_map.values_record_ord_4[records_to_join_index][i];
                     double left_join_ord_5 = join_map.values_record_ord_5[records_to_join_index][i];
                     byte[] left_join_ord_6 = join_map.values_record_ord_6[records_to_join_index][i];
-                    int left_join_ord_7 = join_map.values_record_ord_7[records_to_join_index][i];
                     long group_key_pre_hash = Int_Hash_Function.preHash(left_join_ord_1);
                     group_key_pre_hash ^= Char_Arr_Hash_Function.preHash(left_join_ord_2);
                     group_key_pre_hash ^= Double_Hash_Function.preHash(left_join_ord_5);
@@ -363,7 +370,7 @@ public class NonVectorisedNonSimd {
             // System.out.print((new java.lang.String(groupKey_4) + ", "));
             // System.out.print((new java.lang.String(groupKey_5) + ", "));
             // System.out.print((new java.lang.String(groupKey_3) + ", "));
-            //  System.out.println(new java.lang.String(groupKey_6));
+            // System.out.println(new java.lang.String(groupKey_6));
             this.resultCustKey[key_i] = groupKey_0;
             this.resultCName[key_i] = groupKey_1;
             this.resultRevenue[key_i] = aggregation_0_value;

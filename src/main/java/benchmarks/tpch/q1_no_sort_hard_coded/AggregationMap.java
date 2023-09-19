@@ -43,10 +43,7 @@ public final class AggregationMap {
 
     public void incrementForKey(byte[] key_ord_0, byte[] key_ord_1, long preHash, double value_ord_0, double value_ord_1, double value_ord_2, double value_ord_3, int value_ord_4, double value_ord_5) {
         if ((key_ord_0 == null)) {
-            throw new java.lang.IllegalArgumentException("The map expects non-null keys");
-        }
-        if ((key_ord_1 == null)) {
-            throw new java.lang.IllegalArgumentException("The map expects non-null keys");
+            throw new java.lang.IllegalArgumentException("The map expects the first key ordinal to be non-null");
         }
         int index = this.find(key_ord_0, key_ord_1, preHash);
         boolean newEntry = false;
@@ -56,8 +53,14 @@ public final class AggregationMap {
             if ((this.keys_ord_0.length == index)) {
                 this.growArrays();
             }
-            this.keys_ord_0[index] = key_ord_0;
-            this.keys_ord_1[index] = key_ord_1;
+            int key_ord_0_length = key_ord_0.length;
+            byte[] key_ord_0_copy = new byte[key_ord_0_length];
+            System.arraycopy(key_ord_0, 0, key_ord_0_copy, 0, key_ord_0_length);
+            this.keys_ord_0[index] = key_ord_0_copy;
+            int key_ord_1_length = key_ord_1.length;
+            byte[] key_ord_1_copy = new byte[key_ord_1_length];
+            System.arraycopy(key_ord_1, 0, key_ord_1_copy, 0, key_ord_1_length);
+            this.keys_ord_1[index] = key_ord_1_copy;
         }
         this.values_ord_0[index] += value_ord_0;
         this.values_ord_1[index] += value_ord_1;
@@ -77,7 +80,7 @@ public final class AggregationMap {
             return -1;
         }
         int currentIndex = initialIndex;
-        while (!(Arrays.equals(this.keys_ord_0[currentIndex], key_ord_0)) || !(Arrays.equals(this.keys_ord_1[currentIndex], key_ord_1))) {
+        while ((!(Arrays.equals(this.keys_ord_0[currentIndex], key_ord_0)) || !(Arrays.equals(this.keys_ord_1[currentIndex], key_ord_1)))) {
             int potentialNextIndex = this.next[currentIndex];
             if ((potentialNextIndex == -1)) {
                 return -1;
@@ -136,14 +139,14 @@ public final class AggregationMap {
             return;
         }
         int currentIndex = initialIndex;
-        while ((!(Arrays.equals(this.keys_ord_0[currentIndex], key_ord_0)) || !(Arrays.equals(this.keys_ord_1[currentIndex], key_ord_1))) && (this.next[currentIndex] != -1)) {
+        while (((!(Arrays.equals(this.keys_ord_0[currentIndex], key_ord_0)) || !(Arrays.equals(this.keys_ord_1[currentIndex], key_ord_1))) && (this.next[currentIndex] != -1))) {
             currentIndex = this.next[currentIndex];
         }
         this.next[currentIndex] = index;
     }
     private void rehash() {
         int size = this.hashTable.length;
-        while (size <= this.numberOfRecords) {
+        while ((size <= this.numberOfRecords)) {
             size = (size << 1);
         }
         size = (size << 1);

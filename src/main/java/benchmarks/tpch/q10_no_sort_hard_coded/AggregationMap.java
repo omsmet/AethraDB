@@ -61,12 +61,27 @@ public final class AggregationMap {
                 this.growArrays();
             }
             this.keys_ord_0[index] = key_ord_0;
-            this.keys_ord_1[index] = key_ord_1;
+            int key_ord_1_length = key_ord_1.length;
+            byte[] key_ord_1_copy = new byte[key_ord_1_length];
+            System.arraycopy(key_ord_1, 0, key_ord_1_copy, 0, key_ord_1_length);
+            this.keys_ord_1[index] = key_ord_1_copy;
             this.keys_ord_2[index] = key_ord_2;
-            this.keys_ord_3[index] = key_ord_3;
-            this.keys_ord_4[index] = key_ord_4;
-            this.keys_ord_5[index] = key_ord_5;
-            this.keys_ord_6[index] = key_ord_6;
+            int key_ord_3_length = key_ord_3.length;
+            byte[] key_ord_3_copy = new byte[key_ord_3_length];
+            System.arraycopy(key_ord_3, 0, key_ord_3_copy, 0, key_ord_3_length);
+            this.keys_ord_3[index] = key_ord_3_copy;
+            int key_ord_4_length = key_ord_4.length;
+            byte[] key_ord_4_copy = new byte[key_ord_4_length];
+            System.arraycopy(key_ord_4, 0, key_ord_4_copy, 0, key_ord_4_length);
+            this.keys_ord_4[index] = key_ord_4_copy;
+            int key_ord_5_length = key_ord_5.length;
+            byte[] key_ord_5_copy = new byte[key_ord_5_length];
+            System.arraycopy(key_ord_5, 0, key_ord_5_copy, 0, key_ord_5_length);
+            this.keys_ord_5[index] = key_ord_5_copy;
+            int key_ord_6_length = key_ord_6.length;
+            byte[] key_ord_6_copy = new byte[key_ord_6_length];
+            System.arraycopy(key_ord_6, 0, key_ord_6_copy, 0, key_ord_6_length);
+            this.keys_ord_6[index] = key_ord_6_copy;
         }
         this.values_ord_0[index] += value_ord_0;
         if (newEntry) {

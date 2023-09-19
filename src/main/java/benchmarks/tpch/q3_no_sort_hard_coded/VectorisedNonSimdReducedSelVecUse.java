@@ -204,16 +204,13 @@ public class VectorisedNonSimdReducedSelVecUse {
         double[] projection_computation_result = this.allocationManager.getDoubleVector();
         double[] projection_computation_result_0 = this.allocationManager.getDoubleVector();
         long[] groupKeyPreHashVector = this.allocationManager.getLongVector();
-
-        // DIFF: hard-coded
-        // KeyValueMap_1524744833 aggregation_state_map = new KeyValueMap_1524744833();
-        // KeyMultiRecordMap_1897372527 join_map = new KeyMultiRecordMap_1897372527();
-        // KeyMultiRecordMap_1699637904 join_map_0 = new KeyMultiRecordMap_1699637904();
-
         long[] pre_hash_vector = this.allocationManager.getLongVector();
         long[] pre_hash_vector_0 = this.allocationManager.getLongVector();
 
         // DIFF: hard-coded
+        // KeyValueMap_1425454633 aggregation_state_map = new KeyValueMap_1425454633();
+        // KeyMultiRecordMap_1641677843 join_map = new KeyMultiRecordMap_1641677843();
+        // KeyMultiRecordMap_539322891 join_map_0 = new KeyMultiRecordMap_539322891();
         // ArrowTableReader customer = cCtx.getArrowReader(0);
         while (customer.loadNextBatch()) {
             org.apache.arrow.vector.IntVector customer_vc_0 = ((org.apache.arrow.vector.IntVector) customer.getVector(0));
@@ -225,7 +222,7 @@ public class VectorisedNonSimdReducedSelVecUse {
             for (int i = 0; i < recordCount; i++) {
                 int selected_record_index = ordinal_1_sel_vec[i];
                 int left_join_record_key = customer_vc_0.get(selected_record_index);
-                join_map_0.associate(left_join_record_key, pre_hash_vector_0[selected_record_index], left_join_record_key);
+                join_map_0.associate(left_join_record_key, pre_hash_vector_0[selected_record_index]);
             }
         }
         int[] join_result_vector_ord_0_0 = this.allocationManager.getIntVector();
@@ -264,7 +261,6 @@ public class VectorisedNonSimdReducedSelVecUse {
                     int right_join_ord_2 = orders_vc_2.get(selected_record_index);
                     int right_join_ord_3 = orders_vc_3.get(selected_record_index);
                     for (int i = 0; i < left_join_record_count; i++) {
-                        join_result_vector_ord_0_0[currentResultIndex] = join_map_0.values_record_ord_0[records_to_join_index][i];
                         join_result_vector_ord_1_0[currentResultIndex] = right_join_ord_0;
                         join_result_vector_ord_2_0[currentResultIndex] = right_join_key;
                         join_result_vector_ord_3_0[currentResultIndex] = right_join_ord_2;
@@ -276,7 +272,7 @@ public class VectorisedNonSimdReducedSelVecUse {
                 VectorisedHashOperators.constructPreHashKeyVector(pre_hash_vector, join_result_vector_ord_1_0, currentResultIndex, false);
                 for (int i_0 = 0; i_0 < currentResultIndex; i_0++) {
                     int left_join_record_key = join_result_vector_ord_1_0[i_0];
-                    join_map.associate(left_join_record_key, pre_hash_vector[i_0], left_join_record_key, join_result_vector_ord_3_0[i_0], join_result_vector_ord_4_0[i_0]);
+                    join_map.associate(left_join_record_key, pre_hash_vector[i_0], join_result_vector_ord_3_0[i_0], join_result_vector_ord_4_0[i_0]);
                 }
             }
         }
@@ -327,9 +323,8 @@ public class VectorisedNonSimdReducedSelVecUse {
                     }
                     double right_join_ord_1 = projection_computation_result_0[selected_record_index];
                     for (int i = 0; i < left_join_record_count; i++) {
-                        join_result_vector_ord_0[currentResultIndex] = join_map.values_record_ord_0[records_to_join_index][i];
-                        join_result_vector_ord_1[currentResultIndex] = join_map.values_record_ord_1[records_to_join_index][i];
-                        join_result_vector_ord_2[currentResultIndex] = join_map.values_record_ord_2[records_to_join_index][i];
+                        join_result_vector_ord_1[currentResultIndex] = join_map.values_record_ord_0[records_to_join_index][i];
+                        join_result_vector_ord_2[currentResultIndex] = join_map.values_record_ord_1[records_to_join_index][i];
                         join_result_vector_ord_3[currentResultIndex] = right_join_key;
                         join_result_vector_ord_4[currentResultIndex] = right_join_ord_1;
                         currentResultIndex++;

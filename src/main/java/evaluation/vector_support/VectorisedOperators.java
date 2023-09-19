@@ -8,7 +8,7 @@ public class VectorisedOperators {
     /**
      * Variable storing byte array caches of appropriate sizes.
      */
-    static private byte[][] byteArrayCaches = new byte[1][1];
+    static private byte[][] byteArrayCaches = new byte[1][0];
 
     /**
      * Length of vectors in the system.
@@ -30,7 +30,7 @@ public class VectorisedOperators {
      * @return A reference to a byte array cache of the appropriate size.
      */
     static protected byte[] getByteArrayCache(int cacheWidth) {
-        if (cacheWidth > byteArrayCaches.length) {
+        if (cacheWidth >= byteArrayCaches.length) {
             int newCachesArrayLength = Integer.highestOneBit(cacheWidth) << 1;
             byte[][] newByteArrayCaches = new byte[newCachesArrayLength][];
             System.arraycopy(byteArrayCaches, 0, newByteArrayCaches, 0, byteArrayCaches.length);

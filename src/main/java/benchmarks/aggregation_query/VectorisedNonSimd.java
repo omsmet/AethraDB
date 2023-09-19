@@ -6,6 +6,7 @@ import evaluation.codegen.GeneratedQuery;
 import evaluation.codegen.QueryCodeGenerator;
 import evaluation.codegen.QueryTranslator;
 import evaluation.codegen.infrastructure.context.CodeGenContext;
+import evaluation.codegen.infrastructure.context.OptimisationContext;
 import evaluation.codegen.infrastructure.data.ArrowTableReader;
 import evaluation.codegen.operators.CodeGenOperator;
 import org.apache.calcite.rel.RelNode;
@@ -182,6 +183,10 @@ public class VectorisedNonSimd extends ResultConsumptionTarget {
         // Plan the query
         RelNode plannedQuery = this.database.planQuery(query);
 
+        // Create the contexts required for code generation
+        CodeGenContext cCtx = new CodeGenContext(database);
+        OptimisationContext oCtx = new OptimisationContext();
+
         // Generate code operator tree for the query
         QueryTranslator queryTranslator = new QueryTranslator();
         CodeGenOperator<?> queryRootOperator = queryTranslator.translate(plannedQuery, false);
@@ -195,7 +200,7 @@ public class VectorisedNonSimd extends ResultConsumptionTarget {
 
         // Construct the packaging and result consumption operators and generate the code
         CodeGenOperator<RelNode> queryResultConsumptionOperator = new ResultConsumptionOperator(plannedQuery, packageOperator);
-        QueryCodeGenerator queryCodeGenerator = new QueryCodeGenerator(queryResultConsumptionOperator, true);
+        QueryCodeGenerator queryCodeGenerator = new QueryCodeGenerator(cCtx, oCtx, queryResultConsumptionOperator, true);
         this.generatedQuery = queryCodeGenerator.generateQuery(true);
         this.generatedQueryCCtx = this.generatedQuery.getCCtx();
         this.generatedQueryCCtx.setResultConsumptionTarget(this);

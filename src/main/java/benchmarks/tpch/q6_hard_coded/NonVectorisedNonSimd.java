@@ -45,7 +45,7 @@ public class NonVectorisedNonSimd {
     /**
      * State: the {@link ArrowTableReader} used for reading the lineitem table.
      */
-    private ArrowTableReader lineitem_table;
+    private ArrowTableReader lineitem;
 
     /**
      * State: the result of the query.
@@ -64,7 +64,7 @@ public class NonVectorisedNonSimd {
     public void trialSetup() throws Exception {
         // Setup the database
         this.rootAllocator = new RootAllocator();
-        this.lineitem_table = new ABQArrowTableReader(
+        this.lineitem = new ABQArrowTableReader(
                 new File(this.tpchInstance + "/lineitem.arrow"), this.rootAllocator, ImmutableIntList.of(4, 5, 6, 10));
 
         // Initialise the result
@@ -87,7 +87,7 @@ public class NonVectorisedNonSimd {
     @Setup(Level.Invocation)
     public void invocationStetup() throws Exception {
         // Reset the table
-        this.lineitem_table.reset();
+        this.lineitem.reset();
     }
 
     /**
@@ -123,12 +123,12 @@ public class NonVectorisedNonSimd {
         double sum = 0;
         long count = 0;
         // DIFF: hard-coded
-//        ArrowTableReader lineitem = cCtx.getArrowReader(0);
-        while (this.lineitem_table.loadNextBatch()) {
-            org.apache.arrow.vector.Float8Vector lineitem_vc_0 = ((org.apache.arrow.vector.Float8Vector) this.lineitem_table.getVector(4));
-            org.apache.arrow.vector.Float8Vector lineitem_vc_1 = ((org.apache.arrow.vector.Float8Vector) this.lineitem_table.getVector(5));
-            org.apache.arrow.vector.Float8Vector lineitem_vc_2 = ((org.apache.arrow.vector.Float8Vector) this.lineitem_table.getVector(6));
-            org.apache.arrow.vector.DateDayVector lineitem_vc_3 = ((org.apache.arrow.vector.DateDayVector) this.lineitem_table.getVector(10));
+        // ArrowTableReader lineitem = cCtx.getArrowReader(0);
+        while (lineitem.loadNextBatch()) {
+            org.apache.arrow.vector.Float8Vector lineitem_vc_0 = ((org.apache.arrow.vector.Float8Vector) lineitem.getVector(4));
+            org.apache.arrow.vector.Float8Vector lineitem_vc_1 = ((org.apache.arrow.vector.Float8Vector) lineitem.getVector(5));
+            org.apache.arrow.vector.Float8Vector lineitem_vc_2 = ((org.apache.arrow.vector.Float8Vector) lineitem.getVector(6));
+            org.apache.arrow.vector.DateDayVector lineitem_vc_3 = ((org.apache.arrow.vector.DateDayVector) lineitem.getVector(10));
             int recordCount = lineitem_vc_0.getValueCount();
             for (int aviv = 0; aviv < recordCount; aviv++) {
                 int ordinal_value = lineitem_vc_3.get(aviv);
@@ -149,7 +149,8 @@ public class NonVectorisedNonSimd {
                 if (!((ordinal_value_1 < 24))) {
                     continue;
                 }
-                double projection_computation_result = (lineitem_vc_1.get(aviv) * ordinal_value_0);
+                double ordinal_value_2 = lineitem_vc_1.get(aviv);
+                double projection_computation_result = (ordinal_value_2 * ordinal_value_0);
                 sum += projection_computation_result;
                 count++;
             }
@@ -158,7 +159,7 @@ public class NonVectorisedNonSimd {
         int projection_literal_0 = 0;
         double projection_computation_result = (count == projection_literal_0) ? projection_literal : sum;
         // DIFF: replaced by result verification
-        // System.out.println(projection_computation_result);
+        // System.out.println(String.format("%.2f", projection_computation_result));
         this.sumResult = projection_computation_result;
 
         // DIFF: prevent optimising the result away

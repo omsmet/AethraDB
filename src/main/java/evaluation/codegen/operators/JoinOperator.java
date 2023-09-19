@@ -12,9 +12,7 @@ import evaluation.codegen.infrastructure.context.access_path.ArrowVectorAccessPa
 import evaluation.codegen.infrastructure.context.access_path.ArrowVectorWithSelectionVectorAccessPath;
 import evaluation.codegen.infrastructure.context.access_path.ArrowVectorWithValidityMaskAccessPath;
 import evaluation.codegen.infrastructure.context.access_path.MapAccessPath;
-import evaluation.codegen.infrastructure.context.access_path.SIMDLoopAccessPath;
 import evaluation.codegen.infrastructure.context.access_path.ScalarVariableAccessPath;
-import evaluation.general_support.hashmaps.Int_Hash_Function;
 import evaluation.general_support.hashmaps.KeyMultiRecordMapGenerator;
 import org.apache.calcite.rel.core.JoinRelType;
 import org.apache.calcite.rel.logical.LogicalJoin;
@@ -66,7 +64,6 @@ import static evaluation.codegen.infrastructure.janino.JaninoOperatorGen.eq;
 import static evaluation.codegen.infrastructure.janino.JaninoOperatorGen.gt;
 import static evaluation.codegen.infrastructure.janino.JaninoOperatorGen.lt;
 import static evaluation.codegen.infrastructure.janino.JaninoOperatorGen.not;
-import static evaluation.codegen.infrastructure.janino.JaninoOperatorGen.plus;
 import static evaluation.codegen.infrastructure.janino.JaninoOperatorGen.postIncrement;
 import static evaluation.codegen.infrastructure.janino.JaninoOperatorGen.postIncrementStm;
 import static evaluation.codegen.infrastructure.janino.JaninoOperatorGen.sub;
@@ -458,7 +455,7 @@ public class JoinOperator extends CodeGenOperator<LogicalJoin> {
                 new ArrayList<>(this.getLogicalSubplan().getRowType().getFieldCount());
 
         int leftKeyOrdinalIndex = ((RexInputRef) this.joinCondition.getOperands().get(0)).getIndex();
-        int numberOfLhsColumns = this.joinMapGenerator.valueVariableNames.length;
+        int numberOfLhsColumns = this.joinMapGenerator.valueVariableNames.length + 1; // add 1 for key column
         int currentLhsJoinMapValueColumnIndex = 0; // Need to account for the fact that the key is not duplicated in the map
         for (int i = 0; i < numberOfLhsColumns; i++) {
 
@@ -1140,7 +1137,7 @@ public class JoinOperator extends CodeGenOperator<LogicalJoin> {
             // Get the values for the remaining columns to prevent key duplication
             Java.Rvalue[] columnValues = new Java.Rvalue[currentOrdinalMapping.size() - 1];
             int currentValueColumnIndex = 0;
-            for (int i = 0; i < columnValues.length; i++) {
+            for (int i = 0; i < currentOrdinalMapping.size(); i++) {
                 ArrayVectorAccessPath columnAP = ((ArrayVectorAccessPath) currentOrdinalMapping.get(i));
                 if (i == buildKeyOrdinal)
                     continue;
@@ -1694,7 +1691,7 @@ public class JoinOperator extends CodeGenOperator<LogicalJoin> {
 
         // In the loop over the left join records, first add the statements to set the correct
         // values in the result vectors for the left side join columns
-        int numberOfLhsColumns = this.joinMapGenerator.valueVariableNames.length;
+        int numberOfLhsColumns = this.joinMapGenerator.valueVariableNames.length + 1; // Add 1 for key column
         // Need to account for the join key de-duplication:
         // no need to construct the LHS key vector too, since it is a duplicate of the RHS key vector
         int leftKeyIndex = ((RexInputRef) this.joinCondition.getOperands().get(0)).getIndex();
