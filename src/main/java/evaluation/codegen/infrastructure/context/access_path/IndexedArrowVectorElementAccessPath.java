@@ -1,8 +1,11 @@
 package evaluation.codegen.infrastructure.context.access_path;
 
+import evaluation.codegen.infrastructure.context.CodeGenContext;
 import evaluation.codegen.infrastructure.context.QueryVariableType;
 import org.codehaus.janino.Java;
 
+import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createAmbiguousNameRef;
+import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createPrimitiveArrayType;
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.getLocation;
 import static evaluation.codegen.infrastructure.janino.JaninoMethodGen.createMethodInvocation;
 
@@ -39,16 +42,54 @@ public class IndexedArrowVectorElementAccessPath extends AccessPath {
     }
 
     /**
-     * Method performing code generation to read the value of the variable represented by {@code this}.
-     * @return A {@link Java.Rvalue} to read the value of the variable represented by {@code this}.
+     * Method performing code generation to read the value of the variable represented by {@code this}
+     * without performing any kind of optimisations.
      */
-    public Java.Rvalue read() {
+    public Java.Rvalue readGeneric() {
         return createMethodInvocation(
                 getLocation(),
                 this.arrowVectorVariable.read(),
                 "get",
                 new Java.Rvalue[] {
                         this.indexVariable.read()
+                }
+        );
+    }
+
+    /**
+     * Method performing code generation to read the value of the variable represented by {@code this}
+     * while performing an optimised read for a fixed length binary value. It is the callers
+     * responsibility to only invoke this method for the appropriate vector types.
+     * @param byteArrayCacheName The name of the byte array cache variable to use for the read.
+     */
+    public Java.Rvalue readFixedLengthOptimised(String byteArrayCacheName) {
+        return createMethodInvocation(
+                getLocation(),
+                createAmbiguousNameRef(getLocation(), "ArrowOptimisations"),
+                "getFixedSizeBinaryValue",
+                new Java.Rvalue[] {
+                        this.arrowVectorVariable.read(),
+                        this.indexVariable.read(),
+                        createAmbiguousNameRef(getLocation(), byteArrayCacheName)
+                }
+        );
+    }
+
+    /**
+     * Method performing code generation to read the value of the variable represented by {@code this}
+     * while performing an optimised read for a varchar binary value. It is the callers
+     * responsibility to only invoke this method for the appropriate vector types.
+     * @param byteArrayCachesName The name of the variable with the byte array caches to use for the read.
+     */
+    public Java.Rvalue readVarCharOptimised(String byteArrayCachesName) {
+        return createMethodInvocation(
+                getLocation(),
+                createAmbiguousNameRef(getLocation(), "ArrowOptimisations"),
+                "getVarCharBinaryValue",
+                new Java.Rvalue[] {
+                        this.arrowVectorVariable.read(),
+                        this.indexVariable.read(),
+                        createAmbiguousNameRef(getLocation(), byteArrayCachesName)
                 }
         );
     }

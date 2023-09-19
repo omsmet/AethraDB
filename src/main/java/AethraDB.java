@@ -1,6 +1,8 @@
 import evaluation.codegen.GeneratedQuery;
 import evaluation.codegen.QueryCodeGenerator;
 import evaluation.codegen.QueryTranslator;
+import evaluation.codegen.infrastructure.context.CodeGenContext;
+import evaluation.codegen.infrastructure.context.OptimisationContext;
 import evaluation.codegen.operators.CodeGenOperator;
 import evaluation.codegen.operators.QueryResultCountOperator;
 import evaluation.codegen.operators.QueryResultPrinterOperator;
@@ -128,6 +130,10 @@ public class AethraDB {
             System.out.println();
         }
 
+        // Create the contexts required for code generation
+        CodeGenContext cCtx = new CodeGenContext(database);
+        OptimisationContext oCtx = new OptimisationContext();
+
         // Generate code for the query which prints the result to the standard output
         // while summarising the result if necessary
         boolean shouldSummarise = cmdArguments.hasOption(summariseAsCount);
@@ -136,7 +142,7 @@ public class AethraDB {
         if (shouldSummarise)
             queryRootOperator = new QueryResultCountOperator(logicalQueryPlan, queryRootOperator);
         CodeGenOperator<?> printOperator = new QueryResultPrinterOperator(queryRootOperator.getLogicalSubplan(), queryRootOperator);
-        QueryCodeGenerator queryCodeGenerator = new QueryCodeGenerator(printOperator, useVectorisedProcessing);
+        QueryCodeGenerator queryCodeGenerator = new QueryCodeGenerator(cCtx, oCtx, printOperator, useVectorisedProcessing);
 
         GeneratedQuery generatedQuery;
         try {

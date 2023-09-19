@@ -68,6 +68,7 @@ import static evaluation.codegen.infrastructure.janino.JaninoVariableGen.createS
 import static evaluation.codegen.infrastructure.janino.JaninoVariableGen.createVariableAdditionAssignmentStm;
 import static evaluation.codegen.infrastructure.janino.JaninoVariableGen.createVariableAssignmentStm;
 import static evaluation.codegen.infrastructure.janino.JaninoVariableGen.createVariableXorAssignmentStm;
+import static evaluation.general_support.hashmaps.CommonMapGenerator.createMapAssignmentRValue;
 
 /**
  * This class provides methods to generate a hash-map implementation for mapping some primitive type
@@ -610,7 +611,7 @@ public class KeyValueMapGenerator {
         //     if (this.keys_ord_0.length == index)
         //         growArrays();
         //     $ for each key ord j $
-        //     this.keys_ord_j[index] = key_j;
+        //     this.keys_ord_j[index] = key_j; <-- Note this assignment is slightly different for byte[]
         // }
         ScalarVariableAccessPath newEntryAP = new ScalarVariableAccessPath("newEntry", P_BOOLEAN);
         incrementForKeyMethodBody.add(
@@ -680,7 +681,7 @@ public class KeyValueMapGenerator {
                                     ),
                                     indexAP.read()
                             ),
-                            createAmbiguousNameRef(getLocation(), formalParameters[i].name)
+                            createMapAssignmentRValue( this.keyTypes[i], formalParameters[i].name, allocateIndexBody)
                     )
             );
         }

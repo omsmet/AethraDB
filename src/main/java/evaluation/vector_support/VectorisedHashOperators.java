@@ -1,5 +1,6 @@
 package evaluation.vector_support;
 
+import evaluation.general_support.ArrowOptimisations;
 import evaluation.general_support.hashmaps.Char_Arr_Hash_Function;
 import evaluation.general_support.hashmaps.Double_Hash_Function;
 import evaluation.general_support.hashmaps.Int_Hash_Function;
@@ -392,12 +393,16 @@ public class VectorisedHashOperators extends VectorisedOperators  {
             org.apache.arrow.vector.FixedSizeBinaryVector keyVector,
             boolean extend
     ) {
+        byte[] byte_array_cache = getByteArrayCache(keyVector.getByteWidth());
+
         if (!extend) {
             for (int i = 0; i < keyVector.getValueCount(); i++)
-                preHashKeyVector[i] = Char_Arr_Hash_Function.preHash(keyVector.get(i));
+                preHashKeyVector[i] = Char_Arr_Hash_Function.preHash(
+                        ArrowOptimisations.getFixedSizeBinaryValue(keyVector, i, byte_array_cache));
         } else {
             for (int i = 0; i < keyVector.getValueCount(); i++)
-                preHashKeyVector[i] ^= Char_Arr_Hash_Function.preHash(keyVector.get(i));
+                preHashKeyVector[i] ^= Char_Arr_Hash_Function.preHash(
+                        ArrowOptimisations.getFixedSizeBinaryValue(keyVector, i, byte_array_cache));
         }
     }
 
@@ -470,15 +475,20 @@ public class VectorisedHashOperators extends VectorisedOperators  {
             int selectionVectorLength,
             boolean extend
     ) {
+        byte[] byte_array_cache = getByteArrayCache(keyVector.getByteWidth());
+
         if (!extend) {
             for (int i = 0; i < selectionVectorLength; i++) {
                 int recordIndex = selectionVector[i];
-                preHashKeyVector[recordIndex] = Char_Arr_Hash_Function.preHash(keyVector.get(recordIndex));
+                preHashKeyVector[recordIndex] = Char_Arr_Hash_Function.preHash(
+                        ArrowOptimisations.getFixedSizeBinaryValue(keyVector, recordIndex, byte_array_cache)
+                );
             }
         } else {
             for (int i = 0; i < selectionVectorLength; i++) {
                 int recordIndex = selectionVector[i];
-                preHashKeyVector[recordIndex] ^= Char_Arr_Hash_Function.preHash(keyVector.get(recordIndex));
+                preHashKeyVector[recordIndex] ^= Char_Arr_Hash_Function.preHash(
+                        ArrowOptimisations.getFixedSizeBinaryValue(keyVector, recordIndex, byte_array_cache));
             }
         }
     }
@@ -568,14 +578,18 @@ public class VectorisedHashOperators extends VectorisedOperators  {
             int validityMaskLength,
             boolean extend
     ) {
+        byte[] byte_array_cache = getByteArrayCache(keyVector.getByteWidth());
+
         if (!extend) {
             for (int i = 0; i < keyVector.getValueCount(); i++)
                 if (validityMask[i])
-                    preHashKeyVector[i] = Char_Arr_Hash_Function.preHash(keyVector.get(i));
+                    preHashKeyVector[i] = Char_Arr_Hash_Function.preHash(
+                            ArrowOptimisations.getFixedSizeBinaryValue(keyVector, i, byte_array_cache));
         } else {
             for (int i = 0; i < keyVector.getValueCount(); i++)
                 if (validityMask[i])
-                    preHashKeyVector[i] ^= Char_Arr_Hash_Function.preHash(keyVector.get(i));
+                    preHashKeyVector[i] ^= Char_Arr_Hash_Function.preHash(
+                            ArrowOptimisations.getFixedSizeBinaryValue(keyVector, i, byte_array_cache));
         }
     }
 

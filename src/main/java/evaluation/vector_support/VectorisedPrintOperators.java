@@ -1,5 +1,7 @@
 package evaluation.vector_support;
 
+import evaluation.general_support.ArrowOptimisations;
+
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 
@@ -32,11 +34,14 @@ public class VectorisedPrintOperators extends VectorisedOperators {
      * @param vector The vector to output.
      */
     public static void print(org.apache.arrow.vector.FixedSizeBinaryVector vector) {
+        byte[] byte_array_cache = getByteArrayCache(vector.getByteWidth());
+
         System.out.print("[");
         int lastVectorIndex = vector.getValueCount() - 1;
-        for (int i = 0; i < lastVectorIndex; i++)
-            System.out.print(new String(vector.get(i)) + ", ");
-        System.out.println(new String(vector.get(lastVectorIndex)) + "]");
+        for (int i = 0; i < lastVectorIndex; i++) {
+            System.out.print(new String(ArrowOptimisations.getFixedSizeBinaryValue(vector, i, byte_array_cache)) + ", ");
+        }
+        System.out.println(new String(ArrowOptimisations.getFixedSizeBinaryValue(vector, lastVectorIndex, byte_array_cache)) + "]");
     }
 
     /**

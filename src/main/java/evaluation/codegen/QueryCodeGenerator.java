@@ -77,28 +77,31 @@ public class QueryCodeGenerator extends SimpleCompiler {
 
     /**
      * Creates a {@link QueryCodeGenerator} instance for a specific query.
+     * @param cCtx The {@link CodeGenContext} to use for the query code generation.
+     * @param oCtx The {@link OptimisationContext} to use for the query code generation.
      * @param rootOperator The root operator of the query for which we need to perform code generation.
      * @param useVectorised Whether to use the vectorised produce method on the root operator.
      */
-    public QueryCodeGenerator(CodeGenOperator<?> rootOperator, boolean useVectorised) {
+    public QueryCodeGenerator(
+            CodeGenContext cCtx, OptimisationContext oCtx, CodeGenOperator<?> rootOperator, boolean useVectorised) {
         // Perform SimpleCompiler constructor
         super();
 
         // Initialise member variables
         this.rootOperator = rootOperator;
         this.rootOperatorVectorised = useVectorised;
-        this.cCtx = new CodeGenContext();
-        this.oCtx = new OptimisationContext();
+        this.cCtx = cCtx;
+        this.oCtx = oCtx;
         this.generated = false;
         this.generatedQuery = null;
         this.generatedQueryClassName = "GeneratedQuery_" + rootOperator.hashCode();
         this.defaultImports = new String[] {
                 "evaluation.codegen.infrastructure.data.ArrowTableReader",
 
+                "evaluation.general_support.ArrowOptimisations",
                 "evaluation.general_support.hashmaps.Double_Hash_Function",
                 "evaluation.general_support.hashmaps.Int_Hash_Function",
                 "evaluation.general_support.hashmaps.Char_Arr_Hash_Function",
-                "evaluation.general_support.hashmaps.Simple_Int_Long_Map",
 
                 "evaluation.non_vector_support.LikeOperatorPrimitives",
 
@@ -150,8 +153,8 @@ public class QueryCodeGenerator extends SimpleCompiler {
         );
 
         // Add a constructor matching the GeneratedQuery super-constructor
-        // public GeneratedQueryClass(CodeGenContext cCtx) {
-        //     super(cCtx);
+        // public GeneratedQueryClass(CodeGenContext cCtx, OptimisationContext oCtx) {
+        //     super(cCtx, oCtx);
         // }
         String cCtxParamName = "cCtx";
         String oCtxParamName = "oCtx";

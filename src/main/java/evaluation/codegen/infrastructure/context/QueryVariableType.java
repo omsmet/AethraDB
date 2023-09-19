@@ -86,7 +86,6 @@ public enum QueryVariableType {
     MEMORY_SEGMENT_INT,
 
     // Complex types
-    MAP_INT_LONG_SIMPLE,
     MAP_GENERATED,
 
 }

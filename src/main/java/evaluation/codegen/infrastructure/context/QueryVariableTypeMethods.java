@@ -245,28 +245,6 @@ public final class QueryVariableTypeMethods {
     }
 
     /**
-     * Method to get the key type for a given map type.
-     */
-    public static QueryVariableType keyTypeForMap(QueryVariableType mapType) {
-        return switch (mapType) {
-            case MAP_INT_LONG_SIMPLE -> P_INT;
-            default ->
-                    throw new IllegalArgumentException("keyTypeForMap expects a map type");
-        };
-    }
-
-    /**
-     * Method to get the value type for a given map type.
-     */
-    public static QueryVariableType valueTypeForMap(QueryVariableType mapType) {
-        return switch (mapType) {
-            case MAP_INT_LONG_SIMPLE -> P_LONG;
-            default ->
-                    throw new IllegalArgumentException("valueTypeForMap expects a map type");
-        };
-    }
-
-    /**
      * Method for converting a {@link QueryVariableType} to a {@link Java.Type} instance.
      * @param location The location where the type is requested for generation.
      * @param type The type to convert.
@@ -308,8 +286,6 @@ public final class QueryVariableTypeMethods {
             case VECTOR_MASK_INT -> createReferenceType(location, "jdk.incubator.vector.VectorMask", "Integer");
 
             case VECTOR_INT_MASKED -> createReferenceType(location, "jdk.incubator.vector.IntVector");
-
-            case MAP_INT_LONG_SIMPLE -> createReferenceType(location, "Simple_Int_Long_Map");
 
             default -> throw new UnsupportedOperationException(
                     "toJavaType does not currently support this type " + type);

@@ -110,7 +110,7 @@ public class ResultPackageOperator extends CodeGenOperator<RelNode> {
                 createVariableAssignmentStm(
                         getLocation(),
                         createArrayElementAccessExpr(getLocation(), this.keyArrayAP.read(), this.resultArrayIndexVariableAP.read()),
-                        getRValueFromAccessPathNonVec(cCtx, 0, codeGenResult)
+                        getRValueFromOrdinalAccessPathNonVec(cCtx, 0, codeGenResult)
                 ));
 
         // [this.col2SumArrayAP.read()][this.resultArrayIndexVariableAP.read()] =
@@ -119,7 +119,7 @@ public class ResultPackageOperator extends CodeGenOperator<RelNode> {
                 createVariableAssignmentStm(
                         getLocation(),
                         createArrayElementAccessExpr(getLocation(), this.col2SumArrayAP.read(), this.resultArrayIndexVariableAP.read()),
-                        getRValueFromAccessPathNonVec(cCtx, 1, codeGenResult)
+                        getRValueFromOrdinalAccessPathNonVec(cCtx, 1, codeGenResult)
                 ));
 
         // [this.col3SumArrayAP.read()][this.resultArrayIndexVariableAP.read()] =
@@ -128,7 +128,7 @@ public class ResultPackageOperator extends CodeGenOperator<RelNode> {
                 createVariableAssignmentStm(
                         getLocation(),
                         createArrayElementAccessExpr(getLocation(), this.col3SumArrayAP.read(), this.resultArrayIndexVariableAP.read()),
-                        getRValueFromAccessPathNonVec(cCtx, 2, codeGenResult)
+                        getRValueFromOrdinalAccessPathNonVec(cCtx, 2, codeGenResult)
                 ));
 
         // [this.col4SumArrayAP.read()][this.resultArrayIndexVariableAP.read()++] =
@@ -141,7 +141,7 @@ public class ResultPackageOperator extends CodeGenOperator<RelNode> {
                                 this.col4SumArrayAP.read(),
                                 postIncrement(getLocation(), this.resultArrayIndexVariableAP.write())
                         ),
-                        getRValueFromAccessPathNonVec(cCtx, 3, codeGenResult)
+                        getRValueFromOrdinalAccessPathNonVec(cCtx, 3, codeGenResult)
                 ));
 
         // Do not consume the parent operator here, but in the produceNonVec method since this is

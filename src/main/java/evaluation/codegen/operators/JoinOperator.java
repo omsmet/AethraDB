@@ -282,7 +282,7 @@ public class JoinOperator extends CodeGenOperator<LogicalJoin> {
 
         if (!this.useSIMDNonVec(cCtx)) {
             // Obtain the local access path for the key column value
-            Java.Rvalue keyColumnRvalue = getRValueFromAccessPathNonVec(cCtx, buildKeyOrdinal, codeGenResult);
+            Java.Rvalue keyColumnRvalue = getRValueFromOrdinalAccessPathNonVec(cCtx, buildKeyOrdinal, codeGenResult);
             buildKeyAP = cCtx.getCurrentOrdinalMapping().get(buildKeyOrdinal);
 
             // Compute the pre-hash value in a local variable
@@ -303,7 +303,7 @@ public class JoinOperator extends CodeGenOperator<LogicalJoin> {
             // Get the values for the current row
             currentOrdinalMapping = cCtx.getCurrentOrdinalMapping();
             for (int i = 0; i < currentOrdinalMapping.size(); i++)
-                recordColumnValues[i] = getRValueFromAccessPathNonVec(cCtx, i, codeGenResult);
+                recordColumnValues[i] = getRValueFromOrdinalAccessPathNonVec(cCtx, i, codeGenResult);
 
             // Set the correct target
             hashInsertTarget = new Java.Block(getLocation());
@@ -409,7 +409,7 @@ public class JoinOperator extends CodeGenOperator<LogicalJoin> {
         // Probe the hash-table based on the input type
         if (!this.useSIMDNonVec(cCtx)) {
             // Obtain the local access path for the key column value
-            Java.Rvalue keyColumnRvalue = getRValueFromAccessPathNonVec(cCtx, buildKeyOrdinal, codeGenResult);
+            Java.Rvalue keyColumnRvalue = getRValueFromOrdinalAccessPathNonVec(cCtx, buildKeyOrdinal, codeGenResult);
             buildKeyAP = cCtx.getCurrentOrdinalMapping().get(buildKeyOrdinal);
 
             // Compute the pre-hash value in a local variable
@@ -430,7 +430,7 @@ public class JoinOperator extends CodeGenOperator<LogicalJoin> {
 
             // Prepare the statements for obtaining the local access paths for the right-hand join columns
             for (int i = 0; i < rightHandOrdinalMappings.size(); i++) {
-                getRValueFromAccessPathNonVec(cCtx, i, localRightHandAPsInitialisationStatements);
+                getRValueFromOrdinalAccessPathNonVec(cCtx, i, localRightHandAPsInitialisationStatements);
                 localRightHandAPs.add(i, cCtx.getCurrentOrdinalMapping().get(i));
             }
 

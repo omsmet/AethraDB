@@ -8,6 +8,7 @@ import evaluation.codegen.infrastructure.data.BufferPoolAllocationManager;
 import org.apache.arrow.memory.RootAllocator;
 import org.apache.calcite.util.Pair;
 import org.codehaus.janino.Java;
+import util.arrow.ArrowDatabase;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -25,6 +26,11 @@ import static evaluation.codegen.infrastructure.janino.JaninoVariableGen.createL
  * during execution.
  */
 public class CodeGenContext implements AutoCloseable {
+
+    /**
+     * The {@link ArrowDatabase} over which the generated query code is to be executed.
+     */
+    private final ArrowDatabase database;
 
     /**
      * Stack for keeping track of the defined variables at different stages of the code generation process.
@@ -84,8 +90,11 @@ public class CodeGenContext implements AutoCloseable {
 
     /**
      * Creates a new empty {@link CodeGenContext} instance.
+     * @param arrowDatabase The database over which the generated query code is to be executed.
      */
-    public CodeGenContext() {
+    public CodeGenContext(ArrowDatabase arrowDatabase) {
+        this.database = arrowDatabase;
+
         this.definedVariables = new Stack<>();
         this.currentDefinedVariables = new HashSet<>();
 
@@ -103,6 +112,13 @@ public class CodeGenContext implements AutoCloseable {
         this.arrowTableReaders = new ArrayList<>();
         this.allocationManager = new BufferPoolAllocationManager(8);
         this.resultConsumptionTarget = null;
+    }
+
+    /**
+     * Method for accessing the database over which the query is to be executed.
+     */
+    public ArrowDatabase getDatabase() {
+        return this.database;
     }
 
     /**

@@ -92,7 +92,7 @@ public class QueryResultPrinterOperator extends CodeGenOperator<RelNode> {
         for (int i = 0; i < currentOrdinalMapping.size(); i++) {
             boolean lastElement = (i == currentOrdinalMapping.size() - 1);
             String methodName = lastElement ? "println" : "print";
-            Java.Rvalue printValue = getRValueFromAccessPathNonVec(cCtx, i, codegenResult);
+            Java.Rvalue printValue = getRValueFromOrdinalAccessPathNonVec(cCtx, i, codegenResult);
 
             // Convert fixed length strings
             QueryVariableType ordinalType = cCtx.getCurrentOrdinalMapping().get(i).getType();

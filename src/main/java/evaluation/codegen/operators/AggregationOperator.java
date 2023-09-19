@@ -464,7 +464,7 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
                                     createVariableAdditionAssignmentStm(
                                             getLocation(),
                                             ((ScalarVariableAccessPath) this.aggregationStateVariables[i]).write(),
-                                            iaveap.read()
+                                            iaveap.readGeneric() // Read generic is applicable since this case will only occur for numeric columns
                                     ));
 
                         } else if (useSIMD && inputOrdinalAP instanceof SIMDLoopAccessPath slap) {
@@ -553,7 +553,7 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
                 Java.Rvalue[] keyColumnRValues = new Java.Rvalue[this.groupByKeyColumnIndices.length];
                 keyColumnAccessPaths = new AccessPath[keyColumnRValues.length];
                 for (int i = 0; i < keyColumnRValues.length; i++) {
-                    keyColumnRValues[i] = getRValueFromAccessPathNonVec(cCtx, this.groupByKeyColumnIndices[i], codeGenResult);
+                    keyColumnRValues[i] = getRValueFromOrdinalAccessPathNonVec(cCtx, this.groupByKeyColumnIndices[i], codeGenResult);
                     keyColumnAccessPaths[i] = cCtx.getCurrentOrdinalMapping().get(this.groupByKeyColumnIndices[i]);
                 }
 
@@ -606,7 +606,7 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
                     if (currentFunction == AggregationFunction.G_COUNT) {
                         aggregationValues[i] = createIntegerLiteral(getLocation(), 1);
                     } else if (currentFunction == AggregationFunction.G_SUM) {
-                        aggregationValues[i] = this.getRValueFromAccessPathNonVec(cCtx, this.aggregationFunctionInputOrdinals[i][0], codeGenResult);
+                        aggregationValues[i] = this.getRValueFromOrdinalAccessPathNonVec(cCtx, this.aggregationFunctionInputOrdinals[i][0], codeGenResult);
                     }
 
                     // No other possibilities due to the constructor

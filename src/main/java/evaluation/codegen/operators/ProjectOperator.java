@@ -229,7 +229,7 @@ public class ProjectOperator extends CodeGenOperator<LogicalProject> {
                 if (lhopResult instanceof ScalarVariableAccessPath lhopResultSVAP)
                     lhsRValue = lhopResultSVAP.read();
                 else if (lhopResult instanceof IndexedArrowVectorElementAccessPath lhopResultIAVEA)
-                    lhsRValue = lhopResultIAVEA.read();
+                    lhsRValue = getRValueFromAccessPathNonVec(cCtx, lhopResultIAVEA, codeGenResult).left;
                 else
                     throw new UnsupportedOperationException(
                             "ProjectionOperator.createNonVecComputation does not support this lhopResult AccessPath");
@@ -237,7 +237,7 @@ public class ProjectOperator extends CodeGenOperator<LogicalProject> {
                 if (rhopResult instanceof ScalarVariableAccessPath rhopResultSVAP)
                     rhsRValue = rhopResultSVAP.read();
                 else if (rhopResult instanceof IndexedArrowVectorElementAccessPath rhopResultIAVEA)
-                    rhsRValue = rhopResultIAVEA.read();
+                    rhsRValue = getRValueFromAccessPathNonVec(cCtx, rhopResultIAVEA, codeGenResult).left;
                 else
                     throw new UnsupportedOperationException(
                             "ProjectionOperator.createNonVecComputation does not support this rhopResult AccessPath");
@@ -403,7 +403,7 @@ public class ProjectOperator extends CodeGenOperator<LogicalProject> {
                     "ProjectOperator.createNonVecComputationCode expects the second operand of an EXTRACT to be an input reference");
 
             // Generate the code for extracting the year
-            Java.Rvalue baseValue = getRValueFromAccessPathNonVec(cCtx, baseValueRef.getIndex(), codeGenResult);
+            Java.Rvalue baseValue = getRValueFromOrdinalAccessPathNonVec(cCtx, baseValueRef.getIndex(), codeGenResult);
             ScalarVariableAccessPath extractedYearAP = new ScalarVariableAccessPath(
                     cCtx.defineVariable("extractedYear"), P_INT);
             codeGenResult.add(

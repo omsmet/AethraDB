@@ -66,6 +66,7 @@ import static evaluation.codegen.infrastructure.janino.JaninoOperatorGen.sub;
 import static evaluation.codegen.infrastructure.janino.JaninoVariableGen.createLocalVariable;
 import static evaluation.codegen.infrastructure.janino.JaninoVariableGen.createSimpleVariableDeclaration;
 import static evaluation.codegen.infrastructure.janino.JaninoVariableGen.createVariableAssignmentStm;
+import static evaluation.general_support.hashmaps.CommonMapGenerator.createMapAssignmentRValue;
 
 /**
  * This class provides methods to generate a hash-map implementation for mapping some primitive type
@@ -624,7 +625,7 @@ public class KeyMultiRecordMapGenerator {
         //     index = this.numberOfRecords++;
         //     if (this.keys.length == index)
         //         growArrays();
-        //     this.keys[index] = key;
+        //     this.keys[index] = key; <-- Note this assignment is slightly different for byte[]
         // }
         ScalarVariableAccessPath newEntryAP = new ScalarVariableAccessPath("newEntry", P_BOOLEAN);
         associateMethodBody.add(
@@ -693,7 +694,7 @@ public class KeyMultiRecordMapGenerator {
                                 ),
                                 indexAP.read()
                         ),
-                        createAmbiguousNameRef(getLocation(), formalParameters[0].name)
+                        createMapAssignmentRValue(this.keyType, formalParameters[0].name, allocateIndexBody)
                 )
         );
 
@@ -847,7 +848,7 @@ public class KeyMultiRecordMapGenerator {
         }
 
         // Insert the record values and increment the correct record count
-        // this.values_record_ord_i[index][insertion_index] = record_ord_i;
+        // this.values_record_ord_i[index][insertion_index] = record_ord_i; <-- Need to take care with byte arrays
         for (int i = 0; i < valueVariableNames.length; i++) {
             associateMethodBody.add(
                     createVariableAssignmentStm(
@@ -861,7 +862,7 @@ public class KeyMultiRecordMapGenerator {
                                     ),
                                     insertionIndexAP.read()
                             ),
-                            createAmbiguousNameRef(getLocation(), formalParameters[i + 2].name)
+                            createMapAssignmentRValue(this.valueTypes[i], formalParameters[i + 2].name, associateMethodBody)
                     )
             );
         }

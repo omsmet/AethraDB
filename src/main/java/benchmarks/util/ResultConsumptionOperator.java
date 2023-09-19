@@ -69,7 +69,7 @@ public class ResultConsumptionOperator extends CodeGenOperator<RelNode> {
             if (currentOrdinalMapping.get(i) instanceof ArrayAccessPath aap) { // ResultConsumptionOperator specific pattern
                 resultValue = aap.read();
             } else { // Pattern which can occur in query processing too
-                resultValue = getRValueFromAccessPathNonVec(cCtx, i, codegenResult);
+                resultValue = getRValueFromOrdinalAccessPathNonVec(cCtx, i, codegenResult);
             }
 
             codegenResult.add(

@@ -19,6 +19,7 @@ import org.apache.calcite.schema.Table;
 import org.apache.calcite.sql.SqlNode;
 import org.apache.calcite.sql.parser.SqlParseException;
 import org.apache.calcite.sql.parser.SqlParser;
+import org.apache.calcite.sql.type.BasicSqlType;
 import org.apache.calcite.tools.FrameworkConfig;
 import org.apache.calcite.tools.Frameworks;
 import org.apache.calcite.tools.Planner;
@@ -26,6 +27,8 @@ import org.apache.calcite.tools.RelConversionException;
 import org.apache.calcite.tools.ValidationException;
 
 import java.util.Objects;
+
+import static org.apache.calcite.sql.type.SqlTypeName.VARCHAR;
 
 /**
  * Class used for representing a database over a directory of Arrow files by exposing methods for
@@ -54,6 +57,16 @@ public class ArrowDatabase {
     private final HepPlanner hepPlanner;
 
     /**
+     * Boolean indicating whether the maximum varchar length of the database has already been determined.
+     */
+    private boolean maxVarCharLengthValid;
+
+    /**
+     * Variable indicating the largest length of any varchar column in the database represented by {@code this}.
+     */
+    private int maxVarCharLength;
+
+    /**
      * Constructs a new {@link ArrowDatabase} instance.
      * @param databaseDirectoryPath The directory from which the database should be loaded.
      */
@@ -72,6 +85,32 @@ public class ArrowDatabase {
 
         // Configure the HEP optimiser
         this.hepPlanner = configureOptimiser();
+
+        // Initialise utility variables
+        this.maxVarCharLengthValid = false;
+        this.maxVarCharLength = -1;
+    }
+
+    /**
+     * Method which returns the maximum varchar column length in the database, or -1 if no varchar
+     * column exists in the schema.
+     * @return The maximum varchar column length in the database, or -1 if no varchar column exists.
+     */
+    public int getMaximumVarCharColumnLength() {
+        if (this.maxVarCharLengthValid)
+            return this.maxVarCharLength;
+
+        // Determine the actual max varchar length
+        int resultLength = -1;
+
+        // TODO: Arrow varchar vectors to not encode their maximum length, deal with this properly
+        // The returned value thus is optimised for the TPC-H experiment, whose maximum varchar
+        // column has length 199
+        resultLength = 200;
+
+        this.maxVarCharLengthValid = true;
+        this.maxVarCharLength = resultLength;
+        return resultLength;
     }
 
     /**

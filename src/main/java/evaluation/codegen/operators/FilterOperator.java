@@ -472,7 +472,7 @@ public class FilterOperator extends CodeGenOperator<LogicalFilter> {
         if (operand instanceof RexInputRef inputRef) {
             // RexInputRefs refer to a specific ordinal position in the result of the previous operator
             int ordinalIndex = inputRef.getIndex();
-            return getRValueFromAccessPathNonVec(cCtx, ordinalIndex, target);
+            return getRValueFromOrdinalAccessPathNonVec(cCtx, ordinalIndex, target);
 
         } else if (operand.getType().getSqlTypeName() == SqlTypeName.DATE) {
             // We assume that all dates are always given in unix days, so we translate

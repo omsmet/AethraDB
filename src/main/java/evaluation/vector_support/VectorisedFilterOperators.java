@@ -1,5 +1,6 @@
 package evaluation.vector_support;
 
+import evaluation.general_support.ArrowOptimisations;
 import jdk.incubator.vector.VectorMask;
 import jdk.incubator.vector.VectorOperators;
 import jdk.incubator.vector.VectorSpecies;
@@ -1193,10 +1194,12 @@ public class VectorisedFilterOperators extends VectorisedOperators {
 
     public static int eq(org.apache.arrow.vector.FixedSizeBinaryVector vector, byte[] condition, int[] selectionVector) {
         assert vector.getByteWidth() == condition.length;
+
+        byte[] byte_array_cache = getByteArrayCache(vector.getByteWidth());
         int selectionVectorIndex = 0;
 
         for (int i = 0; i < vector.getValueCount(); i++) {
-            if (Arrays.equals(vector.get(i), condition))
+            if (Arrays.equals(ArrowOptimisations.getFixedSizeBinaryValue(vector, i, byte_array_cache), condition))
                 selectionVector[selectionVectorIndex++] = i;
         }
 
@@ -1205,10 +1208,12 @@ public class VectorisedFilterOperators extends VectorisedOperators {
 
     public static int eq(org.apache.arrow.vector.FixedSizeBinaryVector vector, byte[] condition, boolean[] validityMask) {
         assert vector.getByteWidth() == condition.length;
+
+        byte[] byte_array_cache = getByteArrayCache(vector.getByteWidth());
         int vectorLength = vector.getValueCount();
 
         for (int i = 0; i < vectorLength; i++) {
-            validityMask[i] = Arrays.equals(vector.get(i), condition);
+            validityMask[i] = Arrays.equals(ArrowOptimisations.getFixedSizeBinaryValue(vector, i, byte_array_cache), condition);
         }
 
         return vectorLength;

@@ -1,6 +1,5 @@
 package evaluation.codegen.infrastructure.data;
 
-import evaluation.general_support.hashmaps.Simple_Int_Long_Map;
 import evaluation.vector_support.VectorisedOperators;
 
 /**
@@ -62,16 +61,6 @@ public class BufferPoolAllocationManager extends AllocationManager {
     private int nextNestedByteVectorIndex;
 
     /**
-     * Buffer of {@link Simple_Int_Long_Map} instances.
-     */
-    private Simple_Int_Long_Map[] intLongMaps;
-
-    /**
-     * The index of the next {@link Simple_Int_Long_Map} instance to return on request.
-     */
-    private int nextIntLongMapIndex;
-
-    /**
      * Create a {@link BufferPoolAllocationManager} instance where all buffers have a given initial capacity.
      * @param initialBufferCapacity The initial capacity that all buffers should have.
      */
@@ -95,10 +84,6 @@ public class BufferPoolAllocationManager extends AllocationManager {
         // Setup nested byte vectors
         this.nestedByteVectors = new byte[initialBufferCapacity][][];
         this.nextNestedByteVectorIndex = 0;
-
-        // Setup the Simple_Int_Long_Map instances
-        this.intLongMaps = new Simple_Int_Long_Map[initialBufferCapacity];
-        this.nextIntLongMapIndex = 0;
 
         // Create all buffer elements cleanly
         this.performMaintenance();
@@ -135,12 +120,6 @@ public class BufferPoolAllocationManager extends AllocationManager {
             this.nestedByteVectors[i] = new byte[VectorisedOperators.VECTOR_LENGTH][];
         }
         this.nextNestedByteVectorIndex = 0;
-
-        // Maintain the int -> long maps
-        for (int i = 0; i < this.intLongMaps.length; i++) {
-            this.intLongMaps[i] = new Simple_Int_Long_Map(this.defaultSimpleIntLongMapCapacity);
-        }
-        this.nextIntLongMapIndex = 0;
     }
 
     @Override
@@ -243,23 +222,4 @@ public class BufferPoolAllocationManager extends AllocationManager {
         // to performMaintenance()
     }
 
-    @Override
-    public Simple_Int_Long_Map getSimpleIntLongMap() {
-        // Check if we need to grow the buffer of int -> long maps
-        if (this.nextIntLongMapIndex >= this.intLongMaps.length) {
-            Simple_Int_Long_Map[] newIntLongMaps = new Simple_Int_Long_Map[this.intLongMaps.length * 2];
-            System.arraycopy(this.intLongMaps, 0, newIntLongMaps, 0, this.intLongMaps.length);
-            for (int i = this.intLongMaps.length; i < newIntLongMaps.length; i++)
-                newIntLongMaps[i] = new Simple_Int_Long_Map(this.defaultSimpleIntLongMapCapacity);
-            this.intLongMaps = newIntLongMaps;
-        }
-
-        return this.intLongMaps[this.nextIntLongMapIndex++];
-    }
-
-    @Override
-    public void release(Simple_Int_Long_Map map) {
-        // Do nothing as all map instances will be cleaned at the end of the query via the call to
-        // performMaintenance()
-    }
 }

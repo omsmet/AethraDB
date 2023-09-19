@@ -5,13 +5,13 @@ import evaluation.codegen.infrastructure.context.OptimisationContext;
 import evaluation.codegen.infrastructure.context.QueryVariableType;
 import evaluation.codegen.infrastructure.context.access_path.AccessPath;
 import evaluation.codegen.infrastructure.context.access_path.IndexedArrowVectorElementAccessPath;
-import evaluation.codegen.infrastructure.context.access_path.IndexedMapAccessPath;
 import evaluation.codegen.infrastructure.context.access_path.SIMDLoopAccessPath;
 import evaluation.codegen.infrastructure.context.access_path.ScalarVariableAccessPath;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rex.RexLiteral;
 import org.apache.calcite.sql.type.BasicSqlType;
 import org.apache.calcite.util.NlsString;
+import org.apache.calcite.util.Pair;
 import org.codehaus.janino.Java;
 
 import java.math.BigDecimal;
@@ -20,11 +20,16 @@ import java.util.List;
 import java.util.Objects;
 
 import static evaluation.codegen.infrastructure.context.QueryVariableTypeMethods.toJavaType;
+import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createAmbiguousNameRef;
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createFloatingPointLiteral;
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createInitialisedByteArray;
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createIntegerLiteral;
+import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createNestedPrimitiveArrayType;
+import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createNew2DPrimitiveArray;
+import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createPrimitiveArrayType;
 import static evaluation.codegen.infrastructure.janino.JaninoGeneralGen.getLocation;
 import static evaluation.codegen.infrastructure.janino.JaninoVariableGen.createLocalVariable;
+import static evaluation.codegen.infrastructure.janino.JaninoVariableGen.createVariableAssignmentStm;
 
 /**
  * Class that is extended by all code generator operators.
@@ -187,62 +192,128 @@ public abstract class CodeGenOperator<T extends RelNode> {
     }
 
     /**
-     * Method to retrieve a {@link Java.Rvalue} for a non-vector {@link AccessPath}.
+     * Method to retrieve a {@link Java.Rvalue} for a non-vector {@link AccessPath} which is an
+     * ordinal of the current {@link CodeGenContext} ordinal mapping.
      * @param cCtx The {@link CodeGenContext} to use during the generation.
-     * @param accessPathIndex The index in {@code cCtx.getCurrentOrdinalMapping()} of the
-     *                        {@link AccessPath} to generate the {@link Java.Rvalue} for. Must be
-     *                        a non-vector type.
+     * @param ordinalIndex The ordinal index in {@code cCtx.getCurrentOrdinalMapping()} of the
+     *                     {@link AccessPath} to generate the {@link Java.Rvalue} for.
      * @param codegenTarget The current list of statements being generated to perform allocations of
      *                      variables if necessary for creating the {@link Java.Rvalue}.
      * @return The {@link Java.Rvalue} corresponding to {@code accessPath}.
      */
-    protected Java.Rvalue getRValueFromAccessPathNonVec(
+    protected Java.Rvalue getRValueFromOrdinalAccessPathNonVec(
             CodeGenContext cCtx,
-            int accessPathIndex,
+            int ordinalIndex,
             List<Java.Statement> codegenTarget
     ) {
-        AccessPath accessPath = cCtx.getCurrentOrdinalMapping().get(accessPathIndex);
+        // Get the access path from the ordinal mapping
+        AccessPath accessPath = cCtx.getCurrentOrdinalMapping().get(ordinalIndex);
 
+        // Convert it by possibly allocating a local variable
+        Pair<Java.Rvalue, ScalarVariableAccessPath> accessPathConversionResult =
+                getRValueFromAccessPathNonVec(cCtx, accessPath, codegenTarget);
+
+        // Update the ordinal mapping with the possibly new local variable
+        cCtx.getCurrentOrdinalMapping().set(ordinalIndex, accessPathConversionResult.right);
+
+        // Return the r-value corresponding to the requested ordinal (via the potentially new variable)
+        return accessPathConversionResult.left;
+    }
+
+    /**
+     * Method to retrieve a {@link Java.Rvalue} for a non-vector {@link AccessPath}.
+     * @param cCtx The {@link CodeGenContext} to use during the generation.
+     * @param accessPath The {@link AccessPath} to generate the {@link Java.Rvalue} for.
+     * @param codegenTarget The current list of statements being generated to perform allocations of
+     *                      variables if necessary for creating the {@link Java.Rvalue}.
+     * @return The {@link Java.Rvalue} corresponding to {@code accessPath}.
+     */
+    protected Pair<Java.Rvalue, ScalarVariableAccessPath> getRValueFromAccessPathNonVec(
+            CodeGenContext cCtx,
+            AccessPath accessPath,
+            List<Java.Statement> codegenTarget
+    ) {
         // Expose the ordinal position value based on the supported type. When the access path is
         // not a simple scalar variable, transform it to reduce method calls where possible.
         if (accessPath instanceof ScalarVariableAccessPath svap) {
-            return svap.read();
+            return new Pair<>(svap.read(), svap);
 
-        } else if (accessPath instanceof IndexedArrowVectorElementAccessPath
-                || accessPath instanceof IndexedMapAccessPath) {
-            QueryVariableType ordinalType;
-            Java.Rvalue variableValue;
-            if (accessPath instanceof IndexedArrowVectorElementAccessPath iaveap) {
-                ordinalType = iaveap.getType();
-                variableValue = iaveap.read();
-            } else { // if (accessPath instanceof IndexedMapAccessPath imap) {
-                IndexedMapAccessPath imap = (IndexedMapAccessPath) accessPath;
-                ordinalType = imap.getType();
-                variableValue = imap.read();
+        } else if (accessPath instanceof IndexedArrowVectorElementAccessPath iaveap) {
+            QueryVariableType ordinalType = iaveap.getType();
+
+            // We allocate a new variable and initialise its value based on whether the read needs
+            // to be optimised or not
+            String operandVariableName;
+            if (ordinalType == QueryVariableType.S_FL_BIN) {
+                // Allocate a global byte array cache variable to avoid allocations (initially null)
+                operandVariableName = cCtx.defineQueryGlobalVariable(
+                        "byte_array_cache",
+                        createPrimitiveArrayType(getLocation(), Java.Primitive.BYTE),
+                        new Java.NullLiteral(getLocation()),
+                        false);
+
+                // Perform an optimised read and assign the returned byte array to the variable
+                // to ensure proper initialisation
+                Java.Rvalue optimisedReadValue = iaveap.readFixedLengthOptimised(operandVariableName);
+                codegenTarget.add(
+                        createVariableAssignmentStm(
+                                getLocation(),
+                                createAmbiguousNameRef(getLocation(), operandVariableName),
+                                optimisedReadValue
+                        )
+                );
+
+            } else if (ordinalType == QueryVariableType.S_VARCHAR) {
+                // Allocate an array of global byte array caches to avoid allocations as much as possible
+                // while keeping the var-charity. The array has space for one byte array cache upto the
+                // maximum var char length in the database
+                int maximumVarCharLength = cCtx.getDatabase().getMaximumVarCharColumnLength();
+                String arrayOfCachesName = cCtx.defineQueryGlobalVariable(
+                        "byte_array_caches",
+                        createNestedPrimitiveArrayType(getLocation(), Java.Primitive.BYTE),
+                        createNew2DPrimitiveArray(
+                                getLocation(),
+                                Java.Primitive.BYTE,
+                                createIntegerLiteral(getLocation(), maximumVarCharLength)
+                        ),
+                        false
+                );
+
+                // Perform an optimised read and assign the returned byte array to a local reference variable
+                operandVariableName = cCtx.defineVariable("ordinal_value");
+                codegenTarget.add(
+                        createLocalVariable(
+                                getLocation(),
+                                toJavaType(getLocation(), ordinalType),
+                                operandVariableName,
+                                iaveap.readVarCharOptimised(arrayOfCachesName)
+                        )
+                );
+
+
+            } else {
+                // Allocate a local variable and assign it the value which is obtained via a generic read
+                operandVariableName = cCtx.defineVariable("ordinal_value");
+                codegenTarget.add(
+                        createLocalVariable(
+                                getLocation(),
+                                toJavaType(getLocation(), ordinalType),
+                                operandVariableName,
+                                iaveap.readGeneric()
+                        )
+                );
+
             }
 
-            // Need to allocate a new variable
-            // [scalar java type] ordinal_value = $arrowVectorVar$.get($indexVar$)
-            String operandVariableName = cCtx.defineVariable("ordinal_value");
-            codegenTarget.add(
-                    createLocalVariable(
-                            getLocation(),
-                            toJavaType(getLocation(), ordinalType),
-                            operandVariableName,
-                            variableValue
-                    )
-            );
-
-            // Update the ordinal access path in the mapping to reflect the allocation of the variable
-            var newOrdinalAccessPath = new ScalarVariableAccessPath(operandVariableName, ordinalType);
-            cCtx.getCurrentOrdinalMapping().set(accessPathIndex, newOrdinalAccessPath);
+            // Update the access path to reflect the allocation of the variable
+            var newAccessPath = new ScalarVariableAccessPath(operandVariableName, ordinalType);
 
             // Return the access path code
-            return newOrdinalAccessPath.read();
+            return new Pair<>(newAccessPath.read(), newAccessPath);
 
         } else {
             throw new IllegalStateException(
-                    "CodeGenOperator.getRValueFromAccessPathNonVec should never receive a vectorised access path");
+                    "CodeGenOperator.getRValueFromAccessPathNonVec does not support the provided access path");
         }
     }
 

@@ -103,7 +103,7 @@ public class BlackHoleGeneratorOperator extends CodeGenOperator<RelNode> {
 
         // Generate the required consumption statements
         for (int i = 0; i < currentOrdinalMapping.size(); i++) {
-            Java.Rvalue consumptionValue = getRValueFromAccessPathNonVec(cCtx, i, codegenResult);
+            Java.Rvalue consumptionValue = getRValueFromOrdinalAccessPathNonVec(cCtx, i, codegenResult);
 
             codegenResult.add(
                     createMethodInvocationStm(
