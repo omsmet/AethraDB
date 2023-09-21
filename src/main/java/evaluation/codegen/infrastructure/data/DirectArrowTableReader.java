@@ -3,7 +3,6 @@ package evaluation.codegen.infrastructure.data;
 import org.apache.arrow.memory.RootAllocator;
 import org.apache.arrow.vector.FieldVector;
 import org.apache.arrow.vector.VectorSchemaRoot;
-import org.apache.arrow.vector.ipc.ArrowFileReader;
 import org.apache.arrow.vector.ipc.ArrowReader;
 import org.apache.calcite.util.ImmutableIntList;
 
@@ -26,7 +25,7 @@ public class DirectArrowTableReader extends ArrowTableReader {
     /**
      * The {@link ArrowReader} used for reading the Arrow file.
      */
-    private ArrowReader arrowReader;
+    private AethraArrowFileReader arrowReader;
 
     /**
      * The {@link VectorSchemaRoot} used for reading the Arrow file.
@@ -51,7 +50,7 @@ public class DirectArrowTableReader extends ArrowTableReader {
             this.specificClose();
 
         this.arrowFileStream = new FileInputStream(this.arrowFile);
-        this.arrowReader = new ArrowFileReader(this.arrowFileStream.getChannel(), this.tableAllocator);
+        this.arrowReader = new AethraArrowFileReader(this.arrowFileStream.getChannel(), this.tableAllocator, this.columnsToProject);
         this.vectorSchemaRoot = this.arrowReader.getVectorSchemaRoot();
     }
 

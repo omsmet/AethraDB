@@ -11,7 +11,6 @@ import org.apache.arrow.vector.IntVector;
 import org.apache.arrow.vector.LargeVarCharVector;
 import org.apache.arrow.vector.VarCharVector;
 import org.apache.arrow.vector.VectorSchemaRoot;
-import org.apache.arrow.vector.ipc.ArrowFileReader;
 import org.apache.calcite.util.ImmutableIntList;
 
 import java.io.Closeable;
@@ -149,9 +148,9 @@ public class ABQArrowTableReader extends ArrowTableReader {
         private final FileInputStream tableInputStream;
 
         /**
-         * The {@link ArrowFileReader} used for reading the input file.
+         * The {@link AethraArrowFileReader} used for reading the input file.
          */
-        private final ArrowFileReader tableFileReader;
+        private final AethraArrowFileReader tableFileReader;
 
         /**
          * The {@link VectorSchemaRoot} of the input table.
@@ -191,16 +190,16 @@ public class ABQArrowTableReader extends ArrowTableReader {
         public ReaderThread(
                 File arrowFile,
                 BufferAllocator tableAllocator,
-                int[] columnsToProject,
+                ImmutableIntList columnsToProject,
                 ArrayBlockingQueue<Boolean> loadNextBatchTargetQueue,
                 ArrayBlockingQueue<FieldVector[]> fieldVectorTargetQueue
         ) throws IOException {
             this.tableAllocator = tableAllocator;
             this.tableInputStream = new FileInputStream(arrowFile);
-            this.tableFileReader = new ArrowFileReader(this.tableInputStream.getChannel(), this.tableAllocator);
+            this.tableFileReader = new AethraArrowFileReader(this.tableInputStream.getChannel(), this.tableAllocator, columnsToProject);
             this.schemaRoot = this.tableFileReader.getVectorSchemaRoot();
             this.columnCount = schemaRoot.getFieldVectors().size();
-            this.columnsToProject = columnsToProject;
+            this.columnsToProject = columnsToProject.toIntArray();
             this.loadNextBatchTargetQueue = loadNextBatchTargetQueue;
             this.fieldVectorTargetQueue = fieldVectorTargetQueue;
         }

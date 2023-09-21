@@ -10,7 +10,6 @@ import org.apache.arrow.vector.IntVector;
 import org.apache.arrow.vector.LargeVarCharVector;
 import org.apache.arrow.vector.VarCharVector;
 import org.apache.arrow.vector.VectorSchemaRoot;
-import org.apache.arrow.vector.ipc.ArrowFileReader;
 import org.apache.calcite.util.ImmutableIntList;
 
 import java.io.File;
@@ -63,8 +62,8 @@ public class CachingArrowTableReader extends ArrowTableReader {
     public void initialise() throws IOException {
         // Initialise the reader
         FileInputStream tableInputStream = new FileInputStream(this.arrowFile);
-        ArrowFileReader tableFileReader =
-                new ArrowFileReader(tableInputStream.getChannel(), this.tableAllocator);
+        AethraArrowFileReader tableFileReader =
+                new AethraArrowFileReader(tableInputStream.getChannel(), this.tableAllocator, this.columnsToProject);
         VectorSchemaRoot schemaRoot = tableFileReader.getVectorSchemaRoot();
 
         // Compute the number of vectors and columns

@@ -27,7 +27,7 @@ public abstract class ArrowTableReader implements AutoCloseable {
     /**
      * The list of columns to project.
      */
-    protected int[] columnsToProject;
+    protected ImmutableIntList columnsToProject;
 
     /**
      * Perform the basic initialisation required for any descendant of {@link ArrowTableReader}.
@@ -39,7 +39,7 @@ public abstract class ArrowTableReader implements AutoCloseable {
         this.arrowFile = arrowFile;
         // Initialise a specific allocator for this table, at twice the file size to be on the safe side
         this.tableAllocator = rootAllocator.newChildAllocator(arrowFile.getName(), 0L, 2 * arrowFile.getTotalSpace());
-        this.columnsToProject = columnsToProject.toIntArray();
+        this.columnsToProject = columnsToProject;
     }
 
     /**
