@@ -24,6 +24,7 @@ import org.apache.arrow.vector.ipc.message.ArrowFooter;
 import org.apache.arrow.vector.ipc.message.MessageSerializer;
 import org.apache.arrow.vector.types.pojo.Field;
 import org.apache.arrow.vector.types.pojo.Schema;
+import org.apache.arrow.vector.util.DataSizeRoundingUtil;
 import org.apache.arrow.vector.validate.MetadataV4UnionChecker;
 import org.apache.calcite.util.ImmutableIntList;
 import org.slf4j.Logger;
@@ -44,6 +45,11 @@ import static org.apache.arrow.vector.ipc.message.MessageSerializer.IPC_CONTINUA
 /**
  * Class which performs reading of Arrow IPC files, but while reducing overhead compared to the
  * standard {@link ArrowFileReader}.
+ *
+ * However, to do its work, this reader makes some important assumptions:
+ * - It assumes that no compression is used in the input file
+ * - It assumes that no vector has a child vector
+ * - It assumes that field vectors are always aligned to 8-byte boundaries
  */
 public class AethraArrowFileReader extends ArrowReader {
 
@@ -298,12 +304,14 @@ public class AethraArrowFileReader extends ArrowReader {
 
             // If a column is not enabled, we need to skip its buffers in the input
             if (!this.columnEnabled[columnIndex]) {
-                for (Buffer bufferToSkip : columnsBufferDefinitions)
+                for (Buffer bufferToSkip : columnsBufferDefinitions) {
                     currentInPosition += bufferToSkip.length();
+                    currentInPosition = DataSizeRoundingUtil.roundUpTo8Multiple(currentInPosition); // Align to 8-byte boundaries
+                }
                 continue;
             }
 
-            // Otherwise, we need to load the data into memory
+            // Otherwise, we need to load the data into memory (assumption: no decompression necessary)
             List<ArrowBuf> columnBuffers = new ArrayList<>(bufferLayoutCount);
             for (Buffer cbd : columnsBufferDefinitions) {
                 long bufferLength = cbd.length();
@@ -313,6 +321,7 @@ public class AethraArrowFileReader extends ArrowReader {
                     throw new IOException("Unexpected end of input trying to read batch column buffer.");
                 }
                 currentInPosition += bufferLength;
+                currentInPosition = DataSizeRoundingUtil.roundUpTo8Multiple(currentInPosition);     // Align to 8-byte boundaries
                 columnBuffers.add(actualColumnBuffer);
             }
 
