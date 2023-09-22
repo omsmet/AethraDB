@@ -94,7 +94,7 @@ public class VectorisedNonSimdReducedSelVecUse {
         this.rootAllocator = new RootAllocator();
         ImmutableIntList columnsToProject = ImmutableIntList.of(4, 5, 6, 7, 8, 9, 10);
         this.lineitem = new ABQArrowTableReader(
-                new File(this.tpchInstance + "/lineitem.arrow"), this.rootAllocator, columnsToProject);
+                new File(this.tpchInstance + "/lineitem.arrow"), this.rootAllocator, true, columnsToProject);
 
         // Setup the allocation manager
         this.allocationManager = new BufferPoolAllocationManager(16);

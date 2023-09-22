@@ -3,6 +3,7 @@ package evaluation.codegen.infrastructure.data;
 import org.apache.arrow.memory.RootAllocator;
 import org.apache.arrow.vector.FieldVector;
 import org.apache.arrow.vector.VectorSchemaRoot;
+import org.apache.arrow.vector.ipc.ArrowFileReader;
 import org.apache.arrow.vector.ipc.ArrowReader;
 import org.apache.calcite.util.ImmutableIntList;
 
@@ -25,7 +26,7 @@ public class DirectArrowTableReader extends ArrowTableReader {
     /**
      * The {@link ArrowReader} used for reading the Arrow file.
      */
-    private AethraArrowFileReader arrowReader;
+    private ArrowReader arrowReader;
 
     /**
      * The {@link VectorSchemaRoot} used for reading the Arrow file.
@@ -36,11 +37,13 @@ public class DirectArrowTableReader extends ArrowTableReader {
      * Creates a new {@link ArrowTableReader} instance
      * @param arrowFile The Arrow IPC file representing the table.
      * @param rootAllocator The {@link RootAllocator} used for Arrow operations.
+     * @param useProjectingArrowReader Whether this {@link ArrowTableReader} should use the
+     * {@link AethraArrowFileReader} implementation.
      * @param columnsToProject The columns of the {@code arrowFile} to actually project out.
      * @throws FileNotFoundException When the specified Arrow file cannot be found.
      */
-    public DirectArrowTableReader(File arrowFile, RootAllocator rootAllocator, ImmutableIntList columnsToProject) throws Exception {
-        super(arrowFile, rootAllocator, columnsToProject);
+    public DirectArrowTableReader(File arrowFile, RootAllocator rootAllocator, boolean useProjectingArrowReader, ImmutableIntList columnsToProject) throws Exception {
+        super(arrowFile, rootAllocator, useProjectingArrowReader, columnsToProject);
         this.reset();
     }
 
@@ -50,7 +53,10 @@ public class DirectArrowTableReader extends ArrowTableReader {
             this.specificClose();
 
         this.arrowFileStream = new FileInputStream(this.arrowFile);
-        this.arrowReader = new AethraArrowFileReader(this.arrowFileStream.getChannel(), this.tableAllocator, this.columnsToProject);
+        if (this.useProjectingArrowReader)
+            this.arrowReader = new AethraArrowFileReader(this.arrowFileStream.getChannel(), this.tableAllocator, this.columnsToProject);
+        else
+            this.arrowReader = new ArrowFileReader(this.arrowFileStream.getChannel(), this.tableAllocator);
         this.vectorSchemaRoot = this.arrowReader.getVectorSchemaRoot();
     }
 

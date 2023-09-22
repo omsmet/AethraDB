@@ -25,6 +25,11 @@ public abstract class ArrowTableReader implements AutoCloseable {
     protected BufferAllocator tableAllocator;
 
     /**
+     * Whether to use the {@link AethraArrowFileReader} implementation.
+     */
+    protected boolean useProjectingArrowReader;
+
+    /**
      * The list of columns to project.
      */
     protected ImmutableIntList columnsToProject;
@@ -33,12 +38,15 @@ public abstract class ArrowTableReader implements AutoCloseable {
      * Perform the basic initialisation required for any descendant of {@link ArrowTableReader}.
      * @param arrowFile The Arrow file to be read from.
      * @param rootAllocator The {@link RootAllocator} that is used for Arrow allocations.
+     * @param useProjectingArrowReader Whether this {@link ArrowTableReader} should use the
+     * {@link AethraArrowFileReader} implementation.
      * @param columnsToProject The columns of the {@code arrowFile} to actually project out.
      */
-    public ArrowTableReader(File arrowFile, RootAllocator rootAllocator, ImmutableIntList columnsToProject) {
+    public ArrowTableReader(File arrowFile, RootAllocator rootAllocator, boolean useProjectingArrowReader, ImmutableIntList columnsToProject) {
         this.arrowFile = arrowFile;
         // Initialise a specific allocator for this table, at twice the file size to be on the safe side
         this.tableAllocator = rootAllocator.newChildAllocator(arrowFile.getName(), 0L, 2 * arrowFile.getTotalSpace());
+        this.useProjectingArrowReader = useProjectingArrowReader;
         this.columnsToProject = columnsToProject;
     }
 

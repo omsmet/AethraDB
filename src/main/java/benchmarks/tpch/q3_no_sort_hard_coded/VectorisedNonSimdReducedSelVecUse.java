@@ -108,11 +108,11 @@ public class VectorisedNonSimdReducedSelVecUse {
         // Setup the database
         this.rootAllocator = new RootAllocator();
         this.customer = new ABQArrowTableReader(
-                new File(this.tpchInstance + "/customer.arrow"), this.rootAllocator, ImmutableIntList.of(0, 6));
+                new File(this.tpchInstance + "/customer.arrow"), this.rootAllocator, true, ImmutableIntList.of(0, 6));
         this.orders = new ABQArrowTableReader(
-                new File(this.tpchInstance + "/orders.arrow"), this.rootAllocator, ImmutableIntList.of(0, 1, 4, 7));
+                new File(this.tpchInstance + "/orders.arrow"), this.rootAllocator, true, ImmutableIntList.of(0, 1, 4, 7));
         this.lineitem = new ABQArrowTableReader(
-                new File(this.tpchInstance + "/lineitem.arrow"), this.rootAllocator, ImmutableIntList.of(0, 5, 6, 10));
+                new File(this.tpchInstance + "/lineitem.arrow"), this.rootAllocator, true, ImmutableIntList.of(0, 5, 6, 10));
 
         // Initialise the allocation manager
         this.allocationManager = new BufferPoolAllocationManager(32);

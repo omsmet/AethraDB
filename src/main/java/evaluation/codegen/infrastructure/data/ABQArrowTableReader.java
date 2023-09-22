@@ -11,6 +11,8 @@ import org.apache.arrow.vector.IntVector;
 import org.apache.arrow.vector.LargeVarCharVector;
 import org.apache.arrow.vector.VarCharVector;
 import org.apache.arrow.vector.VectorSchemaRoot;
+import org.apache.arrow.vector.ipc.ArrowFileReader;
+import org.apache.arrow.vector.ipc.ArrowReader;
 import org.apache.calcite.util.ImmutableIntList;
 
 import java.io.Closeable;
@@ -61,14 +63,16 @@ public class ABQArrowTableReader extends ArrowTableReader {
      * Creates a new {@link ABQArrowTableReader} instance.
      * @param arrowFile The Arrow IPC file representing the table.
      * @param rootAllocator The {@link RootAllocator} used for Arrow operations.
+     * @param useProjectingArrowReader Whether this {@link ArrowTableReader} should use the
+     * {@link AethraArrowFileReader} implementation.
      * @param columnsToProject The columns of the {@code arrowFile} to actually project out.
      * @throws FileNotFoundException When the specified Arrow file cannot be found.
      */
-    public ABQArrowTableReader(File arrowFile, RootAllocator rootAllocator, ImmutableIntList columnsToProject) throws Exception {
-        super(arrowFile, rootAllocator, columnsToProject);
+    public ABQArrowTableReader(File arrowFile, RootAllocator rootAllocator, boolean useProjectingArrowReader, ImmutableIntList columnsToProject) throws Exception {
+        super(arrowFile, rootAllocator, useProjectingArrowReader, columnsToProject);
         this.loadNextBatchResultQueue = new ArrayBlockingQueue<>(QUEUE_CAPACITY);
         this.fieldVectorQueue = new ArrayBlockingQueue<>(QUEUE_CAPACITY);
-        this.readerThread = new ReaderThread(this.arrowFile, this.tableAllocator, this.columnsToProject, this.loadNextBatchResultQueue, this.fieldVectorQueue);
+        this.readerThread = new ReaderThread(this.arrowFile, this.tableAllocator, this.useProjectingArrowReader, this.columnsToProject, this.loadNextBatchResultQueue, this.fieldVectorQueue);
     }
 
     @Override
@@ -84,6 +88,7 @@ public class ABQArrowTableReader extends ArrowTableReader {
         this.readerThread = new ReaderThread(
                 this.arrowFile,
                 this.tableAllocator,
+                this.useProjectingArrowReader,
                 this.columnsToProject,
                 this.loadNextBatchResultQueue,
                 this.fieldVectorQueue);
@@ -148,9 +153,9 @@ public class ABQArrowTableReader extends ArrowTableReader {
         private final FileInputStream tableInputStream;
 
         /**
-         * The {@link AethraArrowFileReader} used for reading the input file.
+         * The {@link ArrowReader} used for reading the input file.
          */
-        private final AethraArrowFileReader tableFileReader;
+        private final ArrowReader tableFileReader;
 
         /**
          * The {@link VectorSchemaRoot} of the input table.
@@ -181,6 +186,8 @@ public class ABQArrowTableReader extends ArrowTableReader {
          * Creates a new instance of the {@link ReaderThread} class.
          * @param arrowFile The table file to be read by the created instance.
          * @param tableAllocator The {@link BufferAllocator} to use for reading the table.
+         * @param useProjectingArrowReader Whether this {@link ArrowTableReader} should use the
+         * {@link AethraArrowFileReader} implementation.
          * @param columnsToProject The actual columns to project out.
          * @param loadNextBatchTargetQueue  The queue into which to buffer the result for {@code loadNextBatch} calls.
          * @param fieldVectorTargetQueue The queue into which to buffer the {@link FieldVector}s that have been read.
@@ -190,13 +197,17 @@ public class ABQArrowTableReader extends ArrowTableReader {
         public ReaderThread(
                 File arrowFile,
                 BufferAllocator tableAllocator,
+                boolean useProjectingArrowReader,
                 ImmutableIntList columnsToProject,
                 ArrayBlockingQueue<Boolean> loadNextBatchTargetQueue,
                 ArrayBlockingQueue<FieldVector[]> fieldVectorTargetQueue
         ) throws IOException {
             this.tableAllocator = tableAllocator;
             this.tableInputStream = new FileInputStream(arrowFile);
-            this.tableFileReader = new AethraArrowFileReader(this.tableInputStream.getChannel(), this.tableAllocator, columnsToProject);
+            if (useProjectingArrowReader)
+                this.tableFileReader = new AethraArrowFileReader(this.tableInputStream.getChannel(), this.tableAllocator, columnsToProject);
+            else
+                this.tableFileReader = new ArrowFileReader(this.tableInputStream.getChannel(), this.tableAllocator);
             this.schemaRoot = this.tableFileReader.getVectorSchemaRoot();
             this.columnCount = schemaRoot.getFieldVectors().size();
             this.columnsToProject = columnsToProject.toIntArray();

@@ -10,6 +10,8 @@ import org.apache.arrow.vector.IntVector;
 import org.apache.arrow.vector.LargeVarCharVector;
 import org.apache.arrow.vector.VarCharVector;
 import org.apache.arrow.vector.VectorSchemaRoot;
+import org.apache.arrow.vector.ipc.ArrowFileReader;
+import org.apache.arrow.vector.ipc.ArrowReader;
 import org.apache.calcite.util.ImmutableIntList;
 
 import java.io.File;
@@ -47,11 +49,13 @@ public class CachingArrowTableReader extends ArrowTableReader {
      * Creates a new {@link CachingArrowTableReader} instance
      * @param arrowFile The Arrow IPC file representing the table.
      * @param rootAllocator The {@link RootAllocator} used for Arrow operations.
+     * @param useProjectingArrowReader Whether this {@link ArrowTableReader} should use the
+     * {@link AethraArrowFileReader} implementation.
      * @param columnsToProject The columns of the {@code arrowFile} to actually project out.
      * @throws FileNotFoundException When the specified Arrow file cannot be found.
      */
-    public CachingArrowTableReader(File arrowFile, RootAllocator rootAllocator, ImmutableIntList columnsToProject) throws Exception {
-        super(arrowFile, rootAllocator, columnsToProject);
+    public CachingArrowTableReader(File arrowFile, RootAllocator rootAllocator, boolean useProjectingArrowReader, ImmutableIntList columnsToProject) throws Exception {
+        super(arrowFile, rootAllocator, useProjectingArrowReader, columnsToProject);
         this.initialise();
     }
 
@@ -62,12 +66,16 @@ public class CachingArrowTableReader extends ArrowTableReader {
     public void initialise() throws IOException {
         // Initialise the reader
         FileInputStream tableInputStream = new FileInputStream(this.arrowFile);
-        AethraArrowFileReader tableFileReader =
-                new AethraArrowFileReader(tableInputStream.getChannel(), this.tableAllocator, this.columnsToProject);
-        VectorSchemaRoot schemaRoot = tableFileReader.getVectorSchemaRoot();
+        ArrowReader tableFileReader;
+        if (useProjectingArrowReader) {
+            tableFileReader = new AethraArrowFileReader(tableInputStream.getChannel(), this.tableAllocator, this.columnsToProject);
+            this.numberOfVectors = ((AethraArrowFileReader) tableFileReader).getRecordBlocks().size();
+        } else {
+            tableFileReader = new ArrowFileReader(tableInputStream.getChannel(), this.tableAllocator);
+            this.numberOfVectors = ((ArrowFileReader) tableFileReader).getRecordBlocks().size();
+        }
 
-        // Compute the number of vectors and columns
-        this.numberOfVectors = tableFileReader.getRecordBlocks().size();
+        VectorSchemaRoot schemaRoot = tableFileReader.getVectorSchemaRoot();
         this.columnCount = schemaRoot.getFieldVectors().size();
         this.fieldVectors = new FieldVector[this.numberOfVectors][columnCount];
 

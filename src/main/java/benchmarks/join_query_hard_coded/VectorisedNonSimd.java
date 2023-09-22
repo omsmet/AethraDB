@@ -121,9 +121,9 @@ public class VectorisedNonSimd {
         // Setup the database
         this.rootAllocator = new RootAllocator();
         ImmutableIntList threeColumnIdentity = ImmutableIntList.identity(3);
-        this.table_A = new ABQArrowTableReader(new File(this.tableFilePath + "/table_A.arrow"), this.rootAllocator, threeColumnIdentity);
-        this.table_B = new ABQArrowTableReader(new File(this.tableFilePath + "/table_B.arrow"), this.rootAllocator, threeColumnIdentity);
-        this.table_C = new ABQArrowTableReader(new File(this.tableFilePath + "/table_C.arrow"), this.rootAllocator, threeColumnIdentity);
+        this.table_A = new ABQArrowTableReader(new File(this.tableFilePath + "/table_A.arrow"), this.rootAllocator, false, threeColumnIdentity);
+        this.table_B = new ABQArrowTableReader(new File(this.tableFilePath + "/table_B.arrow"), this.rootAllocator, false, threeColumnIdentity);
+        this.table_C = new ABQArrowTableReader(new File(this.tableFilePath + "/table_C.arrow"), this.rootAllocator, false, threeColumnIdentity);
 
         // Compute the hash-table sizes as the correct power of two size
         int hashTableSize = 3 * 1024 * 1024;

@@ -66,7 +66,7 @@ public class NonVectorisedNonSimd {
         // Setup the database
         this.rootAllocator = new RootAllocator();
         this.lineitem = new ABQArrowTableReader(
-                new File(this.tpchInstance + "/lineitem.arrow"), this.rootAllocator, ImmutableIntList.of(4, 5, 6, 10));
+                new File(this.tpchInstance + "/lineitem.arrow"), this.rootAllocator, true, ImmutableIntList.of(4, 5, 6, 10));
 
         // Initialise the result
         this.sumResult = -1d;

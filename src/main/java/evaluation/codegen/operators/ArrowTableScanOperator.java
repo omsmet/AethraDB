@@ -439,14 +439,17 @@ public class ArrowTableScanOperator extends CodeGenOperator<LogicalArrowTableSca
     ) {
         // Create an arrow reader instance
         var relOptTable = (RelOptTableImpl) this.getLogicalSubplan().getTable();
+        var numberOfTableColumns = relOptTable.getRowType().getFieldCount();
         var arrowTable = (ArrowTable) relOptTable.table();
         var columnsToProject = this.getLogicalSubplan().projects;
+        boolean useProjectingArrowReader = numberOfTableColumns != columnsToProject.size();
 
         ArrowTableReader arrowReader;
         try {
             arrowReader = new ABQArrowTableReader(
                     arrowTable.getArrowFile(),
                     cCtx.getArrowRootAllocator(),
+                    useProjectingArrowReader,
                     columnsToProject
             );
         } catch (Exception e) {
