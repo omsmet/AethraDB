@@ -393,32 +393,13 @@ public class VectorisedHashOperators extends VectorisedOperators  {
             org.apache.arrow.vector.FixedSizeBinaryVector keyVector,
             boolean extend
     ) {
-        byte[] byte_array_cache = getByteArrayCache(keyVector.getByteWidth());
-
         if (!extend) {
             for (int i = 0; i < keyVector.getValueCount(); i++)
-                preHashKeyVector[i] = Char_Arr_Hash_Function.preHash(
-                        ArrowOptimisations.getFixedSizeBinaryValue(keyVector, i, byte_array_cache));
+                preHashKeyVector[i] = Char_Arr_Hash_Function.preHash(keyVector, i);
         } else {
             for (int i = 0; i < keyVector.getValueCount(); i++)
-                preHashKeyVector[i] ^= Char_Arr_Hash_Function.preHash(
-                        ArrowOptimisations.getFixedSizeBinaryValue(keyVector, i, byte_array_cache));
+                preHashKeyVector[i] ^= Char_Arr_Hash_Function.preHash(keyVector, i);
         }
-    }
-
-    /**
-     * Method to construct a pre-hash vector for a fixed size binary key vector using SIMD acceleration.
-     * TODO: currently not using SIMD
-     * @param preHashKeyVector The pre-hash vector to construct.
-     * @param keyVector The key vector for which to construct the pre-hash vector.
-     * @param extend Whether the operation is extending an existing vector or not.
-     */
-    public static void constructPreHashKeyVectorSIMD(
-            long[] preHashKeyVector,
-            org.apache.arrow.vector.FixedSizeBinaryVector keyVector,
-            boolean extend
-    ) {
-        constructPreHashKeyVector(preHashKeyVector, keyVector, extend);
     }
 
     /**
@@ -475,41 +456,17 @@ public class VectorisedHashOperators extends VectorisedOperators  {
             int selectionVectorLength,
             boolean extend
     ) {
-        byte[] byte_array_cache = getByteArrayCache(keyVector.getByteWidth());
-
         if (!extend) {
             for (int i = 0; i < selectionVectorLength; i++) {
                 int recordIndex = selectionVector[i];
-                preHashKeyVector[recordIndex] = Char_Arr_Hash_Function.preHash(
-                        ArrowOptimisations.getFixedSizeBinaryValue(keyVector, recordIndex, byte_array_cache)
-                );
+                preHashKeyVector[recordIndex] = Char_Arr_Hash_Function.preHash(keyVector, recordIndex);
             }
         } else {
             for (int i = 0; i < selectionVectorLength; i++) {
                 int recordIndex = selectionVector[i];
-                preHashKeyVector[recordIndex] ^= Char_Arr_Hash_Function.preHash(
-                        ArrowOptimisations.getFixedSizeBinaryValue(keyVector, recordIndex, byte_array_cache));
+                preHashKeyVector[recordIndex] ^= Char_Arr_Hash_Function.preHash(keyVector, recordIndex);
             }
         }
-    }
-
-    /**
-     * Method to construct a pre-hash vector for a fixed size binary key vector using SIMD acceleration.
-     * TODO: currently not using SIMD
-     * @param preHashKeyVector The pre-hash vector to construct.
-     * @param keyVector The key vector for which to construct the pre-hash vector.
-     * @param selectionVector The vector indicating the valid indices of {@code keyVector}.
-     * @param selectionVectorLength The length of the valid portion of (@code selectionVector}.
-     * @param extend Whether the operation is extending an existing vector or not.
-     */
-    public static void constructPreHashKeyVectorSIMD(
-            long[] preHashKeyVector,
-            org.apache.arrow.vector.FixedSizeBinaryVector keyVector,
-            int[] selectionVector,
-            int selectionVectorLength,
-            boolean extend
-    ) {
-        constructPreHashKeyVector(preHashKeyVector, keyVector, selectionVector, selectionVectorLength, extend);
     }
 
     /**
@@ -583,33 +540,12 @@ public class VectorisedHashOperators extends VectorisedOperators  {
         if (!extend) {
             for (int i = 0; i < keyVector.getValueCount(); i++)
                 if (validityMask[i])
-                    preHashKeyVector[i] = Char_Arr_Hash_Function.preHash(
-                            ArrowOptimisations.getFixedSizeBinaryValue(keyVector, i, byte_array_cache));
+                    preHashKeyVector[i] = Char_Arr_Hash_Function.preHash(keyVector, i);
         } else {
             for (int i = 0; i < keyVector.getValueCount(); i++)
                 if (validityMask[i])
-                    preHashKeyVector[i] ^= Char_Arr_Hash_Function.preHash(
-                            ArrowOptimisations.getFixedSizeBinaryValue(keyVector, i, byte_array_cache));
+                    preHashKeyVector[i] ^= Char_Arr_Hash_Function.preHash(keyVector, i);
         }
-    }
-
-    /**
-     * Method to construct a pre-hash vector for a fixed size binary key vector using SIMD acceleration.
-     * TODO: currently not using SIMD
-     * @param preHashKeyVector The pre-hash vector to construct.
-     * @param keyVector The key vector for which to construct the pre-hash vector.
-     * @param validityMask The boolean mask indicating which entries of {@code keyVector} are valid.
-     * @param validityMaskLength The length of the valid portion of {@code validityMask}.
-     * @param extend Whether the operation is extending an existing vector or not.
-     */
-    public static void constructPreHashKeyVectorSIMD(
-            long[] preHashKeyVector,
-            org.apache.arrow.vector.FixedSizeBinaryVector keyVector,
-            boolean[] validityMask,
-            int validityMaskLength,
-            boolean extend
-    ) {
-        constructPreHashKeyVector(preHashKeyVector, keyVector, validityMask, validityMaskLength, extend);
     }
 
     /**

@@ -139,6 +139,11 @@ public class KeyValueMapGenerator {
     private static final String RESET_METHOD_NAME = "reset";
 
     /**
+     * The default value for how many keys should be expected in the map.
+     */
+    private static final int initialKeysPerMap = 4;
+
+    /**
      * Instantiate a {@link KeyValueMapGenerator} to generate a map type for specific key and
      * value types.
      * @param keyTypes The key types that are to be used by the generated map.
@@ -288,7 +293,7 @@ public class KeyValueMapGenerator {
     private void generateConstructors() {
 
         // Start by generating the no-argument constructor which calls the real constructor with
-        // a default map-size of 4.
+        // a default map-size of initialKeysPerMap.
         createConstructor(
                 getLocation(),
                 this.mapDeclaration,
@@ -297,7 +302,7 @@ public class KeyValueMapGenerator {
                 new Java.AlternateConstructorInvocation(
                         getLocation(),
                         new Java.Rvalue[] {
-                                createIntegerLiteral(getLocation(), 4)
+                                createIntegerLiteral(getLocation(), initialKeysPerMap)
                         }
                 ),
                 new ArrayList<>()

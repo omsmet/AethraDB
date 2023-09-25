@@ -4,6 +4,7 @@ import evaluation.general_support.ArrowOptimisations;
 import jdk.incubator.vector.VectorMask;
 import jdk.incubator.vector.VectorOperators;
 import jdk.incubator.vector.VectorSpecies;
+import org.apache.arrow.memory.util.MemoryUtil;
 import org.apache.arrow.vector.IntVector;
 
 import java.lang.foreign.MemorySegment;
@@ -1193,35 +1194,47 @@ public class VectorisedFilterOperators extends VectorisedOperators {
     /* --------------------------------------------------------------------------------------------------- */
 
     public static int eq(org.apache.arrow.vector.FixedSizeBinaryVector vector, byte[] condition, int[] selectionVector) {
-        assert vector.getByteWidth() == condition.length;
+        long vectorWidth = vector.getByteWidth();
+        long vectorMemoryBaseAddress = vector.getDataBufferAddress();
+        assert vectorWidth == condition.length;
 
-        byte[] byte_array_cache = getByteArrayCache(vector.getByteWidth());
         int selectionVectorIndex = 0;
 
-        for (int i = 0; i < vector.getValueCount(); i++) {
-            if (Arrays.equals(ArrowOptimisations.getFixedSizeBinaryValue(vector, i, byte_array_cache), condition))
-                selectionVector[selectionVectorIndex++] = i;
+        outerLoop: for (int i = 0; i < vector.getValueCount(); i++) {
+            long elementMemoryBaseAddress = vectorMemoryBaseAddress + i * vectorWidth;
+
+            for (int j = 0; j < vectorWidth; j++) {
+                if (MemoryUtil.UNSAFE.getByte(elementMemoryBaseAddress + j) != condition[j])
+                    continue outerLoop;
+            }
+
+            selectionVector[selectionVectorIndex++] = i;
         }
 
         return selectionVectorIndex;
     }
 
     public static int eq(org.apache.arrow.vector.FixedSizeBinaryVector vector, byte[] condition, boolean[] validityMask) {
-        assert vector.getByteWidth() == condition.length;
+        long vectorWidth = vector.getByteWidth();
+        long vectorMemoryBaseAddress = vector.getDataBufferAddress();
+        assert vectorWidth == condition.length;
 
-        byte[] byte_array_cache = getByteArrayCache(vector.getByteWidth());
         int vectorLength = vector.getValueCount();
 
-        for (int i = 0; i < vectorLength; i++) {
-            validityMask[i] = Arrays.equals(ArrowOptimisations.getFixedSizeBinaryValue(vector, i, byte_array_cache), condition);
+        outerLoop: for (int i = 0; i < vectorLength; i++) {
+            long elementMemoryBaseAddress = vectorMemoryBaseAddress + i * vectorWidth;
+
+            for (int j = 0; j < vectorWidth; j++) {
+                if (MemoryUtil.UNSAFE.getByte(elementMemoryBaseAddress + j) != condition[j]) {
+                    validityMask[i] = false;
+                    continue outerLoop;
+                }
+            }
+
+            validityMask[i] = true;
         }
 
         return vectorLength;
-    }
-
-    public static int eqSIMD(org.apache.arrow.vector.FixedSizeBinaryVector vector, byte[] condition, boolean[] validityMask) {
-        // TODO: not manually SIMDed for now, since we assume the compiler already SIMDs the Arrays.equals call based on the source code
-        return eq(vector, condition, validityMask);
     }
 
 }

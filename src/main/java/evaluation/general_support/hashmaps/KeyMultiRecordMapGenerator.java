@@ -144,6 +144,11 @@ public class KeyMultiRecordMapGenerator {
     private static final String RESET_METHOD_NAME = "reset";
 
     /**
+     * The default value for how many keys should be expected in the map.
+     */
+    private static final int initialKeysPerMap = 4;
+
+    /**
      * The default value for how many records should be created per key.
      */
     private static final int initialRecordsPerKeyCount = 8;
@@ -301,7 +306,7 @@ public class KeyMultiRecordMapGenerator {
     private void generateConstructors() {
 
         // Start by generating the no-argument constructor which calls the real constructor with
-        // a default map-size of 4.
+        // a default map-size of initialKeysPerMap.
         createConstructor(
                 getLocation(),
                 this.mapDeclaration,
@@ -310,7 +315,7 @@ public class KeyMultiRecordMapGenerator {
                 new Java.AlternateConstructorInvocation(
                         getLocation(),
                         new Java.Rvalue[] {
-                                createIntegerLiteral(getLocation(), 4)
+                                createIntegerLiteral(getLocation(), initialKeysPerMap)
                         }
                 ),
                 new ArrayList<>()

@@ -1,5 +1,8 @@
 package evaluation.general_support.hashmaps;
 
+import org.apache.arrow.memory.util.MemoryUtil;
+import org.apache.arrow.vector.FixedSizeBinaryVector;
+
 /**
  * The standard hash function used for computing the hash value of a character array column.
  */
@@ -23,6 +26,25 @@ public final class Char_Arr_Hash_Function {
             hash = (hash * 31) ^ key[i];
 
         return (hash < 0) ? (-hash) :  hash;
+    }
+
+    /**
+     * Method to compute the pre-hash of a character array in an arrow vector without any copies.
+     * @param vector The arrow vector containing the character array.
+     * @param keyIndex The index of the character array to compute the pre-hash value for.
+     * @return The pre-hash value.
+     */
+    public static long preHash(FixedSizeBinaryVector vector, long keyIndex) {
+        int vectorWidth = vector.getByteWidth();
+        long baseMemoryAddress = vector.getDataBufferAddress() + keyIndex * vectorWidth;
+        long topMemoryAddress = baseMemoryAddress + vectorWidth;
+
+        long hash = 0L;
+        for (long memoryAddress = baseMemoryAddress; memoryAddress < topMemoryAddress; memoryAddress++) {
+            hash = (hash * 31) ^ MemoryUtil.UNSAFE.getByte(memoryAddress);
+        }
+
+        return (hash < 0) ? (-hash) : hash;
     }
 
 }
