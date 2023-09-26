@@ -90,8 +90,9 @@ public class CodeGenContext implements AutoCloseable {
     /**
      * Creates a new empty {@link CodeGenContext} instance.
      * @param arrowDatabase The database over which the generated query code is to be executed.
+     * @param rootAllocator The {@link RootAllocator} to use for arrow operations.
      */
-    public CodeGenContext(ArrowDatabase arrowDatabase) {
+    public CodeGenContext(ArrowDatabase arrowDatabase, RootAllocator rootAllocator) {
         this.database = arrowDatabase;
 
         this.definedVariables = new Stack<>();
@@ -107,7 +108,7 @@ public class CodeGenContext implements AutoCloseable {
         this.ordinalMapping = new Stack<>();
         this.currentOrdinalMapping = new ArrayList<>();
 
-        this.arrowRootAllocator = new RootAllocator();
+        this.arrowRootAllocator = rootAllocator;
         this.arrowTableReaders = new ArrayList<>();
         this.allocationManager = new BufferPoolAllocationManager(8);
         this.resultConsumptionTarget = null;
@@ -328,9 +329,6 @@ public class CodeGenContext implements AutoCloseable {
         if (this.arrowTableReaders != null)
             for (ArrowTableReader reader : this.arrowTableReaders)
                 reader.close();
-
-        if (this.arrowRootAllocator != null)
-            this.arrowRootAllocator.close();
     }
 
 }

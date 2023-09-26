@@ -3,6 +3,7 @@ package AethraDB.util.arrow;
 import AethraDB.calcite.rules.ArrowTableScanFilterProjectRule;
 import AethraDB.calcite.rules.ArrowTableScanProjectionRule;
 import AethraDB.calcite.rules.ArrowTableScanRule;
+import org.apache.arrow.memory.RootAllocator;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.jdbc.JavaTypeFactoryImpl;
 import org.apache.calcite.plan.RelOptCluster;
@@ -66,11 +67,12 @@ public class ArrowDatabase {
     /**
      * Constructs a new {@link ArrowDatabase} instance.
      * @param databaseDirectoryPath The directory from which the database should be loaded.
+     * @param rootAllocator The {@link RootAllocator} to use for configuring the schema.
      */
-    public ArrowDatabase(String databaseDirectoryPath) {
+    public ArrowDatabase(String databaseDirectoryPath, RootAllocator rootAllocator) {
         // Initialise the schema
         this.typeFactory = new JavaTypeFactoryImpl();
-        this.databaseSchema = ArrowSchemaBuilder.fromDirectory(databaseDirectoryPath, this.typeFactory);
+        this.databaseSchema = ArrowSchemaBuilder.fromDirectory(databaseDirectoryPath, this.typeFactory, rootAllocator);
 
         // Initialise the planner
         SqlParser.Config sqlParserConfig = SqlParser.config().withCaseSensitive(false);

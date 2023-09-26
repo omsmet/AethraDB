@@ -10,6 +10,7 @@ import AethraDB.evaluation.codegen.infrastructure.context.OptimisationContext;
 import AethraDB.evaluation.codegen.infrastructure.data.ArrowTableReader;
 import AethraDB.evaluation.codegen.operators.CodeGenOperator;
 import AethraDB.util.arrow.ArrowDatabase;
+import org.apache.arrow.memory.RootAllocator;
 import org.apache.calcite.rel.RelNode;
 import org.openjdk.jmh.annotations.Benchmark;
 import org.openjdk.jmh.annotations.BenchmarkMode;
@@ -177,14 +178,17 @@ public class NonVectorisedNonSimd extends ResultConsumptionTarget {
      */
     @Setup(Level.Trial)
     public void trialSetup() throws Exception {
+        // Setup the arrow root allocator
+        RootAllocator arrowRootAllocator = new RootAllocator();
+
         // Setup the database
-        this.database = new ArrowDatabase(this.tableFilePath);
+        this.database = new ArrowDatabase(this.tableFilePath, arrowRootAllocator);
 
         // Plan the query
         RelNode plannedQuery = this.database.planQuery(query);
 
         // Create the contexts required for code generation
-        CodeGenContext cCtx = new CodeGenContext(database);
+        CodeGenContext cCtx = new CodeGenContext(database, arrowRootAllocator);
         OptimisationContext oCtx = new OptimisationContext();
 
         // Generate code operator tree for the query

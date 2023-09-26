@@ -1,5 +1,6 @@
 package AethraDB.util.arrow;
 
+import AethraDB.evaluation.codegen.infrastructure.data.AethraArrowFileReader;
 import org.apache.arrow.memory.RootAllocator;
 import org.apache.arrow.vector.VectorSchemaRoot;
 import org.apache.arrow.vector.ipc.ArrowFileReader;
@@ -11,6 +12,7 @@ import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
 import org.apache.calcite.sql.type.SqlTypeName;
+import org.apache.calcite.util.ImmutableIntList;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -28,24 +30,26 @@ public class ArrowSchemaBuilder {
      * Create a schema for an Arrow database directory.
      * @param databaseDirectoryPath The directory to create the database schema from.
      * @param typeFactory The {@link RelDataTypeFactory} to use for creating the schema.
+     * @param rootAllocator The {@link RootAllocator} to use for creating the schema.
      * @return The schema representing the Arrow database in {@code databaseDirectoryPath}.
      */
-    public static CalciteSchema fromDirectory(String databaseDirectoryPath, RelDataTypeFactory typeFactory) {
+    public static CalciteSchema fromDirectory(String databaseDirectoryPath, RelDataTypeFactory typeFactory, RootAllocator rootAllocator) {
         File databaseDirectory = new File(databaseDirectoryPath);
 
         if (!databaseDirectory.exists() || !databaseDirectory.isDirectory())
             throw new IllegalStateException("Cannot create a schema for a non-existent database directory");
 
-        return fromDirectory(databaseDirectory, typeFactory);
+        return fromDirectory(databaseDirectory, typeFactory, rootAllocator);
     }
 
     /**
      * Create a schema for an Arrow database directory.
      * @param databaseDirectory The directory to create the database schema from.
      * @param typeFactory The {@link RelDataTypeFactory} to use for creating the schema.
+     * @param rootAllocator The {@link RootAllocator} to use for creating the schema.
      * @return The schema representing the Arrow database in {@code databaseDirectory}.
      */
-    public static CalciteSchema fromDirectory(File databaseDirectory, RelDataTypeFactory typeFactory) {
+    public static CalciteSchema fromDirectory(File databaseDirectory, RelDataTypeFactory typeFactory, RootAllocator rootAllocator) {
         // Create the root schema and type factory for the schema
         CalciteSchema databaseSchema = CalciteSchema.createRootSchema(false);
 
@@ -56,7 +60,7 @@ public class ArrowSchemaBuilder {
 
         // Add each arrow table to the schema
         for (File arrowTableFile : arrowTableFiles) {
-            ArrowTable arrowTableInstance = createTableForArrowFile(arrowTableFile, typeFactory);
+            ArrowTable arrowTableInstance = createTableForArrowFile(arrowTableFile, typeFactory, rootAllocator);
             databaseSchema.add(arrowTableInstance.getName(), arrowTableInstance);
         }
 
@@ -68,24 +72,17 @@ public class ArrowSchemaBuilder {
      * Create a {@link ArrowTable} instance representing the schema of a specific Arrow table.
      * @param arrowTable The {@link File} containing the Arrow table.
      * @param typeFactory The {@link RelDataTypeFactory} to use for creating the schema.
+     * @param rootAllocator The {@link RootAllocator} to use for creating the schema.
      * @return The type representing the Arrow table.
      */
-    private static ArrowTable createTableForArrowFile(File arrowTable, RelDataTypeFactory typeFactory) {
+    private static ArrowTable createTableForArrowFile(File arrowTable, RelDataTypeFactory typeFactory, RootAllocator rootAllocator) {
         // Convert the arrow schema into the required RelDataType
         try (   // Initialise the objects needed to read the Arrow schema
-                var rootAllocator = new RootAllocator();
                 var arrowTableInputStream = new FileInputStream(arrowTable);
-                var arrowTableFileReader = new ArrowFileReader(arrowTableInputStream.getChannel(), rootAllocator);
+                var arrowTableFileReader = new AethraArrowFileReader(arrowTableInputStream.getChannel(), rootAllocator, ImmutableIntList.of());
         ) {
             // Obtain the arrow schema
-            VectorSchemaRoot arrowSchemaRoot = arrowTableFileReader.getVectorSchemaRoot();
-            Schema arrowSchema = arrowSchemaRoot.getSchema();
-
-            // Instantiate the statistics
-            long arrowVectorCount = arrowTableFileReader.getRecordBlocks().size();
-            long vectorRowCount = arrowTableFileReader.loadNextBatch() ? arrowTableFileReader.getVectorSchemaRoot().getRowCount() : 0;
-            long approximateTableRowCount = arrowVectorCount * vectorRowCount;
-            ArrowTableStatistics tableStatistics = new ArrowTableStatistics(approximateTableRowCount);
+            Schema arrowSchema = arrowTableFileReader.readSchema();
 
             // Create a builder for the calcite type
             RelDataTypeFactory.Builder builderForTable = typeFactory.builder();
@@ -100,7 +97,7 @@ public class ArrowSchemaBuilder {
             RelDataType tableType = builderForTable.build();
 
             // Construct the table instance
-            return new ArrowTable(arrowTable, tableType, tableStatistics);
+            return new ArrowTable(arrowTable, tableType);
 
         } catch (FileNotFoundException e) {
             throw new IllegalStateException("Cannot create a table schema from a non-existent table file: " + e.getMessage());

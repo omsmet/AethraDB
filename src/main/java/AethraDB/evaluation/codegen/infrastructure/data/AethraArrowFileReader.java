@@ -113,7 +113,7 @@ public class AethraArrowFileReader extends ArrowReader {
     }
 
     @Override
-    protected Schema readSchema() throws IOException {
+    public Schema readSchema() throws IOException {
         if (footer == null) {
             if (in.size() <= (MAGIC_LENGTH * 2 + 4)) {
                 throw new InvalidArrowFileException("file too small: " + in.size());

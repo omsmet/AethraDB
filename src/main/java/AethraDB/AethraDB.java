@@ -9,6 +9,7 @@ import AethraDB.evaluation.codegen.operators.CodeGenOperator;
 import AethraDB.evaluation.codegen.operators.QueryResultCountOperator;
 import AethraDB.evaluation.codegen.operators.QueryResultPrinterOperator;
 import AethraDB.util.arrow.ArrowDatabase;
+import org.apache.arrow.memory.RootAllocator;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.externalize.RelWriterImpl;
 import org.apache.calcite.sql.SqlExplainLevel;
@@ -114,11 +115,14 @@ public class AethraDB {
             return;
         }
 
+        // Initialise the arrow root allocator
+        RootAllocator arrowRootAllocator = new RootAllocator();
+
         // Take time when query planning starts
         queryPlanningStart = System.nanoTime();
 
         // Create the database instance
-        ArrowDatabase database = new ArrowDatabase(databaseDirectoryPath);
+        ArrowDatabase database = new ArrowDatabase(databaseDirectoryPath, arrowRootAllocator);
 
         // Read the query
         String textualSqlQuery = Files.readString(queryFile.toPath());
@@ -159,7 +163,7 @@ public class AethraDB {
         codeGenerationStart = System.nanoTime();
 
         // Create the contexts required for code generation
-        CodeGenContext cCtx = new CodeGenContext(database);
+        CodeGenContext cCtx = new CodeGenContext(database, arrowRootAllocator);
         OptimisationContext oCtx = new OptimisationContext();
 
         // Generate code for the query which prints the result to the standard output
@@ -194,10 +198,10 @@ public class AethraDB {
             double compilationTimeMs = ((double) (codeCompilationEnd - codeCompilationStart)) / 1000000d;
             double queryExecutionTimeMs = ((double) (queryExecutionEnd - queryExecutionStart)) / 1000000d;
             System.err.println(
-                    "{planning: " + planningTimeMs
-                            + ", codegen: " + codegenTimeMs
-                            + ", " + "compilation: " + compilationTimeMs
-                            + ", execution: " + queryExecutionTimeMs
+                    "{\"planning\": " + planningTimeMs
+                            + ", \"codegen\": " + codegenTimeMs
+                            + ", " + "\"compilation\": " + compilationTimeMs
+                            + ", \"execution\": " + queryExecutionTimeMs
                             + "}");
         }
     }
