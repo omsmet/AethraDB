@@ -1,20 +1,20 @@
 package AethraDB.evaluation.codegen.operators;
 
-import AethraDB.evaluation.codegen.infrastructure.context.OptimisationContext;
-import AethraDB.evaluation.codegen.infrastructure.context.access_path.AccessPath;
-import AethraDB.evaluation.codegen.infrastructure.context.access_path.ArrayVectorWithValidityMaskAccessPath;
-import AethraDB.evaluation.codegen.infrastructure.context.access_path.ArrowVectorAccessPath;
-import AethraDB.evaluation.codegen.infrastructure.context.access_path.ScalarVariableAccessPath;
-import AethraDB.evaluation.codegen.infrastructure.janino.JaninoControlGen;
-import AethraDB.evaluation.codegen.infrastructure.janino.JaninoOperatorGen;
 import AethraDB.evaluation.codegen.infrastructure.context.CodeGenContext;
+import AethraDB.evaluation.codegen.infrastructure.context.OptimisationContext;
 import AethraDB.evaluation.codegen.infrastructure.context.QueryVariableType;
+import AethraDB.evaluation.codegen.infrastructure.context.access_path.AccessPath;
 import AethraDB.evaluation.codegen.infrastructure.context.access_path.ArrayAccessPath;
 import AethraDB.evaluation.codegen.infrastructure.context.access_path.ArrayVectorAccessPath;
 import AethraDB.evaluation.codegen.infrastructure.context.access_path.ArrayVectorWithSelectionVectorAccessPath;
+import AethraDB.evaluation.codegen.infrastructure.context.access_path.ArrayVectorWithValidityMaskAccessPath;
+import AethraDB.evaluation.codegen.infrastructure.context.access_path.ArrowVectorAccessPath;
 import AethraDB.evaluation.codegen.infrastructure.context.access_path.ArrowVectorWithSelectionVectorAccessPath;
 import AethraDB.evaluation.codegen.infrastructure.context.access_path.ArrowVectorWithValidityMaskAccessPath;
 import AethraDB.evaluation.codegen.infrastructure.context.access_path.MapAccessPath;
+import AethraDB.evaluation.codegen.infrastructure.context.access_path.ScalarVariableAccessPath;
+import AethraDB.evaluation.codegen.infrastructure.janino.JaninoControlGen;
+import AethraDB.evaluation.codegen.infrastructure.janino.JaninoOperatorGen;
 import AethraDB.evaluation.general_support.hashmaps.KeyMultiRecordMapGenerator;
 import org.apache.calcite.rel.core.JoinRelType;
 import org.apache.calcite.rel.logical.LogicalJoin;
@@ -49,7 +49,6 @@ import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableTy
 import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableTypeMethods.vectorTypeForPrimitiveArrayType;
 import static AethraDB.evaluation.codegen.infrastructure.janino.JaninoClassGen.createClassInstance;
 import static AethraDB.evaluation.codegen.infrastructure.janino.JaninoClassGen.createLocalClassDeclarationStm;
-import static AethraDB.evaluation.codegen.infrastructure.janino.JaninoControlGen.createIf;
 import static AethraDB.evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createAmbiguousNameRef;
 import static AethraDB.evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createArrayElementAccessExpr;
 import static AethraDB.evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createIntegerLiteral;

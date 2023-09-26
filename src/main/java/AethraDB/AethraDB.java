@@ -8,6 +8,7 @@ import AethraDB.evaluation.codegen.infrastructure.context.OptimisationContext;
 import AethraDB.evaluation.codegen.operators.CodeGenOperator;
 import AethraDB.evaluation.codegen.operators.QueryResultCountOperator;
 import AethraDB.evaluation.codegen.operators.QueryResultPrinterOperator;
+import AethraDB.util.arrow.ArrowDatabase;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.externalize.RelWriterImpl;
 import org.apache.calcite.sql.SqlExplainLevel;
@@ -19,7 +20,6 @@ import org.apache.commons.cli.HelpFormatter;
 import org.apache.commons.cli.Option;
 import org.apache.commons.cli.Options;
 import org.apache.commons.cli.ParseException;
-import AethraDB.util.arrow.ArrowDatabase;
 
 import java.io.File;
 import java.io.PrintWriter;

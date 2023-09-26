@@ -1,5 +1,6 @@
 package AethraDB.evaluation.codegen.operators;
 
+import AethraDB.evaluation.codegen.infrastructure.context.CodeGenContext;
 import AethraDB.evaluation.codegen.infrastructure.context.OptimisationContext;
 import AethraDB.evaluation.codegen.infrastructure.context.QueryVariableType;
 import AethraDB.evaluation.codegen.infrastructure.context.QueryVariableTypeMethods;
@@ -9,7 +10,6 @@ import AethraDB.evaluation.codegen.infrastructure.context.access_path.SIMDLoopAc
 import AethraDB.evaluation.codegen.infrastructure.context.access_path.ScalarVariableAccessPath;
 import AethraDB.evaluation.codegen.infrastructure.janino.JaninoGeneralGen;
 import AethraDB.evaluation.codegen.infrastructure.janino.JaninoVariableGen;
-import AethraDB.evaluation.codegen.infrastructure.context.CodeGenContext;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rex.RexLiteral;
 import org.apache.calcite.sql.type.BasicSqlType;
@@ -21,10 +21,6 @@ import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Objects;
-
-import static AethraDB.evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createFloatingPointLiteral;
-import static AethraDB.evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createIntegerLiteral;
-import static AethraDB.evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createNew2DPrimitiveArray;
 
 /**
  * Class that is extended by all code generator operators.

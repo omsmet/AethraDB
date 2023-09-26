@@ -1,12 +1,12 @@
 package AethraDB.calcite.rules;
 
 import AethraDB.calcite.operators.LogicalArrowTableScan;
+import AethraDB.util.arrow.ArrowTable;
 import org.apache.calcite.plan.RelOptRuleCall;
 import org.apache.calcite.plan.RelOptTable;
 import org.apache.calcite.plan.RelRule;
 import org.apache.calcite.rel.logical.LogicalTableScan;
 import org.immutables.value.Value;
-import AethraDB.util.arrow.ArrowTable;
 
 import java.util.List;
 

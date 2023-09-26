@@ -1,8 +1,10 @@
 package AethraDB.evaluation.codegen.operators;
 
+import AethraDB.evaluation.codegen.infrastructure.context.CodeGenContext;
 import AethraDB.evaluation.codegen.infrastructure.context.OptimisationContext;
 import AethraDB.evaluation.codegen.infrastructure.context.access_path.AccessPath;
 import AethraDB.evaluation.codegen.infrastructure.context.access_path.ArrayVectorAccessPath;
+import AethraDB.evaluation.codegen.infrastructure.context.access_path.ArrayVectorWithSelectionVectorAccessPath;
 import AethraDB.evaluation.codegen.infrastructure.context.access_path.ArrayVectorWithValidityMaskAccessPath;
 import AethraDB.evaluation.codegen.infrastructure.context.access_path.ArrowVectorAccessPath;
 import AethraDB.evaluation.codegen.infrastructure.context.access_path.ArrowVectorWithSelectionVectorAccessPath;
@@ -14,8 +16,6 @@ import AethraDB.evaluation.codegen.infrastructure.janino.JaninoGeneralGen;
 import AethraDB.evaluation.codegen.infrastructure.janino.JaninoMethodGen;
 import AethraDB.evaluation.codegen.infrastructure.janino.JaninoOperatorGen;
 import AethraDB.evaluation.codegen.infrastructure.janino.JaninoVariableGen;
-import AethraDB.evaluation.codegen.infrastructure.context.CodeGenContext;
-import AethraDB.evaluation.codegen.infrastructure.context.access_path.ArrayVectorWithSelectionVectorAccessPath;
 import org.apache.calcite.rel.RelNode;
 import org.codehaus.janino.Java;
 
@@ -24,8 +24,6 @@ import java.util.List;
 
 import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableType.P_LONG;
 import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableTypeMethods.toJavaType;
-import static AethraDB.evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createIntegerLiteral;
-import static AethraDB.evaluation.codegen.infrastructure.janino.JaninoMethodGen.createMethodInvocation;
 
 /**
  * A {@link CodeGenOperator} which simply counts the number of records passed into it.

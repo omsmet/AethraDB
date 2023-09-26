@@ -1,5 +1,6 @@
 package AethraDB.evaluation.general_support.hashmaps;
 
+import AethraDB.evaluation.codegen.infrastructure.context.CodeGenContext;
 import AethraDB.evaluation.codegen.infrastructure.context.access_path.AccessPath;
 import AethraDB.evaluation.codegen.infrastructure.context.access_path.SIMDLoopAccessPath;
 import AethraDB.evaluation.codegen.infrastructure.context.access_path.ScalarVariableAccessPath;
@@ -8,7 +9,6 @@ import AethraDB.evaluation.codegen.infrastructure.janino.JaninoGeneralGen;
 import AethraDB.evaluation.codegen.infrastructure.janino.JaninoMethodGen;
 import AethraDB.evaluation.codegen.infrastructure.janino.JaninoOperatorGen;
 import AethraDB.evaluation.codegen.infrastructure.janino.JaninoVariableGen;
-import AethraDB.evaluation.codegen.infrastructure.context.CodeGenContext;
 import org.codehaus.janino.Java;
 
 import java.util.ArrayList;
@@ -17,10 +17,6 @@ import java.util.List;
 import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableType.P_INT;
 import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableType.P_LONG;
 import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableTypeMethods.toJavaType;
-import static AethraDB.evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createIntegerLiteral;
-import static AethraDB.evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createReferenceType;
-import static AethraDB.evaluation.codegen.infrastructure.janino.JaninoMethodGen.createMethodInvocation;
-import static AethraDB.evaluation.codegen.infrastructure.janino.JaninoVariableGen.createPrimitiveLocalVar;
 
 /**
  * The standard hash function used for computing the hash value of an integer column.

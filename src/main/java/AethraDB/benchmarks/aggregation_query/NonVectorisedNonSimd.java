@@ -9,6 +9,7 @@ import AethraDB.evaluation.codegen.infrastructure.context.CodeGenContext;
 import AethraDB.evaluation.codegen.infrastructure.context.OptimisationContext;
 import AethraDB.evaluation.codegen.infrastructure.data.ArrowTableReader;
 import AethraDB.evaluation.codegen.operators.CodeGenOperator;
+import AethraDB.util.arrow.ArrowDatabase;
 import org.apache.calcite.rel.RelNode;
 import org.openjdk.jmh.annotations.Benchmark;
 import org.openjdk.jmh.annotations.BenchmarkMode;
@@ -21,7 +22,6 @@ import org.openjdk.jmh.annotations.Scope;
 import org.openjdk.jmh.annotations.Setup;
 import org.openjdk.jmh.annotations.State;
 import org.openjdk.jmh.annotations.TearDown;
-import AethraDB.util.arrow.ArrowDatabase;
 
 import java.io.IOException;
 import java.util.concurrent.TimeUnit;

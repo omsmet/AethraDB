@@ -1,13 +1,13 @@
 package AethraDB.evaluation.general_support.hashmaps;
 
+import AethraDB.evaluation.codegen.infrastructure.context.QueryVariableType;
 import AethraDB.evaluation.codegen.infrastructure.context.access_path.AccessPath;
+import AethraDB.evaluation.codegen.infrastructure.context.access_path.ArrayAccessPath;
 import AethraDB.evaluation.codegen.infrastructure.context.access_path.ScalarVariableAccessPath;
 import AethraDB.evaluation.codegen.infrastructure.janino.JaninoClassGen;
 import AethraDB.evaluation.codegen.infrastructure.janino.JaninoControlGen;
 import AethraDB.evaluation.codegen.infrastructure.janino.JaninoGeneralGen;
 import AethraDB.evaluation.codegen.infrastructure.janino.JaninoOperatorGen;
-import AethraDB.evaluation.codegen.infrastructure.context.QueryVariableType;
-import AethraDB.evaluation.codegen.infrastructure.context.access_path.ArrayAccessPath;
 import org.codehaus.janino.Access;
 import org.codehaus.janino.Java;
 
@@ -25,12 +25,7 @@ import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableTy
 import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableTypeMethods.primitiveMemberTypeForArray;
 import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableTypeMethods.toJavaPrimitive;
 import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableTypeMethods.toJavaType;
-import static AethraDB.evaluation.codegen.infrastructure.janino.JaninoClassGen.createClassInstance;
-import static AethraDB.evaluation.codegen.infrastructure.janino.JaninoControlGen.createIf;
-import static AethraDB.evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createIntegerLiteral;
-import static AethraDB.evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createNew2DPrimitiveArray;
 import static AethraDB.evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createNewPrimitiveArray;
-import static AethraDB.evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createReferenceType;
 import static AethraDB.evaluation.codegen.infrastructure.janino.JaninoMethodGen.createConstructor;
 import static AethraDB.evaluation.codegen.infrastructure.janino.JaninoMethodGen.createFormalParameter;
 import static AethraDB.evaluation.codegen.infrastructure.janino.JaninoMethodGen.createFormalParameters;

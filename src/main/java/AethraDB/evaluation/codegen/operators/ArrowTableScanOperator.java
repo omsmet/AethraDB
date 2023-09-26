@@ -1,24 +1,24 @@
 package AethraDB.evaluation.codegen.operators;
 
 import AethraDB.calcite.operators.LogicalArrowTableScan;
-import AethraDB.evaluation.codegen.infrastructure.context.access_path.AccessPath;
-import AethraDB.evaluation.codegen.infrastructure.context.access_path.ArrowVectorAccessPath;
-import AethraDB.evaluation.codegen.infrastructure.context.access_path.IndexedArrowVectorElementAccessPath;
-import AethraDB.evaluation.codegen.infrastructure.context.access_path.SIMDVectorSpeciesAccessPath;
-import AethraDB.evaluation.codegen.infrastructure.context.access_path.ScalarVariableAccessPath;
-import AethraDB.evaluation.codegen.infrastructure.data.ArrowTableReader;
 import AethraDB.evaluation.codegen.infrastructure.context.CodeGenContext;
 import AethraDB.evaluation.codegen.infrastructure.context.OptimisationContext;
 import AethraDB.evaluation.codegen.infrastructure.context.QueryVariableType;
+import AethraDB.evaluation.codegen.infrastructure.context.access_path.AccessPath;
+import AethraDB.evaluation.codegen.infrastructure.context.access_path.ArrowVectorAccessPath;
+import AethraDB.evaluation.codegen.infrastructure.context.access_path.IndexedArrowVectorElementAccessPath;
 import AethraDB.evaluation.codegen.infrastructure.context.access_path.SIMDLoopAccessPath;
 import AethraDB.evaluation.codegen.infrastructure.context.access_path.SIMDMemorySegmentAccessPath;
 import AethraDB.evaluation.codegen.infrastructure.context.access_path.SIMDVectorMaskAccessPath;
+import AethraDB.evaluation.codegen.infrastructure.context.access_path.SIMDVectorSpeciesAccessPath;
+import AethraDB.evaluation.codegen.infrastructure.context.access_path.ScalarVariableAccessPath;
 import AethraDB.evaluation.codegen.infrastructure.data.ABQArrowTableReader;
+import AethraDB.evaluation.codegen.infrastructure.data.ArrowTableReader;
 import AethraDB.evaluation.codegen.infrastructure.janino.JaninoOperatorGen;
+import AethraDB.util.arrow.ArrowTable;
 import org.apache.calcite.prepare.RelOptTableImpl;
 import org.apache.calcite.rel.type.RelDataTypeField;
 import org.codehaus.janino.Java;
-import AethraDB.util.arrow.ArrowTable;
 
 import java.util.ArrayList;
 import java.util.Arrays;

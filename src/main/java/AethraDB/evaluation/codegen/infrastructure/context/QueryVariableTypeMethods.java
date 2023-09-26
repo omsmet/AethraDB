@@ -5,8 +5,6 @@ import org.apache.calcite.sql.type.SqlTypeName;
 import org.codehaus.commons.compiler.Location;
 import org.codehaus.janino.Java;
 
-import static AethraDB.evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createReferenceType;
-
 /**
  * Class containing helper methods to operate on {@link QueryVariableType} values.
  */

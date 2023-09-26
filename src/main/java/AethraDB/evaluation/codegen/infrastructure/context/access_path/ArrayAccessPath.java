@@ -1,7 +1,7 @@
 package AethraDB.evaluation.codegen.infrastructure.context.access_path;
 
-import AethraDB.evaluation.codegen.infrastructure.janino.JaninoGeneralGen;
 import AethraDB.evaluation.codegen.infrastructure.context.QueryVariableType;
+import AethraDB.evaluation.codegen.infrastructure.janino.JaninoGeneralGen;
 import org.codehaus.janino.Java;
 
 /**

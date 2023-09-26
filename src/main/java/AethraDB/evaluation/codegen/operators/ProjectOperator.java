@@ -1,5 +1,6 @@
 package AethraDB.evaluation.codegen.operators;
 
+import AethraDB.evaluation.codegen.infrastructure.context.CodeGenContext;
 import AethraDB.evaluation.codegen.infrastructure.context.OptimisationContext;
 import AethraDB.evaluation.codegen.infrastructure.context.QueryVariableType;
 import AethraDB.evaluation.codegen.infrastructure.context.QueryVariableTypeMethods;
@@ -17,7 +18,6 @@ import AethraDB.evaluation.codegen.infrastructure.janino.JaninoGeneralGen;
 import AethraDB.evaluation.codegen.infrastructure.janino.JaninoMethodGen;
 import AethraDB.evaluation.codegen.infrastructure.janino.JaninoOperatorGen;
 import AethraDB.evaluation.codegen.infrastructure.janino.JaninoVariableGen;
-import AethraDB.evaluation.codegen.infrastructure.context.CodeGenContext;
 import org.apache.calcite.avatica.util.TimeUnit;
 import org.apache.calcite.avatica.util.TimeUnitRange;
 import org.apache.calcite.rel.logical.LogicalProject;
@@ -35,11 +35,6 @@ import org.codehaus.janino.Java;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
-
-import static AethraDB.evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createFloatingPointLiteral;
-import static AethraDB.evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createIntegerLiteral;
-import static AethraDB.evaluation.codegen.infrastructure.janino.JaninoMethodGen.createMethodInvocation;
-import static AethraDB.evaluation.codegen.infrastructure.janino.JaninoVariableGen.createPrimitiveLocalVar;
 
 /**
  * A {@link CodeGenOperator} which project out records according to a given criterion.

@@ -7,10 +7,10 @@ import AethraDB.evaluation.codegen.infrastructure.data.ArrowTableReader;
 import AethraDB.evaluation.codegen.infrastructure.data.BufferPoolAllocationManager;
 import AethraDB.evaluation.codegen.infrastructure.janino.JaninoGeneralGen;
 import AethraDB.evaluation.codegen.infrastructure.janino.JaninoVariableGen;
+import AethraDB.util.arrow.ArrowDatabase;
 import org.apache.arrow.memory.RootAllocator;
 import org.apache.calcite.util.Pair;
 import org.codehaus.janino.Java;
-import AethraDB.util.arrow.ArrowDatabase;
 
 import java.util.ArrayList;
 import java.util.HashSet;
