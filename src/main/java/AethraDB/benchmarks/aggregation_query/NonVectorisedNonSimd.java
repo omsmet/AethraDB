@@ -12,6 +12,7 @@ import AethraDB.evaluation.codegen.operators.CodeGenOperator;
 import AethraDB.util.arrow.ArrowDatabase;
 import org.apache.arrow.memory.RootAllocator;
 import org.apache.calcite.rel.RelNode;
+import org.apache.calcite.util.SourceStringReader;
 import org.openjdk.jmh.annotations.Benchmark;
 import org.openjdk.jmh.annotations.BenchmarkMode;
 import org.openjdk.jmh.annotations.Fork;
@@ -25,6 +26,7 @@ import org.openjdk.jmh.annotations.State;
 import org.openjdk.jmh.annotations.TearDown;
 
 import java.io.IOException;
+import java.io.StringReader;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -185,7 +187,7 @@ public class NonVectorisedNonSimd extends ResultConsumptionTarget {
         this.database = new ArrowDatabase(this.tableFilePath, arrowRootAllocator);
 
         // Plan the query
-        RelNode plannedQuery = this.database.planQuery(query);
+        RelNode plannedQuery = this.database.planQuery(new StringReader(query));
 
         // Create the contexts required for code generation
         CodeGenContext cCtx = new CodeGenContext(database, arrowRootAllocator);

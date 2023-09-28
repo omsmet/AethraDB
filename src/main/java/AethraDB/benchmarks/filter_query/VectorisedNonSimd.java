@@ -25,6 +25,7 @@ import org.openjdk.jmh.annotations.State;
 import org.openjdk.jmh.annotations.TearDown;
 
 import java.io.IOException;
+import java.io.StringReader;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -115,7 +116,7 @@ public class VectorisedNonSimd extends ResultConsumptionTarget {
         this.database = new ArrowDatabase(this.tableFilePath, arrowRootAllocator);
 
         // Plan the query
-        RelNode plannedQuery = this.database.planQuery(query);
+        RelNode plannedQuery = this.database.planQuery(new StringReader(query));
 
         // Create the contexts required for code generation
         CodeGenContext cCtx = new CodeGenContext(database, arrowRootAllocator);

@@ -22,6 +22,7 @@ import org.apache.commons.cli.Option;
 import org.apache.commons.cli.Options;
 import org.apache.commons.cli.ParseException;
 
+import java.io.BufferedReader;
 import java.io.File;
 import java.io.PrintWriter;
 import java.nio.file.Files;
@@ -125,10 +126,10 @@ public class AethraDB {
         ArrowDatabase database = new ArrowDatabase(databaseDirectoryPath, arrowRootAllocator);
 
         // Read the query
-        String textualSqlQuery = Files.readString(queryFile.toPath());
+        BufferedReader sqlQueryReader = Files.newBufferedReader(queryFile.toPath());
 
         // Parse query into AST
-        SqlNode parsedSqlQuery = database.parseQuery(textualSqlQuery);
+        SqlNode parsedSqlQuery = database.parseQuery(sqlQueryReader);
 
         // Validate the parsed query
         RelNode validatedSqlQuery = database.validateQuery(parsedSqlQuery);

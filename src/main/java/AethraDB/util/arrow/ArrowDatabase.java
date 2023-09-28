@@ -3,6 +3,7 @@ package AethraDB.util.arrow;
 import AethraDB.calcite.rules.ArrowTableScanFilterProjectRule;
 import AethraDB.calcite.rules.ArrowTableScanProjectionRule;
 import AethraDB.calcite.rules.ArrowTableScanRule;
+import AethraDB.util.calcite.ParseAndValidateOnlyPlannerImpl;
 import org.apache.arrow.memory.RootAllocator;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.jdbc.JavaTypeFactoryImpl;
@@ -12,7 +13,10 @@ import org.apache.calcite.plan.hep.HepProgramBuilder;
 import org.apache.calcite.plan.volcano.VolcanoPlanner;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.RelRoot;
-import org.apache.calcite.rel.rules.CoreRules;
+import org.apache.calcite.rel.rules.AggregateReduceFunctionsRule;
+import org.apache.calcite.rel.rules.FilterJoinRule;
+import org.apache.calcite.rel.rules.ProjectJoinTransposeRule;
+import org.apache.calcite.rel.rules.ProjectRemoveRule;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
 import org.apache.calcite.rel.type.RelDataTypeField;
@@ -26,6 +30,7 @@ import org.apache.calcite.tools.Planner;
 import org.apache.calcite.tools.RelConversionException;
 import org.apache.calcite.tools.ValidationException;
 
+import java.io.Reader;
 import java.util.Objects;
 
 /**
@@ -80,7 +85,7 @@ public class ArrowDatabase {
                 .parserConfig(sqlParserConfig)
                 .defaultSchema(databaseSchema.plus())
                 .build();
-        this.queryPlanner = Frameworks.getPlanner(frameworkConfig);
+        this.queryPlanner = new ParseAndValidateOnlyPlannerImpl(frameworkConfig);
 
         // Configure the HEP optimiser
         this.hepPlanner = configureOptimiser();
@@ -118,7 +123,7 @@ public class ArrowDatabase {
      * @return The parsed query.
      * @throws SqlParseException when the query cannot be successfully parsed.
      */
-    public SqlNode parseQuery(String query) throws SqlParseException {
+    public SqlNode parseQuery(Reader query) throws SqlParseException {
         return this.queryPlanner.parse(query);
     }
 
@@ -130,7 +135,7 @@ public class ArrowDatabase {
      * @throws ValidationException when the query cannot be successfully validated.
      * @throws RelConversionException if the query cannot be converted into the appropriate return format.
      */
-    public RelNode validateQuery(String query) throws SqlParseException, ValidationException, RelConversionException {
+    public RelNode validateQuery(Reader query) throws SqlParseException, ValidationException, RelConversionException {
         SqlNode parsedQuery = this.parseQuery(query);
         return this.validateQuery(parsedQuery);
     }
@@ -156,7 +161,7 @@ public class ArrowDatabase {
      * @throws ValidationException when the query cannot be successfully validated.
      * @throws RelConversionException if the query cannot be converted into the appropriate return format.
      */
-    public RelNode planQuery(String query) throws SqlParseException, ValidationException, RelConversionException {
+    public RelNode planQuery(Reader query) throws SqlParseException, ValidationException, RelConversionException {
         RelNode queryNode = this.validateQuery(query);
         return this.planQuery(queryNode);
     }
@@ -215,17 +220,23 @@ public class ArrowDatabase {
     private HepPlanner configureOptimiser() {
         HepProgramBuilder hepProgramBuilder = new HepProgramBuilder();
 
+        // CoreRules have been translated to their actual value to prevent instantiation of the complete class
+
         // Required for AVG aggregation
-        hepProgramBuilder.addRuleInstance(CoreRules.AGGREGATE_REDUCE_FUNCTIONS);        // Reduces aggregate functions in an aggregate to simpler forms
+        // hepProgramBuilder.addRuleInstance(CoreRules.AGGREGATE_REDUCE_FUNCTIONS);        // Reduces aggregate functions in an aggregate to simpler forms
+        hepProgramBuilder.addRuleInstance(AggregateReduceFunctionsRule.Config.DEFAULT.toRule());
 
         // Required to rewrite WHERE conditions into an INNER JOIN
-        hepProgramBuilder.addRuleInstance(CoreRules.FILTER_INTO_JOIN);                  // Pushes filter expressions into a join condition and into the inputs of the join
+        // hepProgramBuilder.addRuleInstance(CoreRules.FILTER_INTO_JOIN);                  // Pushes filter expressions into a join condition and into the inputs of the join
+        hepProgramBuilder.addRuleInstance(FilterJoinRule.FilterIntoJoinRule.FilterIntoJoinRuleConfig.DEFAULT.toRule());
 
         // Required to ensure online necessary columns are processed by the JOIN operator
-        hepProgramBuilder.addRuleInstance(CoreRules.PROJECT_JOIN_TRANSPOSE);            // Push project past join
+        // hepProgramBuilder.addRuleInstance(CoreRules.PROJECT_JOIN_TRANSPOSE);            // Push project past join
+        hepProgramBuilder.addRuleInstance(ProjectJoinTransposeRule.Config.DEFAULT.toRule());
 
         // Required to optimise projections
-        hepProgramBuilder.addRuleInstance(CoreRules.PROJECT_REMOVE);                    // Removes projections that only return their input
+        // hepProgramBuilder.addRuleInstance(CoreRules.PROJECT_REMOVE);                    // Removes projections that only return their input
+        hepProgramBuilder.addRuleInstance(ProjectRemoveRule.Config.DEFAULT.toRule());
 
         // Rules to enable custom, arrow-specific optimisations/translations
         final ArrowTableScanProjectionRule PROJECT_SCAN = ArrowTableScanProjectionRule.Config.DEFAULT.toRule();

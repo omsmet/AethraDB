@@ -1,23 +1,16 @@
 package AethraDB.util.arrow;
 
-import AethraDB.evaluation.codegen.infrastructure.data.AethraArrowFileReader;
 import org.apache.arrow.memory.RootAllocator;
-import org.apache.arrow.vector.VectorSchemaRoot;
-import org.apache.arrow.vector.ipc.ArrowFileReader;
 import org.apache.arrow.vector.types.FloatingPointPrecision;
 import org.apache.arrow.vector.types.pojo.ArrowType;
 import org.apache.arrow.vector.types.pojo.Field;
-import org.apache.arrow.vector.types.pojo.Schema;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
 import org.apache.calcite.sql.type.SqlTypeName;
-import org.apache.calcite.util.ImmutableIntList;
 
 import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileNotFoundException;
-import java.io.IOException;
+import java.util.ArrayList;
 
 /**
  * Class containing functionality for building a {@link CalciteSchema} for a database that is
@@ -76,34 +69,28 @@ public class ArrowSchemaBuilder {
      * @return The type representing the Arrow table.
      */
     private static ArrowTable createTableForArrowFile(File arrowTable, RelDataTypeFactory typeFactory, RootAllocator rootAllocator) {
-        // Convert the arrow schema into the required RelDataType
-        try (   // Initialise the objects needed to read the Arrow schema
-                var arrowTableInputStream = new FileInputStream(arrowTable);
-                var arrowTableFileReader = new AethraArrowFileReader(arrowTableInputStream.getChannel(), rootAllocator, ImmutableIntList.of());
-        ) {
-            // Obtain the arrow schema
-            Schema arrowSchema = arrowTableFileReader.readSchema();
-
-            // Create a builder for the calcite type
-            RelDataTypeFactory.Builder builderForTable = typeFactory.builder();
-
-            // Add each column to the calcite type
-            for (Field column : arrowSchema.getFields()) {
-                RelDataType columnType = typeFactory.createTypeWithNullability(arrowToSqlType(column.getType(), typeFactory), false);
-                builderForTable.add(column.getName(), columnType);
-            }
-
-            // Obtain the calcite type
-            RelDataType tableType = builderForTable.build();
-
-            // Construct the table instance
-            return new ArrowTable(arrowTable, tableType);
-
-        } catch (FileNotFoundException e) {
-            throw new IllegalStateException("Cannot create a table schema from a non-existent table file: " + e.getMessage());
-        } catch (IOException e) {
-            throw new RuntimeException("I/O exception occurred while creating a schema for table file '" + arrowTable.getPath() + "': " + e.getMessage());
+        // Get the arrow schema from the file
+        ArrayList<Field> arrowSchemaFields;
+        try {
+            arrowSchemaFields = ArrowFileSchemaExtractor.getFieldDescriptionFromTableFile(arrowTable);
+        } catch (Exception e) {
+            throw new RuntimeException("Could not parse the arrow file schema for file '" + arrowTable.getPath() + "'", e);
         }
+
+        // Create a builder for the calcite type
+        RelDataTypeFactory.Builder builderForTable = typeFactory.builder();
+
+        // Add each column to the calcite type
+        for (Field column : arrowSchemaFields) {
+            RelDataType columnType = typeFactory.createTypeWithNullability(arrowToSqlType(column.getType(), typeFactory), false);
+            builderForTable.add(column.getName(), columnType);
+        }
+
+        // Obtain the calcite type
+        RelDataType tableType = builderForTable.build();
+
+        // Construct the table instance
+        return new ArrowTable(arrowTable, tableType);
     }
 
     /**
