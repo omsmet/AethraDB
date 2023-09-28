@@ -13,6 +13,9 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * This class has been edited in the AethraDB context to remove overhead from the implementation.
+ * Specifically JSON related functionality has been removed from this edited class.
  */
 
 package org.apache.arrow.vector.types.pojo;
@@ -20,7 +23,6 @@ package org.apache.arrow.vector.types.pojo;
 
 import static org.apache.arrow.vector.types.pojo.Field.convertField;
 
-import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.AbstractMap;
@@ -35,18 +37,8 @@ import java.util.stream.Collectors;
 import org.apache.arrow.flatbuf.Endianness;
 import org.apache.arrow.flatbuf.KeyValue;
 import org.apache.arrow.util.Collections2;
-import org.apache.arrow.util.Preconditions;
 import org.apache.arrow.vector.ipc.message.FBSerializables;
 
-import com.fasterxml.jackson.annotation.JsonCreator;
-import com.fasterxml.jackson.annotation.JsonIgnore;
-import com.fasterxml.jackson.annotation.JsonInclude;
-import com.fasterxml.jackson.annotation.JsonInclude.Include;
-import com.fasterxml.jackson.annotation.JsonProperty;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.ObjectReader;
-import com.fasterxml.jackson.databind.ObjectWriter;
 import com.google.flatbuffers.FlatBufferBuilder;
 
 /**
@@ -74,14 +66,16 @@ public class Schema {
   static final String METADATA_KEY = "key";
   static final String METADATA_VALUE = "value";
 
-  private static final ObjectMapper mapper = new ObjectMapper();
-  private static final ObjectWriter writer = mapper.writerWithDefaultPrettyPrinter();
-  private static final ObjectReader reader = mapper.readerFor(Schema.class);
+// Removed since AethraDB does not use this functionality
+//  private static final ObjectMapper mapper = new ObjectMapper();
+//  private static final ObjectWriter writer = mapper.writerWithDefaultPrettyPrinter();
+//  private static final ObjectReader reader = mapper.readerFor(Schema.class);
   private static final boolean LITTLE_ENDIAN = ByteOrder.nativeOrder() == ByteOrder.LITTLE_ENDIAN;
 
-  public static Schema fromJSON(String json) throws IOException {
-    return reader.readValue(Preconditions.checkNotNull(json));
-  }
+//  Removed since AethraDB does not use this functionality
+//  public static Schema fromJSON(String json) throws IOException {
+//    return reader.readValue(Preconditions.checkNotNull(json));
+//  }
 
   public static Schema deserialize(ByteBuffer buffer) {
     return convertSchema(org.apache.arrow.flatbuf.Schema.getRootAsSchema(buffer));
@@ -120,15 +114,15 @@ public class Schema {
         metadata == null ? Collections.emptyMap() : Collections2.immutableMapCopy(metadata));
   }
 
-
-  /**
-   * Constructor used for JSON deserialization.
-   */
-  @JsonCreator
-  private Schema(@JsonProperty("fields") Iterable<Field> fields,
-                @JsonProperty("metadata") List<Map<String, String>> metadata) {
-    this(fields, convertMetadata(metadata));
-  }
+// Removed since AethraDB does not use this functionality
+//  /**
+//   * Constructor used for JSON deserialization.
+//   */
+//  @JsonCreator
+//  private Schema(@JsonProperty("fields") Iterable<Field> fields,
+//                @JsonProperty("metadata") List<Map<String, String>> metadata) {
+//    this(fields, convertMetadata(metadata));
+//  }
 
 
   /**
@@ -165,16 +159,18 @@ public class Schema {
     return fields;
   }
 
-  @JsonIgnore
+// Removed since AethraDB does not use this functionality
+//  @JsonIgnore
   public Map<String, String> getCustomMetadata() {
     return metadata;
   }
 
-  @JsonProperty("metadata")
-  @JsonInclude(Include.NON_EMPTY)
-  List<Map<String, String>> getCustomMetadataForJson() {
-    return convertMetadata(getCustomMetadata());
-  }
+// Removed since AethraDB does not use this functionality
+//  @JsonProperty("metadata")
+//  @JsonInclude(Include.NON_EMPTY)
+//  List<Map<String, String>> getCustomMetadataForJson() {
+//    return convertMetadata(getCustomMetadata());
+//  }
 
   /**
    * Search for a field by name in this Schema.
@@ -187,17 +183,18 @@ public class Schema {
     return findField(getFields(), name);
   }
 
-  /**
-   * Returns the JSON string representation of this schema.
-   */
-  public String toJson() {
-    try {
-      return writer.writeValueAsString(this);
-    } catch (JsonProcessingException e) {
-      // this should not happen
-      throw new RuntimeException(e);
-    }
-  }
+// Removed since AethraDB does not use this functionality
+//  /**
+//   * Returns the JSON string representation of this schema.
+//   */
+//  public String toJson() {
+//    try {
+//      return writer.writeValueAsString(this);
+//    } catch (JsonProcessingException e) {
+//      // this should not happen
+//      throw new RuntimeException(e);
+//    }
+//  }
 
   /**
    *  Adds this schema to the builder returning the size of the builder after adding.
