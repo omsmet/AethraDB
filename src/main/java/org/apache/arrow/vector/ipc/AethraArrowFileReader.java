@@ -1,4 +1,4 @@
-package AethraDB.evaluation.codegen.infrastructure.data;
+package org.apache.arrow.vector.ipc;
 
 import org.apache.arrow.flatbuf.Buffer;
 import org.apache.arrow.flatbuf.FieldNode;
@@ -13,10 +13,6 @@ import org.apache.arrow.vector.TypeLayout;
 import org.apache.arrow.vector.VectorSchemaRoot;
 import org.apache.arrow.vector.compression.CompressionCodec;
 import org.apache.arrow.vector.compression.NoCompressionCodec;
-import org.apache.arrow.vector.ipc.ArrowFileReader;
-import org.apache.arrow.vector.ipc.ArrowReader;
-import org.apache.arrow.vector.ipc.InvalidArrowFileException;
-import org.apache.arrow.vector.ipc.SeekableReadChannel;
 import org.apache.arrow.vector.ipc.message.ArrowBlock;
 import org.apache.arrow.vector.ipc.message.ArrowDictionaryBatch;
 import org.apache.arrow.vector.ipc.message.ArrowFieldNode;
@@ -27,8 +23,6 @@ import org.apache.arrow.vector.types.pojo.Schema;
 import org.apache.arrow.vector.util.DataSizeRoundingUtil;
 import org.apache.arrow.vector.validate.MetadataV4UnionChecker;
 import org.apache.calcite.util.ImmutableIntList;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -40,9 +34,11 @@ import java.util.List;
 import java.util.Map;
 
 import static org.apache.arrow.memory.util.LargeMemoryUtil.checkedCastToInt;
+import static org.apache.arrow.vector.ipc.ArrowMagic.MAGIC_LENGTH;
 import static org.apache.arrow.vector.ipc.message.MessageSerializer.IPC_CONTINUATION_TOKEN;
 
 /**
+ * AethraDB specific class.
  * Class which performs reading of Arrow IPC files, but while reducing overhead compared to the
  * standard {@link ArrowFileReader}.
  *
@@ -52,27 +48,6 @@ import static org.apache.arrow.vector.ipc.message.MessageSerializer.IPC_CONTINUA
  * - It assumes that field vectors are always aligned to 8-byte boundaries
  */
 public class AethraArrowFileReader extends ArrowReader {
-
-    private static final int MAGIC_LENGTH;
-    private static final java.lang.reflect.Method VALIDATE_MAGIC_METHOD;
-
-    static {
-        try {
-            Class<?> arrowMagicClass = Class.forName("org.apache.arrow.vector.ipc.ArrowMagic");
-
-            java.lang.reflect.Field magicLengthField = arrowMagicClass.getDeclaredField("MAGIC_LENGTH");
-            magicLengthField.setAccessible(true);
-            MAGIC_LENGTH = magicLengthField.getInt(null);
-
-            VALIDATE_MAGIC_METHOD = arrowMagicClass.getDeclaredMethod("validateMagic", byte[].class);
-            VALIDATE_MAGIC_METHOD.setAccessible(true);
-
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
-    }
-
-    private static final Logger LOGGER = LoggerFactory.getLogger(ArrowFileReader.class);
 
     private final SeekableReadChannel in;
     private final int[] columnsToRead;
@@ -124,14 +99,7 @@ public class AethraArrowFileReader extends ArrowReader {
             in.readFully(buffer);
             buffer.flip();
             byte[] array = buffer.array();
-            boolean validMagic;
-            try {
-                byte[] magicToValidate = Arrays.copyOfRange(array, 4, array.length);
-                validMagic = (boolean) VALIDATE_MAGIC_METHOD.invoke(null, magicToValidate);
-            } catch (Exception e) {
-                throw new RuntimeException(e);
-            }
-            if (!validMagic) {
+            if (!ArrowMagic.validateMagic(Arrays.copyOfRange(array, 4, array.length))) {
                 throw new InvalidArrowFileException("missing Magic number " + Arrays.toString(buffer.array()));
             }
             int footerLength = MessageSerializer.bytesToInt(array);
@@ -140,7 +108,6 @@ public class AethraArrowFileReader extends ArrowReader {
                 throw new InvalidArrowFileException("invalid footer length: " + footerLength);
             }
             long footerOffset = footerLengthOffset - footerLength;
-            LOGGER.debug("Footer starts at {}, length: {}", footerOffset, footerLength);
             ByteBuffer footerBuffer = ByteBuffer.allocate(footerLength);
             in.setPosition(footerOffset);
             in.readFully(footerBuffer);
@@ -242,8 +209,6 @@ public class AethraArrowFileReader extends ArrowReader {
     private ArrowDictionaryBatch readDictionaryBatch(SeekableReadChannel in,
                                                      ArrowBlock block,
                                                      BufferAllocator allocator) throws IOException {
-        LOGGER.debug("DictionaryRecordBatch at {}, metadata: {}, body: {}",
-                block.getOffset(), block.getMetadataLength(), block.getBodyLength());
         in.setPosition(block.getOffset());
         ArrowDictionaryBatch batch = MessageSerializer.deserializeDictionaryBatch(in, block, allocator);
         if (batch == null) {
@@ -253,8 +218,6 @@ public class AethraArrowFileReader extends ArrowReader {
     }
 
     private void readAndLoadRecordBatch(SeekableReadChannel in, ArrowBlock block, BufferAllocator allocator) throws IOException {
-        LOGGER.debug("RecordBatch at {}, metadata: {}, body: {}", block.getOffset(), block.getMetadataLength(), block.getBodyLength());
-
         // Move the reader to the correct position and initialise a variable to keep track of the current position
         long currentInPosition = block.getOffset();
         in.setPosition(currentInPosition);

@@ -3,6 +3,7 @@ package AethraDB.evaluation.codegen.infrastructure.data;
 import org.apache.arrow.memory.BufferAllocator;
 import org.apache.arrow.memory.RootAllocator;
 import org.apache.arrow.vector.FieldVector;
+import org.apache.arrow.vector.ipc.AethraArrowFileReader;
 import org.apache.calcite.util.ImmutableIntList;
 
 import java.io.File;
