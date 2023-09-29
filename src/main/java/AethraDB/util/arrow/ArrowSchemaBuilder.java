@@ -23,26 +23,24 @@ public class ArrowSchemaBuilder {
      * Create a schema for an Arrow database directory.
      * @param databaseDirectoryPath The directory to create the database schema from.
      * @param typeFactory The {@link RelDataTypeFactory} to use for creating the schema.
-     * @param rootAllocator The {@link RootAllocator} to use for creating the schema.
      * @return The schema representing the Arrow database in {@code databaseDirectoryPath}.
      */
-    public static CalciteSchema fromDirectory(String databaseDirectoryPath, RelDataTypeFactory typeFactory, RootAllocator rootAllocator) {
+    public static CalciteSchema fromDirectory(String databaseDirectoryPath, RelDataTypeFactory typeFactory) {
         File databaseDirectory = new File(databaseDirectoryPath);
 
         if (!databaseDirectory.exists() || !databaseDirectory.isDirectory())
             throw new IllegalStateException("Cannot create a schema for a non-existent database directory");
 
-        return fromDirectory(databaseDirectory, typeFactory, rootAllocator);
+        return fromDirectory(databaseDirectory, typeFactory);
     }
 
     /**
      * Create a schema for an Arrow database directory.
      * @param databaseDirectory The directory to create the database schema from.
      * @param typeFactory The {@link RelDataTypeFactory} to use for creating the schema.
-     * @param rootAllocator The {@link RootAllocator} to use for creating the schema.
      * @return The schema representing the Arrow database in {@code databaseDirectory}.
      */
-    public static CalciteSchema fromDirectory(File databaseDirectory, RelDataTypeFactory typeFactory, RootAllocator rootAllocator) {
+    public static CalciteSchema fromDirectory(File databaseDirectory, RelDataTypeFactory typeFactory) {
         // Create the root schema and type factory for the schema
         CalciteSchema databaseSchema = CalciteSchema.createRootSchema(false);
 
@@ -53,7 +51,7 @@ public class ArrowSchemaBuilder {
 
         // Add each arrow table to the schema
         for (File arrowTableFile : arrowTableFiles) {
-            ArrowTable arrowTableInstance = createTableForArrowFile(arrowTableFile, typeFactory, rootAllocator);
+            ArrowTable arrowTableInstance = createTableForArrowFile(arrowTableFile, typeFactory);
             databaseSchema.add(arrowTableInstance.getName(), arrowTableInstance);
         }
 
@@ -65,10 +63,9 @@ public class ArrowSchemaBuilder {
      * Create a {@link ArrowTable} instance representing the schema of a specific Arrow table.
      * @param arrowTable The {@link File} containing the Arrow table.
      * @param typeFactory The {@link RelDataTypeFactory} to use for creating the schema.
-     * @param rootAllocator The {@link RootAllocator} to use for creating the schema.
      * @return The type representing the Arrow table.
      */
-    private static ArrowTable createTableForArrowFile(File arrowTable, RelDataTypeFactory typeFactory, RootAllocator rootAllocator) {
+    private static ArrowTable createTableForArrowFile(File arrowTable, RelDataTypeFactory typeFactory) {
         // Get the arrow schema from the file
         ArrayList<Field> arrowSchemaFields;
         try {

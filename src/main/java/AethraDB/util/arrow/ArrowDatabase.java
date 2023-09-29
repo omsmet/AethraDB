@@ -72,12 +72,11 @@ public class ArrowDatabase {
     /**
      * Constructs a new {@link ArrowDatabase} instance.
      * @param databaseDirectoryPath The directory from which the database should be loaded.
-     * @param rootAllocator The {@link RootAllocator} to use for configuring the schema.
      */
-    public ArrowDatabase(String databaseDirectoryPath, RootAllocator rootAllocator) {
+    public ArrowDatabase(String databaseDirectoryPath) {
         // Initialise the schema
         this.typeFactory = new JavaTypeFactoryImpl();
-        this.databaseSchema = ArrowSchemaBuilder.fromDirectory(databaseDirectoryPath, this.typeFactory, rootAllocator);
+        this.databaseSchema = ArrowSchemaBuilder.fromDirectory(databaseDirectoryPath, this.typeFactory);
 
         // Initialise the planner
         SqlParser.Config sqlParserConfig = SqlParser.config().withCaseSensitive(false);
@@ -185,14 +184,7 @@ public class ArrowDatabase {
      */
     public RelNode planQuery(RelNode query) {
         this.hepPlanner.setRoot(query);
-        RelNode plannedQuery = this.hepPlanner.findBestExp();
-
-        // Finally, configure the VolcanoPlanner of the query to give approximate costs for the operators
-        RelOptCluster queryCluster = plannedQuery.getCluster();
-        VolcanoPlanner queryVolcanoPlanner = (VolcanoPlanner) queryCluster.getPlanner();
-        queryVolcanoPlanner.setNoneConventionHasInfiniteCost(false);
-
-        return plannedQuery;
+        return this.hepPlanner.findBestExp();
     }
 
     /**

@@ -113,7 +113,7 @@ public class NonVectorisedNonSimd extends ResultConsumptionTarget {
         RootAllocator arrowRootAllocator = new RootAllocator();
 
         // Setup the database
-        this.database = new ArrowDatabase(this.tableFilePath, arrowRootAllocator);
+        this.database = new ArrowDatabase(this.tableFilePath);
 
         // Plan the query
         RelNode plannedQuery = this.database.planQuery(new StringReader(query));

@@ -123,7 +123,7 @@ public class AethraDB {
         queryPlanningStart = System.nanoTime();
 
         // Create the database instance
-        ArrowDatabase database = new ArrowDatabase(databaseDirectoryPath, arrowRootAllocator);
+        ArrowDatabase database = new ArrowDatabase(databaseDirectoryPath);
 
         // Read the query
         BufferedReader sqlQueryReader = Files.newBufferedReader(queryFile.toPath());
