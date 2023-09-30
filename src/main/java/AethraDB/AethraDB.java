@@ -25,6 +25,9 @@ import org.apache.commons.cli.ParseException;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.PrintWriter;
+import java.nio.ByteBuffer;
+import java.nio.MappedByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 
 /**
@@ -122,89 +125,96 @@ public class AethraDB {
         // Take time when query planning starts
         queryPlanningStart = System.nanoTime();
 
-        // Create the database instance
-        ArrowDatabase database = new ArrowDatabase(databaseDirectoryPath);
+        // Plan the query via the native library
+        System.load("/home/olivier/Repositories/AethraDB-Planner-Lib/AethraDB-Planner-Lib.so");
 
-        // Read the query
-        BufferedReader sqlQueryReader = Files.newBufferedReader(queryFile.toPath());
+        long isolateThread = createIsolate();
+        String queryPlan = plan(isolateThread, databaseDirectoryPath, queryFile.getPath());
+        System.out.println(queryPlan);
 
-        // Parse query into AST
-        SqlNode parsedSqlQuery = database.parseQuery(sqlQueryReader);
-
-        // Validate the parsed query
-        RelNode validatedSqlQuery = database.validateQuery(parsedSqlQuery);
-
-        // Plan the query
-        RelNode logicalQueryPlan = database.planQuery(validatedSqlQuery);
-
-        // Take time when the query planning has finished
-        queryPlanningEnd = System.nanoTime();
-
-        // Print debug information if required
-        if (verboseOutputEnabled) {
-            System.out.println("[Database schema]");
-            database.printSchema();
-            System.out.println();
-
-            System.out.println("[Parsed query]");
-            System.out.println(parsedSqlQuery.toString());
-            System.out.println();
-
-            System.out.println("[Validated query]");
-            System.out.println(validatedSqlQuery.toString());
-            System.out.println();
-
-            System.out.println("[Optimised query]");
-            var relWriter = new RelWriterImpl(new PrintWriter(System.out, true), SqlExplainLevel.NON_COST_ATTRIBUTES, false);
-            logicalQueryPlan.explain(relWriter);
-            System.out.println();
-        }
-
-        // Take time when the code generation starts (and query planning has finished)
-        codeGenerationStart = System.nanoTime();
-
-        // Create the contexts required for code generation
-        CodeGenContext cCtx = new CodeGenContext(database, arrowRootAllocator);
-        OptimisationContext oCtx = new OptimisationContext();
-
-        // Generate code for the query which prints the result to the standard output
-        // while summarising the result if necessary
-        boolean shouldSummarise = cmdArguments.hasOption(summariseAsCount);
-        QueryTranslator queryTranslator = new QueryTranslator();
-        CodeGenOperator<?> queryRootOperator = queryTranslator.translate(logicalQueryPlan, false);
-        if (shouldSummarise)
-            queryRootOperator = new QueryResultCountOperator(logicalQueryPlan, queryRootOperator);
-        CodeGenOperator<?> printOperator = new QueryResultPrinterOperator(queryRootOperator.getLogicalSubplan(), queryRootOperator);
-        QueryCodeGenerator queryCodeGenerator = new QueryCodeGenerator(cCtx, oCtx, printOperator, useVectorisedProcessing);
-
-        GeneratedQuery generatedQuery;
-        try {
-            generatedQuery = queryCodeGenerator.generateQuery(verboseOutputEnabled);
-        } catch (Exception e) {
-            throw new RuntimeException("Could not generate code for query", e);
-        }
-
-        // Execute the generated query
-        System.out.println("[Query result]");
-        queryExecutionStart = System.nanoTime();
-        generatedQuery.execute();
-        queryExecutionEnd = System.nanoTime();
-        generatedQuery.getCCtx().close();
-        // We do not perform maintenance on the allocation manager in the cCtx of the query as we only execute a single query
-
-        // Output profiling information if required
-        if (cmdArguments.hasOption(outputProfileInformation)) {
-            double planningTimeMs = ((double) (queryPlanningEnd - queryPlanningStart)) / 1000000d;
-            double codegenTimeMs = ((double) (codeGenerationEnd - codeGenerationStart)) / 1000000d;
-            double compilationTimeMs = ((double) (codeCompilationEnd - codeCompilationStart)) / 1000000d;
-            double queryExecutionTimeMs = ((double) (queryExecutionEnd - queryExecutionStart)) / 1000000d;
-            System.err.println(
-                    "{\"planning\": " + planningTimeMs
-                            + ", \"codegen\": " + codegenTimeMs
-                            + ", " + "\"compilation\": " + compilationTimeMs
-                            + ", \"execution\": " + queryExecutionTimeMs
-                            + "}");
-        }
+//        // Create the database instance
+//        ArrowDatabase database = new ArrowDatabase(databaseDirectoryPath);
+//
+//        // Read the query
+//        BufferedReader sqlQueryReader = Files.newBufferedReader(queryFile.toPath());
+//
+//        // Parse query into AST
+//        SqlNode parsedSqlQuery = database.parseQuery(sqlQueryReader);
+//
+//        // Validate the parsed query
+//        RelNode validatedSqlQuery = database.validateQuery(parsedSqlQuery);
+//
+//        // Plan the query
+//        RelNode logicalQueryPlan = database.planQuery(validatedSqlQuery);
+//
+//        // Take time when the query planning has finished
+//        queryPlanningEnd = System.nanoTime();
+//
+//        // Print debug information if required
+//        if (verboseOutputEnabled) {
+//            System.out.println("[Database schema]");
+//            database.printSchema();
+//            System.out.println();
+//
+//            System.out.println("[Parsed query]");
+//            System.out.println(parsedSqlQuery.toString());
+//            System.out.println();
+//
+//            System.out.println("[Validated query]");
+//            System.out.println(validatedSqlQuery.toString());
+//            System.out.println();
+//
+//            System.out.println("[Optimised query]");
+//            var relWriter = new RelWriterImpl(new PrintWriter(System.out, true), SqlExplainLevel.NON_COST_ATTRIBUTES, false);
+//            logicalQueryPlan.explain(relWriter);
+//            System.out.println();
+//        }
+//
+//        // Take time when the code generation starts (and query planning has finished)
+//        codeGenerationStart = System.nanoTime();
+//
+//        // Create the contexts required for code generation
+//        CodeGenContext cCtx = new CodeGenContext(database, arrowRootAllocator);
+//        OptimisationContext oCtx = new OptimisationContext();
+//
+//        // Generate code for the query which prints the result to the standard output
+//        // while summarising the result if necessary
+//        boolean shouldSummarise = cmdArguments.hasOption(summariseAsCount);
+//        QueryTranslator queryTranslator = new QueryTranslator();
+//        CodeGenOperator<?> queryRootOperator = queryTranslator.translate(logicalQueryPlan, false);
+//        if (shouldSummarise)
+//            queryRootOperator = new QueryResultCountOperator(logicalQueryPlan, queryRootOperator);
+//        CodeGenOperator<?> printOperator = new QueryResultPrinterOperator(queryRootOperator.getLogicalSubplan(), queryRootOperator);
+//        QueryCodeGenerator queryCodeGenerator = new QueryCodeGenerator(cCtx, oCtx, printOperator, useVectorisedProcessing);
+//
+//        GeneratedQuery generatedQuery;
+//        try {
+//            generatedQuery = queryCodeGenerator.generateQuery(verboseOutputEnabled);
+//        } catch (Exception e) {
+//            throw new RuntimeException("Could not generate code for query", e);
+//        }
+//
+//        // Execute the generated query
+//        System.out.println("[Query result]");
+//        queryExecutionStart = System.nanoTime();
+//        generatedQuery.execute();
+//        queryExecutionEnd = System.nanoTime();
+//        generatedQuery.getCCtx().close();
+//        // We do not perform maintenance on the allocation manager in the cCtx of the query as we only execute a single query
+//
+//        // Output profiling information if required
+//        if (cmdArguments.hasOption(outputProfileInformation)) {
+//            double planningTimeMs = ((double) (queryPlanningEnd - queryPlanningStart)) / 1000000d;
+//            double codegenTimeMs = ((double) (codeGenerationEnd - codeGenerationStart)) / 1000000d;
+//            double compilationTimeMs = ((double) (codeCompilationEnd - codeCompilationStart)) / 1000000d;
+//            double queryExecutionTimeMs = ((double) (queryExecutionEnd - queryExecutionStart)) / 1000000d;
+//            System.err.println(
+//                    "{\"planning\": " + planningTimeMs
+//                            + ", \"codegen\": " + codegenTimeMs
+//                            + ", " + "\"compilation\": " + compilationTimeMs
+//                            + ", \"execution\": " + queryExecutionTimeMs
+//                            + "}");
+//        }
     }
 
     /**
@@ -276,5 +286,20 @@ public class AethraDB {
 
         return options;
     }
+
+    /**
+     * Method mapping for the plan method of the native planning library.
+     * @param isolateThreadId Parameter for isolating the native library thread calls.
+     * @param databasePath The path of the database for which the query should be planned.
+     * @param queryPath The path of the query that should be planned.
+     * @return A {@link String} representation of the query plan that was constructed.
+     */
+    private static native String plan(long isolateThreadId, final String databasePath, final String queryPath);
+
+    /**
+     * Method for mapping the native method creating an isolation identifier.
+     * @return The isolation identifier.
+     */
+    private static native long createIsolate();
 
 }
