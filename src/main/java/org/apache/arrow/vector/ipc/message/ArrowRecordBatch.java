@@ -17,11 +17,7 @@
 
 package org.apache.arrow.vector.ipc.message;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-import java.util.stream.Collectors;
-
+import com.google.flatbuffers.FlatBufferBuilder;
 import org.apache.arrow.flatbuf.RecordBatch;
 import org.apache.arrow.memory.ArrowBuf;
 import org.apache.arrow.memory.BufferAllocator;
@@ -31,7 +27,10 @@ import org.apache.arrow.vector.util.DataSizeRoundingUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.google.flatbuffers.FlatBufferBuilder;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * POJO representation of a RecordBatch IPC message (https://arrow.apache.org/docs/format/Columnar.html#recordbatch-message).

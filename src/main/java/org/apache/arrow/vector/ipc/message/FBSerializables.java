@@ -17,15 +17,14 @@
 
 package org.apache.arrow.vector.ipc.message;
 
+import com.google.flatbuffers.FlatBufferBuilder;
+import org.apache.arrow.flatbuf.KeyValue;
+
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
-
-import org.apache.arrow.flatbuf.KeyValue;
-
-import com.google.flatbuffers.FlatBufferBuilder;
 
 /**
  * Utility methods for {@linkplain org.apache.arrow.vector.ipc.message.FBSerializable}s.

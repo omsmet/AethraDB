@@ -17,13 +17,6 @@
 
 package org.apache.arrow.memory;
 
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.IdentityHashMap;
-import java.util.Map;
-import java.util.Set;
-
 import org.apache.arrow.memory.rounding.DefaultRoundingPolicy;
 import org.apache.arrow.memory.rounding.RoundingPolicy;
 import org.apache.arrow.memory.util.AssertionUtil;
@@ -31,6 +24,13 @@ import org.apache.arrow.memory.util.CommonUtil;
 import org.apache.arrow.memory.util.HistoricalLog;
 import org.apache.arrow.util.Preconditions;
 import org.immutables.value.Value;
+
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.IdentityHashMap;
+import java.util.Map;
+import java.util.Set;
 
 /**
  * A base-class that implements all functionality of {@linkplain BufferAllocator}s.

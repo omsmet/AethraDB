@@ -17,13 +17,13 @@
 
 package org.apache.arrow.vector.validate;
 
-import java.io.IOException;
-import java.util.Iterator;
-
 import org.apache.arrow.vector.types.MetadataVersion;
 import org.apache.arrow.vector.types.pojo.ArrowType;
 import org.apache.arrow.vector.types.pojo.Field;
 import org.apache.arrow.vector.types.pojo.Schema;
+
+import java.io.IOException;
+import java.util.Iterator;
 
 /**
  * Given a field, checks that no Union fields are present.

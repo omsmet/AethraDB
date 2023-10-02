@@ -17,10 +17,6 @@
 
 package org.apache.arrow.vector.util;
 
-import static org.apache.arrow.memory.util.LargeMemoryUtil.checkedCastToInt;
-
-import java.util.HashSet;
-
 import org.apache.arrow.memory.util.MemoryUtil;
 import org.apache.arrow.util.Preconditions;
 import org.apache.arrow.vector.BaseFixedWidthVector;
@@ -39,6 +35,10 @@ import org.apache.arrow.vector.complex.LargeListVector;
 import org.apache.arrow.vector.complex.ListVector;
 import org.apache.arrow.vector.complex.NonNullableStructVector;
 import org.apache.arrow.vector.complex.UnionVector;
+
+import java.util.HashSet;
+
+import static org.apache.arrow.memory.util.LargeMemoryUtil.checkedCastToInt;
 
 /**
  * Utility to append two vectors together.

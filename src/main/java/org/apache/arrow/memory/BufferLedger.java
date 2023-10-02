@@ -17,13 +17,13 @@
 
 package org.apache.arrow.memory;
 
-import java.util.IdentityHashMap;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicLong;
-
 import org.apache.arrow.memory.util.CommonUtil;
 import org.apache.arrow.memory.util.HistoricalLog;
 import org.apache.arrow.util.Preconditions;
+
+import java.util.IdentityHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * The reference manager that binds an {@link AllocationManager} to

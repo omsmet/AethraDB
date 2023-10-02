@@ -17,10 +17,10 @@
 
 package org.apache.arrow.memory.util;
 
+import org.slf4j.Logger;
+
 import java.util.Arrays;
 import java.util.LinkedList;
-
-import org.slf4j.Logger;
 
 /**
  * Utility class that can be used to log activity within a class

@@ -17,11 +17,6 @@
 
 package org.apache.arrow.vector;
 
-import static org.apache.arrow.vector.NullCheckingForGet.NULL_CHECKING_ENABLED;
-
-import java.math.BigDecimal;
-import java.nio.ByteOrder;
-
 import org.apache.arrow.memory.ArrowBuf;
 import org.apache.arrow.memory.BufferAllocator;
 import org.apache.arrow.memory.util.MemoryUtil;
@@ -35,6 +30,11 @@ import org.apache.arrow.vector.types.pojo.Field;
 import org.apache.arrow.vector.types.pojo.FieldType;
 import org.apache.arrow.vector.util.DecimalUtility;
 import org.apache.arrow.vector.util.TransferPair;
+
+import java.math.BigDecimal;
+import java.nio.ByteOrder;
+
+import static org.apache.arrow.vector.NullCheckingForGet.NULL_CHECKING_ENABLED;
 
 /**
  * DecimalVector implements a fixed width vector (16 bytes) of

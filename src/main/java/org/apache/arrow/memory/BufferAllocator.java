@@ -17,10 +17,10 @@
 
 package org.apache.arrow.memory;
 
-import java.util.Collection;
-
 import org.apache.arrow.memory.rounding.DefaultRoundingPolicy;
 import org.apache.arrow.memory.rounding.RoundingPolicy;
+
+import java.util.Collection;
 
 /**
  * Wrapper class to deal with byte buffer allocation. Ensures users only use designated methods.

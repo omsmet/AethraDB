@@ -17,14 +17,14 @@
 
 package org.apache.arrow.vector.complex.impl;
 
-import java.util.Iterator;
-
 import org.apache.arrow.vector.complex.reader.FieldReader;
 import org.apache.arrow.vector.complex.writer.BaseWriter.ListWriter;
 import org.apache.arrow.vector.complex.writer.BaseWriter.MapWriter;
 import org.apache.arrow.vector.complex.writer.FieldWriter;
 import org.apache.arrow.vector.holders.DenseUnionHolder;
 import org.apache.arrow.vector.holders.UnionHolder;
+
+import java.util.Iterator;
 
 /**
  * Base class providing common functionality for {@link FieldReader} implementations.

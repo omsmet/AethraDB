@@ -17,11 +17,6 @@
 
 package org.apache.arrow.vector.types.pojo;
 
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Objects;
-
 import org.apache.arrow.memory.BufferAllocator;
 import org.apache.arrow.util.Collections2;
 import org.apache.arrow.util.Preconditions;
@@ -30,6 +25,11 @@ import org.apache.arrow.vector.types.Types;
 import org.apache.arrow.vector.types.Types.MinorType;
 import org.apache.arrow.vector.types.pojo.ArrowType.ExtensionType;
 import org.apache.arrow.vector.util.CallBack;
+
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Objects;
 
 /**
  * POJO representation of an Arrow field type.  It consists of a logical type, nullability and whether the field

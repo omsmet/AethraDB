@@ -9,7 +9,6 @@ import AethraDB.evaluation.codegen.infrastructure.context.access_path.ArrowVecto
 import AethraDB.evaluation.codegen.infrastructure.context.access_path.ArrowVectorWithValidityMaskAccessPath;
 import AethraDB.evaluation.codegen.infrastructure.context.access_path.ScalarVariableAccessPath;
 import AethraDB.evaluation.codegen.operators.CodeGenOperator;
-import org.apache.calcite.rel.RelNode;
 import org.codehaus.janino.Java;
 
 import java.util.ArrayList;
@@ -27,12 +26,12 @@ import static AethraDB.evaluation.codegen.infrastructure.janino.JaninoVariableGe
  * {@link CodeGenOperator} which generates a {@link org.openjdk.jmh.infra.Blackhole} that consumes
  * the current ordinal mapping to ensure that the compiler does not optimise the query result away.
  */
-public class BlackHoleGeneratorOperator extends CodeGenOperator<RelNode> {
+public class BlackHoleGeneratorOperator extends CodeGenOperator {
 
     /**
      * The {@link CodeGenOperator} producing the query result that is to be transferred to a benchmark.
      */
-    private final CodeGenOperator<?> child;
+    private final CodeGenOperator child;
 
     /**
      * The name of the {@link org.openjdk.jmh.infra.Blackhole} variable to use.
@@ -41,11 +40,9 @@ public class BlackHoleGeneratorOperator extends CodeGenOperator<RelNode> {
 
     /**
      * Initialises a new instance of a specific {@link BlackHoleGeneratorOperator}.
-     * @param logicalSubplan The logical sub-plan that should be implemented by this operator.
      * @param child The {@link CodeGenOperator} producing the actual query result.
      */
-    public BlackHoleGeneratorOperator(RelNode logicalSubplan, CodeGenOperator<?> child) {
-        super(logicalSubplan, false);
+    public BlackHoleGeneratorOperator(CodeGenOperator child) {
         this.child = child;
         this.child.setParent(this);
     }

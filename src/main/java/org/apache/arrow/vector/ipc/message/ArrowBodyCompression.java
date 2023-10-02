@@ -17,9 +17,8 @@
 
 package org.apache.arrow.vector.ipc.message;
 
-import org.apache.arrow.flatbuf.BodyCompression;
-
 import com.google.flatbuffers.FlatBufferBuilder;
+import org.apache.arrow.flatbuf.BodyCompression;
 
 /**
  * Compression information about data written to a channel.

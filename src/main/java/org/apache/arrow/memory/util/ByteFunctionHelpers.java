@@ -17,12 +17,12 @@
 
 package org.apache.arrow.memory.util;
 
-import java.nio.ByteOrder;
-
 import org.apache.arrow.memory.ArrowBuf;
 import org.apache.arrow.memory.BoundsChecking;
 import org.apache.arrow.memory.util.hash.ArrowBufHasher;
 import org.apache.arrow.memory.util.hash.SimpleHasher;
+
+import java.nio.ByteOrder;
 
 /**
  * Utility methods for memory comparison at a byte level.

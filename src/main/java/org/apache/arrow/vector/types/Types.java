@@ -17,11 +17,6 @@
 
 package org.apache.arrow.vector.types;
 
-import static org.apache.arrow.vector.types.FloatingPointPrecision.DOUBLE;
-import static org.apache.arrow.vector.types.FloatingPointPrecision.SINGLE;
-import static org.apache.arrow.vector.types.UnionMode.Dense;
-import static org.apache.arrow.vector.types.UnionMode.Sparse;
-
 import org.apache.arrow.memory.BufferAllocator;
 import org.apache.arrow.vector.BigIntVector;
 import org.apache.arrow.vector.BitVector;
@@ -138,6 +133,11 @@ import org.apache.arrow.vector.types.pojo.ArrowType.Utf8;
 import org.apache.arrow.vector.types.pojo.Field;
 import org.apache.arrow.vector.types.pojo.FieldType;
 import org.apache.arrow.vector.util.CallBack;
+
+import static org.apache.arrow.vector.types.FloatingPointPrecision.DOUBLE;
+import static org.apache.arrow.vector.types.FloatingPointPrecision.SINGLE;
+import static org.apache.arrow.vector.types.UnionMode.Dense;
+import static org.apache.arrow.vector.types.UnionMode.Sparse;
 
 /** An enumeration of all logical types supported by this library. */
 public class Types {

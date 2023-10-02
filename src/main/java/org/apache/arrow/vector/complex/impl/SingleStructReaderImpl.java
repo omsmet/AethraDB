@@ -18,15 +18,15 @@
 package org.apache.arrow.vector.complex.impl;
 
 
-import java.util.HashMap;
-import java.util.Map;
-
 import org.apache.arrow.vector.ValueVector;
 import org.apache.arrow.vector.complex.NonNullableStructVector;
 import org.apache.arrow.vector.complex.reader.FieldReader;
 import org.apache.arrow.vector.complex.writer.BaseWriter.StructWriter;
 import org.apache.arrow.vector.types.Types.MinorType;
 import org.apache.arrow.vector.types.pojo.Field;
+
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * {@link FieldReader} for a single {@link org.apache.arrow.vector.complex.NonNullableStructVector}.

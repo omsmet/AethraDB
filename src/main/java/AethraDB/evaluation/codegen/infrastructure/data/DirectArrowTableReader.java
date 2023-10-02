@@ -6,7 +6,6 @@ import org.apache.arrow.vector.VectorSchemaRoot;
 import org.apache.arrow.vector.ipc.AethraArrowFileReader;
 import org.apache.arrow.vector.ipc.ArrowFileReader;
 import org.apache.arrow.vector.ipc.ArrowReader;
-import org.apache.calcite.util.ImmutableIntList;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -43,7 +42,7 @@ public class DirectArrowTableReader extends ArrowTableReader {
      * @param columnsToProject The columns of the {@code arrowFile} to actually project out.
      * @throws FileNotFoundException When the specified Arrow file cannot be found.
      */
-    public DirectArrowTableReader(File arrowFile, RootAllocator rootAllocator, boolean useProjectingArrowReader, ImmutableIntList columnsToProject) throws Exception {
+    public DirectArrowTableReader(File arrowFile, RootAllocator rootAllocator, boolean useProjectingArrowReader, int[] columnsToProject) throws Exception {
         super(arrowFile, rootAllocator, useProjectingArrowReader, columnsToProject);
         this.reset();
     }

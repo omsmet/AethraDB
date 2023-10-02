@@ -17,13 +17,13 @@
 
 package org.apache.arrow.vector.compare;
 
-import java.util.function.BiFunction;
-
 import org.apache.arrow.vector.BaseFixedWidthVector;
 import org.apache.arrow.vector.Float4Vector;
 import org.apache.arrow.vector.Float8Vector;
 import org.apache.arrow.vector.ValueVector;
 import org.apache.arrow.vector.compare.util.ValueEpsilonEqualizers;
+
+import java.util.function.BiFunction;
 
 /**
  * Visitor to compare floating point vectors approximately.

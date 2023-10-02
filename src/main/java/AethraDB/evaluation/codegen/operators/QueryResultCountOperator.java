@@ -16,7 +16,6 @@ import AethraDB.evaluation.codegen.infrastructure.janino.JaninoGeneralGen;
 import AethraDB.evaluation.codegen.infrastructure.janino.JaninoMethodGen;
 import AethraDB.evaluation.codegen.infrastructure.janino.JaninoOperatorGen;
 import AethraDB.evaluation.codegen.infrastructure.janino.JaninoVariableGen;
-import org.apache.calcite.rel.RelNode;
 import org.codehaus.janino.Java;
 
 import java.util.ArrayList;
@@ -28,12 +27,12 @@ import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableTy
 /**
  * A {@link CodeGenOperator} which simply counts the number of records passed into it.
  */
-public class QueryResultCountOperator extends CodeGenOperator<RelNode> {
+public class QueryResultCountOperator extends CodeGenOperator {
 
     /**
      * The {@link CodeGenOperator} producing the records to be aggregated by {@code this}.
      */
-    private final CodeGenOperator<?> child;
+    private final CodeGenOperator child;
 
     /**
      * Stores the {@link ScalarVariableAccessPath} to the count variable of this operator.
@@ -42,11 +41,9 @@ public class QueryResultCountOperator extends CodeGenOperator<RelNode> {
 
     /**
      * Create an {@link QueryResultCountOperator} instance for a specific query.
-     * @param logicalSubplan The logical plan of the query for which the operator is created.
      * @param child The {@link CodeGenOperator} producing the actual query result.
      */
-    public QueryResultCountOperator(RelNode logicalSubplan, CodeGenOperator<?> child) {
-        super(logicalSubplan, false);
+    public QueryResultCountOperator(CodeGenOperator child) {
         this.child = child;
         this.child.setParent(this);
     }

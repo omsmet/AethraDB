@@ -17,9 +17,6 @@
 
 package org.apache.arrow.vector;
 
-import java.util.Collections;
-import java.util.Iterator;
-
 import org.apache.arrow.memory.ArrowBuf;
 import org.apache.arrow.memory.BufferAllocator;
 import org.apache.arrow.memory.ReferenceManager;
@@ -30,6 +27,9 @@ import org.apache.arrow.vector.util.TransferPair;
 import org.apache.arrow.vector.util.ValueVectorUtility;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.util.Collections;
+import java.util.Iterator;
 
 /**
  * Base class for other Arrow Vector Types.  Provides basic functionality around

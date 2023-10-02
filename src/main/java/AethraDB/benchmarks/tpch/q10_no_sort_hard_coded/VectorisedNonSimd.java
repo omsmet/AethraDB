@@ -10,7 +10,6 @@ import AethraDB.evaluation.vector_support.VectorisedFilterOperators;
 import AethraDB.evaluation.vector_support.VectorisedHashOperators;
 import AethraDB.evaluation.vector_support.VectorisedOperators;
 import org.apache.arrow.memory.RootAllocator;
-import org.apache.calcite.util.ImmutableIntList;
 import org.openjdk.jmh.annotations.Benchmark;
 import org.openjdk.jmh.annotations.BenchmarkMode;
 import org.openjdk.jmh.annotations.Fork;
@@ -120,14 +119,18 @@ public class VectorisedNonSimd {
     public void trialSetup() throws Exception {
         // Setup the database
         this.rootAllocator = new RootAllocator();
+        int[] customerProjects = new int[] { 0, 1, 2, 3, 4, 5, 7 };
         this.customer = new ABQArrowTableReader(
-                new File(this.tpchInstance + "/customer.arrow"), this.rootAllocator, true, ImmutableIntList.of(0, 1, 2, 3, 4, 5, 7));
+                new File(this.tpchInstance + "/customer.arrow"), this.rootAllocator, true, customerProjects);
+        int[] orderProjects = new int[] { 0, 1, 4 };
         this.orders = new ABQArrowTableReader(
-                new File(this.tpchInstance + "/orders.arrow"), this.rootAllocator, true, ImmutableIntList.of(0, 1, 4));
+                new File(this.tpchInstance + "/orders.arrow"), this.rootAllocator, true, orderProjects);
+        int[] lineitemProjects = new int[] { 0, 5, 6, 8 };
         this.lineitem = new ABQArrowTableReader(
-                new File(this.tpchInstance + "/lineitem.arrow"), this.rootAllocator, true, ImmutableIntList.of(0, 5, 6, 8));
+                new File(this.tpchInstance + "/lineitem.arrow"), this.rootAllocator, true, lineitemProjects);
+        int[] nationProjects = new int[] { 0, 1 };
         this.nation = new ABQArrowTableReader(
-                new File(this.tpchInstance + "/nation.arrow"), this.rootAllocator, true, ImmutableIntList.of(0, 1));
+                new File(this.tpchInstance + "/nation.arrow"), this.rootAllocator, true, nationProjects);
 
         // Setup the allocation manager
         this.allocationManager = new BufferPoolAllocationManager(32);

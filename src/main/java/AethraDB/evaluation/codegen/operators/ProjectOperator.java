@@ -18,44 +18,46 @@ import AethraDB.evaluation.codegen.infrastructure.janino.JaninoGeneralGen;
 import AethraDB.evaluation.codegen.infrastructure.janino.JaninoMethodGen;
 import AethraDB.evaluation.codegen.infrastructure.janino.JaninoOperatorGen;
 import AethraDB.evaluation.codegen.infrastructure.janino.JaninoVariableGen;
-import org.apache.calcite.avatica.util.TimeUnit;
-import org.apache.calcite.avatica.util.TimeUnitRange;
-import org.apache.calcite.rel.logical.LogicalProject;
-import org.apache.calcite.rex.RexCall;
-import org.apache.calcite.rex.RexInputRef;
-import org.apache.calcite.rex.RexLiteral;
-import org.apache.calcite.rex.RexNode;
-import org.apache.calcite.sql.SqlBinaryOperator;
-import org.apache.calcite.sql.SqlKind;
-import org.apache.calcite.sql.SqlOperator;
-import org.apache.calcite.sql.fun.SqlCaseOperator;
-import org.apache.calcite.sql.fun.SqlExtractFunction;
+import AethraDB.util.language.AethraExpression;
+import AethraDB.util.language.function.AethraBinaryFunction;
+import AethraDB.util.language.function.AethraFunction;
+import AethraDB.util.language.function.logic.AethraCaseFunction;
+import AethraDB.util.language.value.AethraInputRef;
+import AethraDB.util.language.value.literal.AethraDoubleLiteral;
+import AethraDB.util.language.value.literal.AethraIntegerLiteral;
+import AethraDB.util.language.value.literal.AethraLiteral;
 import org.codehaus.janino.Java;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Objects;
+
+import static AethraDB.util.language.function.AethraFunction.Kind.DIVIDE;
+import static AethraDB.util.language.function.AethraFunction.Kind.EQ;
 
 /**
  * A {@link CodeGenOperator} which project out records according to a given criterion.
  */
-public class ProjectOperator extends CodeGenOperator<LogicalProject> {
+public class ProjectOperator extends CodeGenOperator {
 
     /**
      * The {@link CodeGenOperator} producing the records to be projected by {@code this}.
      */
-    private final CodeGenOperator<?> child;
+    private final CodeGenOperator child;
+
+    /**
+     * The {@link AethraExpression}s prescribing the projections to be implemented by {@code} this.
+     */
+    private final AethraExpression[] projectionExpressions;
 
     /**
      * Create a {@link ProjectOperator} instance for a specific sub-query.
-     * @param project The logical project (and sub-query) for which the operator is created.
-     * @param simdEnabled Whether the operator is allowed to use SIMD for processing.
      * @param child The {@link CodeGenOperator} producing the records to be projected.
+     * @param projections The {@link AethraExpression}s defining the projection to be performed.
      */
-    public ProjectOperator(LogicalProject project, boolean simdEnabled, CodeGenOperator<?> child) {
-        super(project, simdEnabled);
+    public ProjectOperator(CodeGenOperator child, AethraExpression[] projections) {
         this.child = child;
         this.child.setParent(this);
+        this.projectionExpressions = projections;
     }
 
     @Override
@@ -78,14 +80,11 @@ public class ProjectOperator extends CodeGenOperator<LogicalProject> {
     public List<Java.Statement> consumeNonVec(CodeGenContext cCtx, OptimisationContext oCtx) {
         List<Java.Statement> codeGenResult = new ArrayList<>();
 
-        // Obtain and process the projection specification
-        List<RexNode> projectionExpressions = this.getLogicalSubplan().getProjects();
-
         // Handle each projection expression separately, to update the ordinal mapping to the correct state
-        List<AccessPath> updatedOrdinalMapping = new ArrayList<>(projectionExpressions.size());
-        for (int i = 0; i < projectionExpressions.size(); i++) {
-            RexNode projectionExp = projectionExpressions.get(i);
-            updatedOrdinalMapping.add(i, generatedProjectionCode(cCtx, projectionExp, codeGenResult, false));
+        List<AccessPath> updatedOrdinalMapping = new ArrayList<>(this.projectionExpressions.length);
+        for (int i = 0; i < this.projectionExpressions.length; i++) {
+            AethraExpression projectionExp = this.projectionExpressions[i];
+             updatedOrdinalMapping.add(i, generateProjectionCode(cCtx, projectionExp, codeGenResult, false));
         }
 
         // Set the updated ordinal mapping
@@ -108,31 +107,38 @@ public class ProjectOperator extends CodeGenOperator<LogicalProject> {
      *                   a vectorised fashion or not.
      * @return The {@link AccessPath} to the "result" of the provided {@code projectionExpression}.
      */
-    private AccessPath generatedProjectionCode(
+    private AccessPath generateProjectionCode(
             CodeGenContext cCtx,
-            RexNode projectionExpression,
+            AethraExpression projectionExpression,
             List<Java.Statement> codeGenResult,
             boolean vectorised
     ) {
         // Check the projection expression type
-        if (projectionExpression instanceof RexLiteral rlExpr) {
+        if (projectionExpression instanceof AethraLiteral alExpr) {
             // Simply need to give access to the literal value of the expression
+            QueryVariableType translatedLiteralType;
+            Java.Rvalue translatedLiteralValue;
+
+            if (alExpr instanceof AethraDoubleLiteral adlExpr) {
+                translatedLiteralType = QueryVariableType.P_DOUBLE;
+                if (Double.isNaN(adlExpr.value))
+                    translatedLiteralValue = JaninoGeneralGen.createAmbiguousNameRef(JaninoGeneralGen.getLocation(), "Double.NaN");
+                else
+                    translatedLiteralValue = JaninoGeneralGen.createFloatingPointLiteral(JaninoGeneralGen.getLocation(), adlExpr.value);
+
+            } else if (alExpr instanceof AethraIntegerLiteral ailExpr) {
+                translatedLiteralType = QueryVariableType.P_INT;
+                translatedLiteralValue = JaninoGeneralGen.createIntegerLiteral(JaninoGeneralGen.getLocation(), ailExpr.value);
+
+            } else {
+                throw new UnsupportedOperationException(
+                        "ProjectOperator.generateProjectionCode does not support the provided literal type: " + alExpr.getClass());
+            }
+
             ScalarVariableAccessPath literalVariableAP = new ScalarVariableAccessPath(
                     cCtx.defineVariable("projection_literal"),
-                    QueryVariableTypeMethods.sqlTypeToPrimitiveType(rlExpr.getType().getSqlTypeName())
+                    translatedLiteralType
             );
-
-            Java.Rvalue translatedLiteralValue;
-            if (rlExpr.toString().equals("null:DOUBLE"))
-                translatedLiteralValue = JaninoGeneralGen.createAmbiguousNameRef(JaninoGeneralGen.getLocation(), "Double.NaN");
-            else if (rlExpr.toString().equals("null:FLOAT"))
-                translatedLiteralValue = JaninoGeneralGen.createAmbiguousNameRef(JaninoGeneralGen.getLocation(), "Float.NaN");
-            else
-                translatedLiteralValue = switch (literalVariableAP.getType()) {
-                    case P_DOUBLE, P_FLOAT -> JaninoGeneralGen.createFloatingPointLiteral(JaninoGeneralGen.getLocation(), rlExpr.toString());
-                    case P_INT, P_LONG -> JaninoGeneralGen.createIntegerLiteral(JaninoGeneralGen.getLocation(), rlExpr.toString());
-                    default -> throw new UnsupportedOperationException("ProjectOperator.generatedProjectionCode does not support the provided literal type");
-                };
 
             codeGenResult.add(
                     JaninoVariableGen.createLocalVariable(
@@ -145,19 +151,18 @@ public class ProjectOperator extends CodeGenOperator<LogicalProject> {
 
             return literalVariableAP;
 
-        } else if (projectionExpression instanceof RexInputRef rirExpr) {
+        } else if (projectionExpression instanceof AethraInputRef airExpr) {
             // Simply need to project out a column already present in the ordinal mapping
-            int projectedColumnIndex = rirExpr.getIndex();
-            return cCtx.getCurrentOrdinalMapping().get(projectedColumnIndex);
+            return cCtx.getCurrentOrdinalMapping().get(airExpr.columnIndex);
 
-        } else if (projectionExpression instanceof RexCall rcExpr) {
+        } else if (projectionExpression instanceof AethraFunction afExpr) {
             return vectorised
-                    ? createVecComputationCode(cCtx, rcExpr, codeGenResult)
-                    : createNonVecComputationCode(cCtx, rcExpr, codeGenResult);
+                    ? createVecComputationCode(cCtx, afExpr, codeGenResult)
+                    : createNonVecComputationCode(cCtx, afExpr, codeGenResult);
 
         } else {
             throw new UnsupportedOperationException(
-                    "ProjectOperator.generatedProjectionCode does not support the current projection expression");
+                    "ProjectOperator.generateProjectionCode does not support the current projection expression");
         }
     }
 
@@ -170,129 +175,106 @@ public class ProjectOperator extends CodeGenOperator<LogicalProject> {
      */
     private AccessPath createNonVecComputationCode(
             CodeGenContext cCtx,
-            RexCall computationExpression,
+            AethraFunction computationExpression,
             List<Java.Statement> codeGenResult
     ) {
-        SqlOperator computationOperator = computationExpression.getOperator();
-        List<RexNode> computationOperands = computationExpression.getOperands();
+        if (this.useSIMDNonVec(cCtx))
+            throw new UnsupportedOperationException("ProjectOperator.createNonVecComputationCode does not support SIMD code generation");
 
-        if (computationOperator instanceof SqlBinaryOperator sqlBinaryOperator) {
+        if (computationExpression instanceof AethraBinaryFunction aethraBinaryFunction) {
             // Deal with recursive "projections" first
-            if (computationOperands.size() != 2)
-                throw new UnsupportedOperationException(
-                        "ProjectOperator.createNonVecComputationCode expects two operands for a binary operator");
-
-            AccessPath lhopResult = this.generatedProjectionCode(cCtx, computationOperands.get(0), codeGenResult, false);
+            AccessPath lhopResult = this.generateProjectionCode(cCtx, aethraBinaryFunction.firstOperand, codeGenResult, false);
             QueryVariableType primLhsResType = QueryVariableTypeMethods.primitiveType(lhopResult.getType());
-            AccessPath rhopResult = this.generatedProjectionCode(cCtx, computationOperands.get(1), codeGenResult, false);
+            AccessPath rhopResult = this.generateProjectionCode(cCtx, aethraBinaryFunction.secondOperand, codeGenResult, false);
             QueryVariableType primRhsResType = QueryVariableTypeMethods.primitiveType(rhopResult.getType());
 
             // Compute the result type first
             QueryVariableType primitiveReturnType;
-            if (computationOperator.getKind() == SqlKind.DIVIDE)
+            if (aethraBinaryFunction.getKind() == DIVIDE)
                 primitiveReturnType = QueryVariableType.P_DOUBLE;
             else if (primLhsResType == QueryVariableType.P_DOUBLE && primRhsResType == QueryVariableType.P_DOUBLE)
                 primitiveReturnType = QueryVariableType.P_DOUBLE;
             else if (primLhsResType == QueryVariableType.P_INT && primRhsResType == QueryVariableType.P_DOUBLE)
                 primitiveReturnType = QueryVariableType.P_DOUBLE;
             else
-                throw new UnsupportedOperationException("ProjectOperator.createNonVecComputation could not determine desired return type");
+                throw new UnsupportedOperationException("ProjectOperator.createNonVecComputationCode could not determine desired return type");
 
-            // Now "combine" the results from the operands depending on the operator, the SIMD processing mode and the result access paths
-            if (!this.useSIMDNonVec(cCtx)) {
-                // Simple scalar processing
-                // Obtain r-values for the operands
-                Java.Rvalue lhsRValue, rhsRValue;
+            // Now "combine" the results from the operands depending on the operator and the result access paths
+            // Obtain r-values for the operands
+            Java.Rvalue lhsRValue, rhsRValue;
 
-                if (lhopResult instanceof ScalarVariableAccessPath lhopResultSVAP)
-                    lhsRValue = lhopResultSVAP.read();
-                else if (lhopResult instanceof IndexedArrowVectorElementAccessPath lhopResultIAVEA)
-                    lhsRValue = getRValueFromAccessPathNonVec(cCtx, lhopResultIAVEA, codeGenResult).left;
-                else
-                    throw new UnsupportedOperationException(
-                            "ProjectionOperator.createNonVecComputation does not support this lhopResult AccessPath");
+            if (lhopResult instanceof ScalarVariableAccessPath lhopResultSVAP)
+                lhsRValue = lhopResultSVAP.read();
+            else if (lhopResult instanceof IndexedArrowVectorElementAccessPath lhopResultIAVEA)
+                lhsRValue = getRValueFromAccessPathNonVec(cCtx, lhopResultIAVEA, codeGenResult).getLeft();
+            else
+                throw new UnsupportedOperationException(
+                        "ProjectionOperator.createNonVecComputation does not support this lhopResult AccessPath");
 
-                if (rhopResult instanceof ScalarVariableAccessPath rhopResultSVAP)
-                    rhsRValue = rhopResultSVAP.read();
-                else if (rhopResult instanceof IndexedArrowVectorElementAccessPath rhopResultIAVEA)
-                    rhsRValue = getRValueFromAccessPathNonVec(cCtx, rhopResultIAVEA, codeGenResult).left;
-                else
-                    throw new UnsupportedOperationException(
-                            "ProjectionOperator.createNonVecComputation does not support this rhopResult AccessPath");
+            if (rhopResult instanceof ScalarVariableAccessPath rhopResultSVAP)
+                rhsRValue = rhopResultSVAP.read();
+            else if (rhopResult instanceof IndexedArrowVectorElementAccessPath rhopResultIAVEA)
+                rhsRValue = getRValueFromAccessPathNonVec(cCtx, rhopResultIAVEA, codeGenResult).getLeft();
+            else
+                throw new UnsupportedOperationException(
+                        "ProjectionOperator.createNonVecComputation does not support this rhopResult AccessPath");
 
-                // Create a new scalar variable to store the computation result in
-                ScalarVariableAccessPath resultPath = new ScalarVariableAccessPath(
-                        cCtx.defineVariable("projection_computation_result"),
-                        primitiveReturnType
+            // Create a new scalar variable to store the computation result in
+            ScalarVariableAccessPath resultPath = new ScalarVariableAccessPath(
+                    cCtx.defineVariable("projection_computation_result"),
+                    primitiveReturnType
+            );
+
+            // Generate the code for the actual computation
+            Java.Rvalue operatorComputation = switch (aethraBinaryFunction.getKind()) {
+                case MULTIPLY -> JaninoOperatorGen.mul(
+                        JaninoGeneralGen.getLocation(),
+                        lhsRValue,
+                        rhsRValue
                 );
-
-                // Generate the code for the actual computation
-                Java.Rvalue operatorComputation = switch (sqlBinaryOperator.getKind()) {
-                    case TIMES -> JaninoOperatorGen.mul(
-                            JaninoGeneralGen.getLocation(),
-                            lhsRValue,
-                            rhsRValue
-                    );
-                    case PLUS -> JaninoOperatorGen.plus(
-                            JaninoGeneralGen.getLocation(),
-                            lhsRValue,
-                            rhsRValue
-                    );
-                    case MINUS -> JaninoOperatorGen.sub(
-                            JaninoGeneralGen.getLocation(),
-                            lhsRValue,
-                            rhsRValue
-                    );
-                    case DIVIDE -> JaninoOperatorGen.div(
-                            JaninoGeneralGen.getLocation(),
-                            (primLhsResType != QueryVariableType.P_DOUBLE)
-                                    ? JaninoGeneralGen.createCast(JaninoGeneralGen.getLocation(), QueryVariableTypeMethods.toJavaType(JaninoGeneralGen.getLocation(), QueryVariableType.P_DOUBLE), lhsRValue)
-                                    : lhsRValue,
-                            rhsRValue
-                    );
-                    default -> throw new UnsupportedOperationException(
-                            "ProjectOperator.createNonVecComputation does not support the provided operator type");
-                };
-
-                codeGenResult.add(
-                        JaninoVariableGen.createLocalVariable(
-                                JaninoGeneralGen.getLocation(),
-                                QueryVariableTypeMethods.toJavaType(JaninoGeneralGen.getLocation(), primitiveReturnType),
-                                resultPath.getVariableName(),
-                                operatorComputation
-                        )
+                case ADD -> JaninoOperatorGen.plus(
+                        JaninoGeneralGen.getLocation(),
+                        lhsRValue,
+                        rhsRValue
                 );
+                case SUBTRACT -> JaninoOperatorGen.sub(
+                        JaninoGeneralGen.getLocation(),
+                        lhsRValue,
+                        rhsRValue
+                );
+                case DIVIDE -> JaninoOperatorGen.div(
+                        JaninoGeneralGen.getLocation(),
+                        (primLhsResType != QueryVariableType.P_DOUBLE)
+                                ? JaninoGeneralGen.createCast(JaninoGeneralGen.getLocation(), QueryVariableTypeMethods.toJavaType(JaninoGeneralGen.getLocation(), QueryVariableType.P_DOUBLE), lhsRValue)
+                                : lhsRValue,
+                        rhsRValue
+                );
+                default -> throw new UnsupportedOperationException(
+                        "ProjectOperator.createNonVecComputation does not support the provided operator type");
+            };
 
-                return resultPath;
+            codeGenResult.add(
+                    JaninoVariableGen.createLocalVariable(
+                            JaninoGeneralGen.getLocation(),
+                            QueryVariableTypeMethods.toJavaType(JaninoGeneralGen.getLocation(), primitiveReturnType),
+                            resultPath.getVariableName(),
+                            operatorComputation
+                    )
+            );
 
-            } else { // this.useSIMDNonVec(cCtx)
-                throw new UnsupportedOperationException("NOT YET IMPLEMENTED");
-            }
+            return resultPath;
 
-        } else if (computationOperator instanceof SqlCaseOperator caseOperator) {
-            // Currently the case operator is only supported for non-SIMD mode
-            if (this.useSIMDNonVec(cCtx))
+        } else if (computationExpression instanceof AethraCaseFunction aethraCaseFunction) {
+            // Only supports the if-then-else paradigm which is already checked by the AethraCaseFunction instantiation
+            AethraFunction caseCondition = aethraCaseFunction.ifExpression;
+            if (!(caseCondition instanceof AethraBinaryFunction binaryCondition && binaryCondition.getKind() == EQ))
                 throw new UnsupportedOperationException(
-                        "ProjectOperator.createNonVecComputationCode only supports the CASE operator in non-SIMD mode");
-
-            // Only supports "binary-choice" case operator
-            if (computationExpression.getOperands().size() != 3)
-                throw new UnsupportedOperationException(
-                        "ProjectionOperator.createNonVecComputationCode only supports 3 operands for the CASE operator");
-
-            if (!(computationOperands.get(0) instanceof RexCall))
-                throw new UnsupportedOperationException(
-                        "ProjectionOperator.createNonVecComputationCode only supports CASE operators with a first RexCall operand");
-            RexCall caseRexCall = (RexCall) computationOperands.get(0);
-
-            if (caseRexCall.getOperator().getKind() != SqlKind.EQUALS)
-                throw new UnsupportedOperationException(
-                        "ProjectionOperator.createNonVecComputationCode only supports CASE operators using the = operator");
+                        "ProjectionOperator.createNonVecComputationCode only supports CASE operators using the binary = operator");
 
             // Translate the result of the case branches
-            AccessPath tbResult = this.generatedProjectionCode(cCtx, computationOperands.get(1), codeGenResult, false);
+            AccessPath tbResult = this.generateProjectionCode(cCtx, aethraCaseFunction.trueValue, codeGenResult, false);
             QueryVariableType primitiveTbResultType = QueryVariableTypeMethods.primitiveType(tbResult.getType());
-            AccessPath fbResult = this.generatedProjectionCode(cCtx, computationOperands.get(2), codeGenResult, false);
+            AccessPath fbResult = this.generateProjectionCode(cCtx, aethraCaseFunction.falseValue, codeGenResult, false);
             QueryVariableType primitiveFbResultType = QueryVariableTypeMethods.primitiveType(fbResult.getType());
 
             // And obtain the r-values corresponding to these values
@@ -318,9 +300,8 @@ public class ProjectOperator extends CodeGenOperator<LogicalProject> {
                 throw new UnsupportedOperationException("ProjectOperator.createNonVecComputation could not determine the return type");
 
             // Resolve the lhs and rhs of the equality comparison
-            List<RexNode> comparisonOperands = caseRexCall.getOperands();
-            AccessPath lhsCompAp = this.generatedProjectionCode(cCtx, comparisonOperands.get(0), codeGenResult, false);
-            AccessPath rhsCompAp = this.generatedProjectionCode(cCtx, comparisonOperands.get(1), codeGenResult, false);
+            AccessPath lhsCompAp = this.generateProjectionCode(cCtx, binaryCondition.firstOperand, codeGenResult, false);
+            AccessPath rhsCompAp = this.generateProjectionCode(cCtx, binaryCondition.secondOperand, codeGenResult, false);
 
             // And get the r-values corresponding to the operands
             Java.Rvalue lhsCompRValue, rhsCompRValue;
@@ -360,50 +341,6 @@ public class ProjectOperator extends CodeGenOperator<LogicalProject> {
 
             return resultPath;
 
-        } else if (computationOperator instanceof SqlExtractFunction sqlExtractFunction) {
-            // Currently the extract operator is only supported for non-SIMD mode
-            if (this.useSIMDNonVec(cCtx))
-                throw new UnsupportedOperationException(
-                        "ProjectOperator.createNonVecComputationCode only supports the EXTRACT operator in non-SIMD mode");
-
-            // The extraction operator currently only supports extracting a year from a date, so check this pre-condition
-            if (!(computationOperands.get(0) instanceof RexLiteral extractLiteral))
-                throw new UnsupportedOperationException(
-                        "ProjectOperator.createNonVecComputationCode expects the first operand of an EXTRACT to be a literal");
-
-            TimeUnitRange extractTimeUnit = Objects.requireNonNull(extractLiteral.getValueAs(TimeUnitRange.class));
-            if (extractTimeUnit.startUnit != TimeUnit.YEAR || extractTimeUnit.endUnit != null)
-                throw new UnsupportedOperationException(
-                        "ProjectOperator.createNonVecComputationCode only supports extracting years from a date column");
-
-            if (!(computationOperands.get(1) instanceof RexInputRef baseValueRef))
-                throw new UnsupportedOperationException(
-                    "ProjectOperator.createNonVecComputationCode expects the second operand of an EXTRACT to be an input reference");
-
-            // Generate the code for extracting the year
-            Java.Rvalue baseValue = getRValueFromOrdinalAccessPathNonVec(cCtx, baseValueRef.getIndex(), codeGenResult);
-            ScalarVariableAccessPath extractedYearAP = new ScalarVariableAccessPath(
-                    cCtx.defineVariable("extractedYear"), QueryVariableType.P_INT);
-            codeGenResult.add(
-                    JaninoVariableGen.createLocalVariable(
-                            JaninoGeneralGen.getLocation(),
-                            QueryVariableTypeMethods.toJavaType(JaninoGeneralGen.getLocation(), extractedYearAP.getType()),
-                            extractedYearAP.getVariableName(),
-                            JaninoMethodGen.createMethodInvocation(
-                                    JaninoGeneralGen.getLocation(),
-                                    JaninoMethodGen.createMethodInvocation(
-                                            JaninoGeneralGen.getLocation(),
-                                            JaninoGeneralGen.createAmbiguousNameRef(JaninoGeneralGen.getLocation(), "java.time.LocalDate"),
-                                            "ofEpochDay",
-                                            new Java.Rvalue[] { baseValue }
-                                    ),
-                                    "getYear"
-                            )
-                    )
-            );
-
-            return extractedYearAP;
-
         } else {
             throw new UnsupportedOperationException(
                     "ProjectOperator.createNonVecComputationCode does not support the provided computation expression");
@@ -420,14 +357,11 @@ public class ProjectOperator extends CodeGenOperator<LogicalProject> {
     public List<Java.Statement> consumeVec(CodeGenContext cCtx, OptimisationContext oCtx) {
         List<Java.Statement> codeGenResult = new ArrayList<>();
 
-        // Obtain and process the projection specification
-        List<RexNode> projectionExpressions = this.getLogicalSubplan().getProjects();
-
         // Handle each projection expression separately, to update the ordinal mapping to the correct state
-        List<AccessPath> updatedOrdinalMapping = new ArrayList<>(projectionExpressions.size());
-        for (int i = 0; i < projectionExpressions.size(); i++) {
-            RexNode projectionExp = projectionExpressions.get(i);
-            updatedOrdinalMapping.add(i, generatedProjectionCode(cCtx, projectionExp, codeGenResult, true));
+        List<AccessPath> updatedOrdinalMapping = new ArrayList<>(this.projectionExpressions.length);
+        for (int i = 0; i < this.projectionExpressions.length; i++) {
+            AethraExpression projectionExp = this.projectionExpressions[i];
+            updatedOrdinalMapping.add(i, generateProjectionCode(cCtx, projectionExp, codeGenResult, true));
         }
 
         // Set the updated ordinal mapping
@@ -449,24 +383,19 @@ public class ProjectOperator extends CodeGenOperator<LogicalProject> {
      */
     private AccessPath createVecComputationCode(
             CodeGenContext cCtx,
-            RexCall computationExpression,
+            AethraFunction computationExpression,
             List<Java.Statement> codeGenResult
     ) {
-        if (computationExpression.getOperator() instanceof SqlBinaryOperator sqlBinaryOperator) {
+        if (computationExpression instanceof AethraBinaryFunction aethraBinaryFunction) {
             // Deal with recursive "projections" first
-            List<RexNode> computationOperands = computationExpression.getOperands();
-            if (computationOperands.size() != 2)
-                throw new UnsupportedOperationException(
-                        "ProjectOperator.createVecComputationCode expects two operands for a binary operator");
-
-            AccessPath lhopResult = this.generatedProjectionCode(cCtx, computationOperands.get(0), codeGenResult, true);
+            AccessPath lhopResult = this.generateProjectionCode(cCtx, aethraBinaryFunction.firstOperand, codeGenResult, true);
             QueryVariableType primLhsResType = QueryVariableTypeMethods.primitiveType(lhopResult.getType());
-            AccessPath rhopResult = this.generatedProjectionCode(cCtx, computationOperands.get(1), codeGenResult, true);
+            AccessPath rhopResult = this.generateProjectionCode(cCtx, aethraBinaryFunction.secondOperand, codeGenResult, true);
             QueryVariableType primRhsResType = QueryVariableTypeMethods.primitiveType(rhopResult.getType());
 
             // Compute the result type first
             QueryVariableType primitiveReturnType;
-            if (sqlBinaryOperator.getKind() == SqlKind.DIVIDE) {
+            if (aethraBinaryFunction.getKind() == DIVIDE) {
                 primitiveReturnType = QueryVariableType.P_DOUBLE;
             } else if (primLhsResType == QueryVariableType.P_DOUBLE && primRhsResType == QueryVariableType.P_DOUBLE)
                 primitiveReturnType = QueryVariableType.P_DOUBLE;
@@ -516,19 +445,13 @@ public class ProjectOperator extends CodeGenOperator<LogicalProject> {
 
             // Now "combine" the results from the operands depending on the operator, the SIMD processing mode and the result access paths
             // First we obtain the name of the correct vectorised primitive for the operator
-            SqlKind computationOperator = sqlBinaryOperator.getKind();
-            String operatorMethodName;
-            if (computationOperator == SqlKind.TIMES) {
-                operatorMethodName = "multiply";
-            } else if (computationOperator == SqlKind.PLUS) {
-                operatorMethodName = "add";
-            } else if (computationOperator == SqlKind.MINUS) {
-                operatorMethodName = "subtract";
-            } else if (computationOperator == SqlKind.DIVIDE) {
-                operatorMethodName = "divide";
-            } else {
-                throw new UnsupportedOperationException("ProjectOperator.createVecComputationOperator does not support the required operator");
-            }
+            String operatorMethodName = switch (aethraBinaryFunction.getKind()) {
+                case MULTIPLY -> "multiply";
+                case ADD -> "add";
+                case SUBTRACT -> "subtract";
+                case DIVIDE -> "divide";
+                default -> throw new UnsupportedOperationException("ProjectOperator.createVecComputationOperator does not support the required operator");
+            };
 
             // And we select the SIMDed version if required
             if (this.useSIMDVec())

@@ -7,7 +7,6 @@ import AethraDB.evaluation.general_support.hashmaps.Char_Arr_Hash_Function;
 import AethraDB.evaluation.general_support.hashmaps.Double_Hash_Function;
 import AethraDB.evaluation.general_support.hashmaps.Int_Hash_Function;
 import org.apache.arrow.memory.RootAllocator;
-import org.apache.calcite.util.ImmutableIntList;
 import org.openjdk.jmh.annotations.Benchmark;
 import org.openjdk.jmh.annotations.BenchmarkMode;
 import org.openjdk.jmh.annotations.Fork;
@@ -112,14 +111,18 @@ public class NonVectorisedNonSimd {
     public void trialSetup() throws Exception {
         // Setup the database
         this.rootAllocator = new RootAllocator();
+        int[] customerProjects = new int[] { 0, 1, 2, 3, 4, 5, 7 };
         this.customer = new ABQArrowTableReader(
-                new File(this.tpchInstance + "/customer.arrow"), this.rootAllocator, true, ImmutableIntList.of(0, 1, 2, 3, 4, 5, 7));
+                new File(this.tpchInstance + "/customer.arrow"), this.rootAllocator, true, customerProjects);
+        int[] orderProjects = new int[] { 0, 1, 4 };
         this.orders = new ABQArrowTableReader(
-                new File(this.tpchInstance + "/orders.arrow"), this.rootAllocator, true, ImmutableIntList.of(0, 1, 4));
+                new File(this.tpchInstance + "/orders.arrow"), this.rootAllocator, true, orderProjects);
+        int[] lineitemProjects = new int[] { 0, 5, 6, 8 };
         this.lineitem = new ABQArrowTableReader(
-                new File(this.tpchInstance + "/lineitem.arrow"), this.rootAllocator, true, ImmutableIntList.of(0, 5, 6, 8));
+                new File(this.tpchInstance + "/lineitem.arrow"), this.rootAllocator, true, lineitemProjects);
+        int[] nationProjects = new int[] { 0, 1 };
         this.nation = new ABQArrowTableReader(
-                new File(this.tpchInstance + "/nation.arrow"), this.rootAllocator, true, ImmutableIntList.of(0, 1));
+                new File(this.tpchInstance + "/nation.arrow"), this.rootAllocator, true, nationProjects);
 
         // Initialise the hash-table
         this.aggregation_state_map = new AggregationMap();

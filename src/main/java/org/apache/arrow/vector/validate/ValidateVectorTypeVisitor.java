@@ -17,8 +17,6 @@
 
 package org.apache.arrow.vector.validate;
 
-import static org.apache.arrow.vector.validate.ValidateUtil.validateOrThrow;
-
 import org.apache.arrow.vector.BaseFixedWidthVector;
 import org.apache.arrow.vector.BaseLargeVariableWidthVector;
 import org.apache.arrow.vector.BaseVariableWidthVector;
@@ -75,6 +73,8 @@ import org.apache.arrow.vector.types.TimeUnit;
 import org.apache.arrow.vector.types.UnionMode;
 import org.apache.arrow.vector.types.pojo.ArrowType;
 import org.apache.arrow.vector.types.pojo.FieldType;
+
+import static org.apache.arrow.vector.validate.ValidateUtil.validateOrThrow;
 
 /**
  * Utility to validate vector type information.

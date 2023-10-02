@@ -1,6 +1,5 @@
 package AethraDB.evaluation.codegen.operators;
 
-import AethraDB.calcite.operators.LogicalArrowTableScan;
 import AethraDB.evaluation.codegen.infrastructure.context.CodeGenContext;
 import AethraDB.evaluation.codegen.infrastructure.context.OptimisationContext;
 import AethraDB.evaluation.codegen.infrastructure.context.QueryVariableType;
@@ -15,11 +14,12 @@ import AethraDB.evaluation.codegen.infrastructure.context.access_path.ScalarVari
 import AethraDB.evaluation.codegen.infrastructure.data.ABQArrowTableReader;
 import AethraDB.evaluation.codegen.infrastructure.data.ArrowTableReader;
 import AethraDB.evaluation.codegen.infrastructure.janino.JaninoOperatorGen;
-import AethraDB.util.arrow.ArrowTable;
-import org.apache.calcite.prepare.RelOptTableImpl;
-import org.apache.calcite.rel.type.RelDataTypeField;
+import AethraDB.util.arrow.ArrowFileSchemaExtractor;
+import org.apache.arrow.vector.types.pojo.Field;
 import org.codehaus.janino.Java;
 
+import java.io.File;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -34,9 +34,9 @@ import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableTy
 import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableType.VECTOR_MASK_INT;
 import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableType.VECTOR_SPECIES_DOUBLE;
 import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableType.VECTOR_SPECIES_INT;
+import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableTypeMethods.arrowTypeToArrowVectorType;
 import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableTypeMethods.memberTypeForArrowVector;
 import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableTypeMethods.memorySegmentTypeForArrowVector;
-import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableTypeMethods.sqlTypeToArrowVectorType;
 import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableTypeMethods.toJavaType;
 import static AethraDB.evaluation.codegen.infrastructure.janino.JaninoControlGen.createForLoop;
 import static AethraDB.evaluation.codegen.infrastructure.janino.JaninoControlGen.createWhileLoop;
@@ -57,21 +57,46 @@ import static AethraDB.evaluation.codegen.infrastructure.janino.JaninoVariableGe
 /**
  * {@link CodeGenOperator} which generates code for reading data from an Arrow file.
  */
-public class ArrowTableScanOperator extends CodeGenOperator<LogicalArrowTableScan> {
+public class ArrowTableScanOperator extends CodeGenOperator {
 
     /**
      * Boolean keeping track of whether SIMD production is allowed in this operator.
      */
-    private final boolean SIMDProductionAllowed;
+     private final boolean SIMDProductionAllowed;
 
     /**
-     * Creates an {@link ArrowTableScanOperator} for a specific {@link LogicalArrowTableScan}.
-     * @param logicalSubplan The {@link LogicalArrowTableScan} to create a scan operator for.
-     * @param simdEnabled Whether the operator is allowed to use SIMD for processing.
+     * The path of the directory containing the database.
      */
-    public ArrowTableScanOperator(LogicalArrowTableScan logicalSubplan, boolean simdEnabled) {
-        super(logicalSubplan, simdEnabled);
-        this.SIMDProductionAllowed = simdEnabled;
+    private final String databasePath;
+
+    /**
+     * The name of the table to scan over.
+     */
+    private final String tableName;
+
+    /**
+     * Whether the scan should be performed using a projecting table scan implementation.
+     */
+    private final boolean isProjecting;
+
+    /**
+     * The indices of the columns to project (only considered when {@code isProject == true}).
+     */
+    private final int[] projectedColumns;
+
+    /**
+     * Creates an {@link ArrowTableScanOperator} for a specific table.
+     * @param databasePath The path of the directory containing the database.
+     * @param tableName The name of the table to scan over.
+     * @param isProjecting Whether the scan returns all columns, or projects out only a few.
+     * @param projectedColumns The indices of the columns that are accessible via this scan.
+     */
+    public ArrowTableScanOperator(String databasePath, String tableName, boolean isProjecting, int[] projectedColumns) {
+        this.SIMDProductionAllowed = false;
+        this.databasePath = databasePath;
+        this.tableName = tableName;
+        this.isProjecting = isProjecting;
+        this.projectedColumns = projectedColumns;
     }
 
     @Override
@@ -438,19 +463,14 @@ public class ArrowTableScanOperator extends CodeGenOperator<LogicalArrowTableSca
             Java.Block whileLoopBody
     ) {
         // Create an arrow reader instance
-        var relOptTable = (RelOptTableImpl) this.getLogicalSubplan().getTable();
-        var numberOfTableColumns = relOptTable.getRowType().getFieldCount();
-        var arrowTable = (ArrowTable) relOptTable.table();
-        var columnsToProject = this.getLogicalSubplan().projects;
-        boolean useProjectingArrowReader = numberOfTableColumns != columnsToProject.size();
-
+        File tableFile = new File(this.databasePath + "/" + this.tableName + ".arrow");
         ArrowTableReader arrowReader;
         try {
             arrowReader = new ABQArrowTableReader(
-                    arrowTable.getArrowFile(),
+                    tableFile,
                     cCtx.getArrowRootAllocator(),
-                    useProjectingArrowReader,
-                    columnsToProject
+                    this.isProjecting,
+                    this.projectedColumns
             );
         } catch (Exception e) {
             throw new RuntimeException("Could not create ArrowTableReader in query compilation stage.", e);
@@ -464,7 +484,7 @@ public class ArrowTableScanOperator extends CodeGenOperator<LogicalArrowTableSca
 
         // Initialise a variable for accessing the arrow reader
         // ArrowTableReader $tablename$ = cCtx.getArrowReader(arrowReaderIndex);
-        String arrowReaderVariableName = cCtx.defineVariable(arrowTable.getName());
+        String arrowReaderVariableName = cCtx.defineVariable(this.tableName);
 
         codegenResult.add(
                 createLocalVariable(
@@ -485,7 +505,7 @@ public class ArrowTableScanOperator extends CodeGenOperator<LogicalArrowTableSca
                 )
         );
 
-        System.out.println("Arrow reader " + arrowReaderIndex + " projects columns  " + Arrays.toString(columnsToProject.toIntArray()));
+        System.out.println("Arrow reader " + arrowReaderIndex + " projects columns  " + Arrays.toString(this.projectedColumns));
 
         // Loop over the vectors in the arrow file
         // while ([arrowReaderVariableName].loadNextBatch()) { [whileLoopBody] }
@@ -505,15 +525,19 @@ public class ArrowTableScanOperator extends CodeGenOperator<LogicalArrowTableSca
         // [vectorType] [arrowReaderVariableName]_vc_[outputColumnIndex] =
         //     ([vectorType]) [arrowReaderVariableName].get([originalColumnIndex])
 
-        List<RelDataTypeField> rowType = relOptTable.getRowType().getFieldList();
-        int numberOutputColumns = this.getLogicalSubplan().projects.size();
+        List<Field> schemaFields;
+        try {
+            schemaFields = ArrowFileSchemaExtractor.getFieldDescriptionFromTableFile(tableFile);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+        int numberOutputColumns = this.projectedColumns.length;
         List<AccessPath> projectedColumnAccessPaths = new ArrayList<>(numberOutputColumns);
 
         for (int outputColumnIndex = 0; outputColumnIndex < numberOutputColumns; outputColumnIndex++) {
             // Obtain data about the column to project
-            int originalColumnIndex = this.getLogicalSubplan().projects.get(outputColumnIndex);
-            QueryVariableType vectorType =
-                    sqlTypeToArrowVectorType(rowType.get(originalColumnIndex).getType().getSqlTypeName()); // Accessing SQL type appropriate here: loading data from file
+            int originalColumnIndex = this.projectedColumns[outputColumnIndex];
+            QueryVariableType vectorType = arrowTypeToArrowVectorType(schemaFields.get(originalColumnIndex).getType());
 
             // Define and expose an access path to a variable representing vectors of the projected column
             String preferredOutputColumnVariableName = arrowReaderVariableName + "_vc_" + outputColumnIndex;

@@ -17,17 +17,11 @@
 
 package org.apache.arrow.vector.ipc;
 
-import static org.apache.arrow.vector.BufferLayout.BufferType.*;
-
-import java.io.File;
-import java.io.IOException;
-import java.math.BigDecimal;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
-
+import com.fasterxml.jackson.core.JsonEncoding;
+import com.fasterxml.jackson.core.JsonGenerator;
+import com.fasterxml.jackson.core.util.DefaultPrettyPrinter;
+import com.fasterxml.jackson.core.util.DefaultPrettyPrinter.NopIndenter;
+import com.fasterxml.jackson.databind.MappingJsonFactory;
 import org.apache.arrow.memory.ArrowBuf;
 import org.apache.arrow.util.Preconditions;
 import org.apache.arrow.vector.BaseLargeVariableWidthVector;
@@ -77,11 +71,19 @@ import org.apache.arrow.vector.util.DecimalUtility;
 import org.apache.arrow.vector.util.DictionaryUtility;
 import org.apache.commons.codec.binary.Hex;
 
-import com.fasterxml.jackson.core.JsonEncoding;
-import com.fasterxml.jackson.core.JsonGenerator;
-import com.fasterxml.jackson.core.util.DefaultPrettyPrinter;
-import com.fasterxml.jackson.core.util.DefaultPrettyPrinter.NopIndenter;
-import com.fasterxml.jackson.databind.MappingJsonFactory;
+import java.io.File;
+import java.io.IOException;
+import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+
+import static org.apache.arrow.vector.BufferLayout.BufferType.DATA;
+import static org.apache.arrow.vector.BufferLayout.BufferType.OFFSET;
+import static org.apache.arrow.vector.BufferLayout.BufferType.TYPE;
+import static org.apache.arrow.vector.BufferLayout.BufferType.VALIDITY;
 
 /**
  * A writer that converts binary Vectors into an <em>internal, unstable</em> JSON format suitable

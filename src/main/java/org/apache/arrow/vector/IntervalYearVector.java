@@ -17,10 +17,6 @@
 
 package org.apache.arrow.vector;
 
-import static org.apache.arrow.vector.NullCheckingForGet.NULL_CHECKING_ENABLED;
-
-import java.time.Period;
-
 import org.apache.arrow.memory.ArrowBuf;
 import org.apache.arrow.memory.BufferAllocator;
 import org.apache.arrow.vector.complex.impl.IntervalYearReaderImpl;
@@ -31,6 +27,10 @@ import org.apache.arrow.vector.types.Types.MinorType;
 import org.apache.arrow.vector.types.pojo.Field;
 import org.apache.arrow.vector.types.pojo.FieldType;
 import org.apache.arrow.vector.util.TransferPair;
+
+import java.time.Period;
+
+import static org.apache.arrow.vector.NullCheckingForGet.NULL_CHECKING_ENABLED;
 
 /**
  * IntervalYearVector implements a fixed width (4 bytes) vector of

@@ -17,15 +17,15 @@
 
 package org.apache.arrow.vector;
 
-import java.util.ArrayList;
-import java.util.List;
-
 import org.apache.arrow.memory.ArrowBuf;
 import org.apache.arrow.vector.compression.CompressionCodec;
 import org.apache.arrow.vector.compression.CompressionUtil;
 import org.apache.arrow.vector.compression.NoCompressionCodec;
 import org.apache.arrow.vector.ipc.message.ArrowFieldNode;
 import org.apache.arrow.vector.ipc.message.ArrowRecordBatch;
+
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Helper class that handles converting a {@link VectorSchemaRoot}

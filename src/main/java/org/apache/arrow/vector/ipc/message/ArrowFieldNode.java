@@ -17,11 +17,10 @@
 
 package org.apache.arrow.vector.ipc.message;
 
-import static org.apache.arrow.memory.util.LargeMemoryUtil.checkedCastToInt;
-
+import com.google.flatbuffers.FlatBufferBuilder;
 import org.apache.arrow.flatbuf.FieldNode;
 
-import com.google.flatbuffers.FlatBufferBuilder;
+import static org.apache.arrow.memory.util.LargeMemoryUtil.checkedCastToInt;
 
 /**
  * Metadata about Vectors/Arrays that is written to a channel.

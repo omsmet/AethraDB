@@ -31,7 +31,7 @@ public class QueryCodeGenerator extends SimpleCompiler {
     /**
      * The root operator of the query for which code should be generated.
      */
-    private final CodeGenOperator<?> rootOperator;
+    private final CodeGenOperator rootOperator;
 
     /**
      * Whether to use the vectorised execution produce method on the top-level operator.
@@ -76,7 +76,7 @@ public class QueryCodeGenerator extends SimpleCompiler {
      * @param useVectorised Whether to use the vectorised produce method on the root operator.
      */
     public QueryCodeGenerator(
-            CodeGenContext cCtx, OptimisationContext oCtx, CodeGenOperator<?> rootOperator, boolean useVectorised) {
+            CodeGenContext cCtx, OptimisationContext oCtx, CodeGenOperator rootOperator, boolean useVectorised) {
         // Perform SimpleCompiler constructor
         super();
 
@@ -192,9 +192,9 @@ public class QueryCodeGenerator extends SimpleCompiler {
 
         // Introduce the query-global variable declarations
         var queryGlobalVariableDeclarations = this.cCtx.getQueryGlobalVariables();
-        List<Java.Statement> completedExecuteMethodBody = new ArrayList<>(queryGlobalVariableDeclarations.left);
+        List<Java.Statement> completedExecuteMethodBody = new ArrayList<>(queryGlobalVariableDeclarations.getLeft());
         completedExecuteMethodBody.addAll(executeMethodBody);
-        for (String varToDallocate : queryGlobalVariableDeclarations.right) {
+        for (String varToDallocate : queryGlobalVariableDeclarations.getRight()) {
             completedExecuteMethodBody.add(
                     JaninoMethodGen.createMethodInvocationStm(
                             JaninoGeneralGen.getLocation(),

@@ -17,10 +17,10 @@
 
 package org.apache.arrow.vector.util;
 
+import org.apache.arrow.vector.complex.AbstractStructVector;
+
 import java.util.Collection;
 import java.util.Set;
-
-import org.apache.arrow.vector.complex.AbstractStructVector;
 
 /**
  * Implementation of MapWithOrdinal that allows for promotion to multimap when duplicate fields exist.

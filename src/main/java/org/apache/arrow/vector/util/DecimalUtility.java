@@ -17,13 +17,13 @@
 
 package org.apache.arrow.vector.util;
 
+import org.apache.arrow.memory.ArrowBuf;
+import org.apache.arrow.memory.util.MemoryUtil;
+
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
-
-import org.apache.arrow.memory.ArrowBuf;
-import org.apache.arrow.memory.util.MemoryUtil;
 
 /**
  * Utility methods for configurable precision Decimal values (e.g. {@link BigDecimal}).

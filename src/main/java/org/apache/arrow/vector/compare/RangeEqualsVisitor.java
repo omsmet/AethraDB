@@ -17,11 +17,6 @@
 
 package org.apache.arrow.vector.compare;
 
-import static org.apache.arrow.memory.util.LargeMemoryUtil.checkedCastToInt;
-
-import java.util.List;
-import java.util.function.BiFunction;
-
 import org.apache.arrow.memory.util.ByteFunctionHelpers;
 import org.apache.arrow.util.Preconditions;
 import org.apache.arrow.vector.BaseFixedWidthVector;
@@ -38,6 +33,11 @@ import org.apache.arrow.vector.complex.LargeListVector;
 import org.apache.arrow.vector.complex.ListVector;
 import org.apache.arrow.vector.complex.NonNullableStructVector;
 import org.apache.arrow.vector.complex.UnionVector;
+
+import java.util.List;
+import java.util.function.BiFunction;
+
+import static org.apache.arrow.memory.util.LargeMemoryUtil.checkedCastToInt;
 
 /**
  * Visitor to compare a range of values for vectors.

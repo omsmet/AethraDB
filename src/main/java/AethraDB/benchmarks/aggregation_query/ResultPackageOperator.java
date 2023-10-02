@@ -6,7 +6,6 @@ import AethraDB.evaluation.codegen.infrastructure.context.access_path.ArrayAcces
 import AethraDB.evaluation.codegen.infrastructure.context.access_path.ArrayVectorAccessPath;
 import AethraDB.evaluation.codegen.infrastructure.context.access_path.ScalarVariableAccessPath;
 import AethraDB.evaluation.codegen.operators.CodeGenOperator;
-import org.apache.calcite.rel.RelNode;
 import org.codehaus.janino.Java;
 
 import java.util.ArrayList;
@@ -33,12 +32,12 @@ import static AethraDB.evaluation.codegen.infrastructure.janino.JaninoVariableGe
  * {@link CodeGenOperator} for packaging the result of a generated aggregation query as four arrays.
  * That is, all values produced by the query are put into an array per column in a contiguous fashion.
  */
-public class ResultPackageOperator extends CodeGenOperator<RelNode> {
+public class ResultPackageOperator extends CodeGenOperator {
 
     /**
      * The {@link CodeGenOperator} producing the query result that should be packaged in the integer array.
      */
-    private final CodeGenOperator<?> child;
+    private final CodeGenOperator child;
 
     /**
      * The number of elements that will be present in the packed array.
@@ -72,12 +71,10 @@ public class ResultPackageOperator extends CodeGenOperator<RelNode> {
 
     /**
      * Create an {@link ResultPackageOperator} instance for a specific query.
-     * @param logicalSubplan The logical plan of the query for which the operator is created.
      * @param child The {@link CodeGenOperator} producing the actual query result.
      * @param resultSize The number of elements that will be put into the result array.
      */
-    public ResultPackageOperator(RelNode logicalSubplan, CodeGenOperator<?> child, int resultSize) {
-        super(logicalSubplan, false);
+    public ResultPackageOperator(CodeGenOperator child, int resultSize) {
         this.child = child;
         this.child.setParent(this);
         this.resultSize = resultSize;

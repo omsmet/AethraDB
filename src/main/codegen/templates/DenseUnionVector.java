@@ -21,17 +21,14 @@ import org.apache.arrow.memory.ReferenceManager;
 import org.apache.arrow.memory.util.CommonUtil;
 import org.apache.arrow.util.Preconditions;
 import org.apache.arrow.vector.BaseValueVector;
-import org.apache.arrow.vector.BitVectorHelper;
 import org.apache.arrow.vector.FieldVector;
 import org.apache.arrow.vector.ValueVector;
+import org.apache.arrow.vector.compare.VectorVisitor;
 import org.apache.arrow.vector.complex.AbstractStructVector;
 import org.apache.arrow.vector.complex.ListVector;
 import org.apache.arrow.vector.complex.NonNullableStructVector;
 import org.apache.arrow.vector.complex.StructVector;
-import org.apache.arrow.vector.compare.VectorVisitor;
-import org.apache.arrow.vector.types.Types;
 import org.apache.arrow.vector.types.UnionMode;
-import org.apache.arrow.vector.compare.RangeEqualsVisitor;
 import org.apache.arrow.vector.types.pojo.ArrowType;
 import org.apache.arrow.vector.types.pojo.Field;
 import org.apache.arrow.vector.types.pojo.FieldType;
@@ -40,7 +37,6 @@ import org.apache.arrow.vector.util.DataSizeRoundingUtil;
 import org.apache.arrow.vector.util.TransferPair;
 
 import java.util.Arrays;
-import java.util.stream.Collectors;
 
 <@pp.dropOutputFile />
 <@pp.changeOutputFile name="/org/apache/arrow/vector/complex/DenseUnionVector.java" />

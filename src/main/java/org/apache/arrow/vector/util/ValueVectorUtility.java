@@ -17,10 +17,6 @@
 
 package org.apache.arrow.vector.util;
 
-import static org.apache.arrow.vector.validate.ValidateUtil.validateOrThrow;
-
-import java.util.function.BiFunction;
-
 import org.apache.arrow.util.Preconditions;
 import org.apache.arrow.vector.BaseFixedWidthVector;
 import org.apache.arrow.vector.ValueVector;
@@ -28,6 +24,10 @@ import org.apache.arrow.vector.VectorSchemaRoot;
 import org.apache.arrow.vector.validate.ValidateVectorBufferVisitor;
 import org.apache.arrow.vector.validate.ValidateVectorDataVisitor;
 import org.apache.arrow.vector.validate.ValidateVectorTypeVisitor;
+
+import java.util.function.BiFunction;
+
+import static org.apache.arrow.vector.validate.ValidateUtil.validateOrThrow;
 
 /**
  * Utility methods for {@link ValueVector}.

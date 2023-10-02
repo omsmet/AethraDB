@@ -17,10 +17,6 @@
 
 package org.apache.arrow.vector.util;
 
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
-import java.nio.channels.Channels;
-
 import org.apache.arrow.memory.BufferAllocator;
 import org.apache.arrow.vector.ipc.ReadChannel;
 import org.apache.arrow.vector.ipc.WriteChannel;
@@ -28,6 +24,10 @@ import org.apache.arrow.vector.ipc.message.MessageChannelReader;
 import org.apache.arrow.vector.ipc.message.MessageResult;
 import org.apache.arrow.vector.ipc.message.MessageSerializer;
 import org.apache.arrow.vector.types.pojo.Schema;
+
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.nio.channels.Channels;
 
 /**
  * Schema utility class including serialization and deserialization.

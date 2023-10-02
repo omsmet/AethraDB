@@ -17,11 +17,11 @@
 
 package org.apache.arrow.vector;
 
-import java.util.List;
-
 import org.apache.arrow.memory.ArrowBuf;
 import org.apache.arrow.vector.ipc.message.ArrowFieldNode;
 import org.apache.arrow.vector.types.pojo.Field;
+
+import java.util.List;
 
 /**
  * A vector corresponding to a Field in the schema.

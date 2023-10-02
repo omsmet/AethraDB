@@ -17,10 +17,10 @@
 
 package org.apache.arrow.vector;
 
+import org.apache.arrow.util.Preconditions;
+
 import java.time.Duration;
 import java.time.Period;
-
-import org.apache.arrow.util.Preconditions;
 
 /**
  * Combination of Period and Duration for representing this interval type

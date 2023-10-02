@@ -21,8 +21,6 @@ import org.apache.arrow.vector.complex.writer.DecimalWriter;
 import org.apache.arrow.vector.holders.Decimal256Holder;
 import org.apache.arrow.vector.holders.DecimalHolder;
 
-
-import java.lang.UnsupportedOperationException;
 import java.math.BigDecimal;
 
 <@pp.dropOutputFile />

@@ -10,63 +10,36 @@ import AethraDB.evaluation.codegen.infrastructure.context.access_path.SIMDLoopAc
 import AethraDB.evaluation.codegen.infrastructure.context.access_path.ScalarVariableAccessPath;
 import AethraDB.evaluation.codegen.infrastructure.janino.JaninoGeneralGen;
 import AethraDB.evaluation.codegen.infrastructure.janino.JaninoVariableGen;
-import org.apache.calcite.rel.RelNode;
-import org.apache.calcite.rex.RexLiteral;
-import org.apache.calcite.sql.type.BasicSqlType;
-import org.apache.calcite.util.NlsString;
-import org.apache.calcite.util.Pair;
+import AethraDB.util.language.value.literal.AethraDateDayLiteral;
+import AethraDB.util.language.value.literal.AethraDoubleLiteral;
+import AethraDB.util.language.value.literal.AethraIntegerLiteral;
+import AethraDB.util.language.value.literal.AethraLiteral;
+import AethraDB.util.language.value.literal.AethraStringLiteral;
+import org.apache.commons.lang3.tuple.Pair;
 import org.codehaus.janino.Java;
 
-import java.math.BigDecimal;
-import java.nio.charset.StandardCharsets;
 import java.util.List;
-import java.util.Objects;
 
 /**
  * Class that is extended by all code generator operators.
- * Wraps the {@link RelNode} representing the logical sub-plan that is implemented by this node.
  */
-public abstract class CodeGenOperator<T extends RelNode> {
+public abstract class CodeGenOperator {
 
     /**
      * The {@link CodeGenOperator} that consumes the result from this operator.
      */
-    protected CodeGenOperator<?> parent;
-
-    /**
-     * The logical sub-plan that is represented by the query operator tree rooted at this operator.
-     */
-    private final T logicalSubplan;
+    protected CodeGenOperator parent = null;
 
     /**
      * Whether a {@link CodeGenOperator} is allowed to use SIMD for processing.
      */
-    private final boolean simdEnabled;
-
-    /**
-     * Initialises a new instance of a specific {@link CodeGenOperator}.
-     * @param logicalSubplan The logical sub-plan that should be implemented by this operator.
-     * @param simdEnabled Whether the operator is allowed to use SIMD for processing.
-     */
-    protected CodeGenOperator(T logicalSubplan, boolean simdEnabled) {
-        this.parent = null;
-        this.logicalSubplan = logicalSubplan;
-        this.simdEnabled = simdEnabled;
-    }
-
-    /**
-     * Obtain the logical query plan that should be implemented by this operator.
-     * @return The logical query plan implemented by the query operator tree rooted at this node.
-     */
-    public T getLogicalSubplan() {
-        return this.logicalSubplan;
-    }
+    private final boolean simdEnabled = false;
 
     /**
      * Method to set the parent of this {@link CodeGenOperator}.
      * @param parent The parent of this operator.
      */
-    public void setParent(CodeGenOperator<?> parent) {
+    public void setParent(CodeGenOperator parent) {
         this.parent = parent;
     }
 
@@ -83,18 +56,6 @@ public abstract class CodeGenOperator<T extends RelNode> {
     public boolean canProduceVectorised() {
         return false;
     };
-
-// TODO: ensure we can really do without these operators
-//
-//    /**
-//     * Method to indicate whether the current operator can consume code for non-vectorised execution.
-//     */
-//    public abstract boolean canConsumeNonVectorised();
-//
-//    /**
-//     * Method to indicate whether the current operator can consume code for vectorised execution.
-//     */
-//    public abstract boolean canConsumeVectorised();
 
     /**
      * Method for generating non-vectorised code during a "forward" pass.
@@ -205,10 +166,10 @@ public abstract class CodeGenOperator<T extends RelNode> {
                 getRValueFromAccessPathNonVec(cCtx, accessPath, codegenTarget);
 
         // Update the ordinal mapping with the possibly new local variable
-        cCtx.getCurrentOrdinalMapping().set(ordinalIndex, accessPathConversionResult.right);
+        cCtx.getCurrentOrdinalMapping().set(ordinalIndex, accessPathConversionResult.getRight());
 
         // Return the r-value corresponding to the requested ordinal (via the potentially new variable)
-        return accessPathConversionResult.left;
+        return accessPathConversionResult.getLeft();
     }
 
     /**
@@ -227,7 +188,7 @@ public abstract class CodeGenOperator<T extends RelNode> {
         // Expose the ordinal position value based on the supported type. When the access path is
         // not a simple scalar variable, transform it to reduce method calls where possible.
         if (accessPath instanceof ScalarVariableAccessPath svap) {
-            return new Pair<>(svap.read(), svap);
+            return Pair.of(svap.read(), svap);
 
         } else if (accessPath instanceof IndexedArrowVectorElementAccessPath iaveap) {
             QueryVariableType ordinalType = iaveap.getType();
@@ -258,7 +219,7 @@ public abstract class CodeGenOperator<T extends RelNode> {
                 // Allocate an array of global byte array caches to avoid allocations as much as possible
                 // while keeping the var-charity. The array has space for one byte array cache upto the
                 // maximum var char length in the database
-                int maximumVarCharLength = cCtx.getDatabase().getMaximumVarCharColumnLength();
+                int maximumVarCharLength = 200; // TODO: find way to not hard-code this
                 String arrayOfCachesName = cCtx.defineQueryGlobalVariable(
                         "byte_array_caches",
                         JaninoGeneralGen.createNestedPrimitiveArrayType(JaninoGeneralGen.getLocation(), Java.Primitive.BYTE),
@@ -300,7 +261,7 @@ public abstract class CodeGenOperator<T extends RelNode> {
             var newAccessPath = new ScalarVariableAccessPath(operandVariableName, ordinalType);
 
             // Return the access path code
-            return new Pair<>(newAccessPath.read(), newAccessPath);
+            return Pair.of(newAccessPath.read(), newAccessPath);
 
         } else {
             throw new IllegalStateException(
@@ -309,27 +270,22 @@ public abstract class CodeGenOperator<T extends RelNode> {
     }
 
     /**
-     * Method to convert a {@link RexLiteral} to an appropriate {@link Java.Rvalue}.
-     * @param literal The {@link RexLiteral} to convert.
+     * Method to convert a {@link AethraLiteral} to an appropriate {@link Java.Rvalue}.
+     * @param literal The {@link AethraLiteral} to convert.
      * @return The {@link Java.Rvalue} corresponding to {@code literal}.
      */
-    Java.Rvalue rexLiteralToRvalue(RexLiteral literal) {
-        // Simply return a literal corresponding to the operand
-        BasicSqlType literalType = (BasicSqlType) literal.getType();
-
-        return switch (literalType.getSqlTypeName()) {
-            case DOUBLE -> JaninoGeneralGen.createFloatingPointLiteral(JaninoGeneralGen.getLocation(), literal.getValueAs(Double.class).toString());
-            case FLOAT -> JaninoGeneralGen.createFloatingPointLiteral(JaninoGeneralGen.getLocation(), literal.getValueAs(Float.class).toString());
-            case INTEGER -> JaninoGeneralGen.createIntegerLiteral(JaninoGeneralGen.getLocation(), literal.getValueAs(Integer.class).toString());
-            case DECIMAL -> JaninoGeneralGen.createFloatingPointLiteral(JaninoGeneralGen.getLocation(), literal.getValueAs(BigDecimal.class).doubleValue());
-            case CHAR -> {
-                String value = Objects.requireNonNull(literal.getValueAs(NlsString.class)).getValue();
-                byte[] valueBytes = new byte[literalType.getPrecision()];
-                System.arraycopy(value.getBytes(StandardCharsets.US_ASCII), 0, valueBytes, 0, value.length());
-                yield JaninoGeneralGen.createInitialisedByteArray(JaninoGeneralGen.getLocation(), valueBytes);
-            }
-            default -> throw new UnsupportedOperationException(
-                    "FilterOperator.codeGenOperandNonVec does not support his literal type");
+    protected Java.Rvalue aethraLiteralToRvalue(AethraLiteral literal) {
+        return switch (literal) {
+            case AethraDateDayLiteral addl ->
+                    JaninoGeneralGen.createIntegerLiteral(JaninoGeneralGen.getLocation(), addl.unixDay);
+            case AethraDoubleLiteral adl ->
+                    JaninoGeneralGen.createFloatingPointLiteral(JaninoGeneralGen.getLocation(), adl.value);
+            case AethraIntegerLiteral ail ->
+                    JaninoGeneralGen.createIntegerLiteral(JaninoGeneralGen.getLocation(), ail.value);
+            case AethraStringLiteral asl ->
+                    JaninoGeneralGen.createInitialisedByteArray(JaninoGeneralGen.getLocation(), asl.value);
+            case null, default -> throw new UnsupportedOperationException(
+                    "FilterOperator.aethraLiteralToRvalue does not support this literal type: " + literal.getClass());
         };
     }
 

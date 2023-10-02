@@ -17,14 +17,6 @@
 
 package org.apache.arrow.vector.ipc;
 
-import java.io.IOException;
-import java.nio.channels.WritableByteChannel;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
-
 import org.apache.arrow.util.VisibleForTesting;
 import org.apache.arrow.vector.VectorSchemaRoot;
 import org.apache.arrow.vector.compression.CompressionCodec;
@@ -39,6 +31,14 @@ import org.apache.arrow.vector.ipc.message.IpcOption;
 import org.apache.arrow.vector.ipc.message.MessageSerializer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.io.IOException;
+import java.nio.channels.WritableByteChannel;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
 
 /**
  * {@link ArrowWriter} that writes out a Arrow files (https://arrow.apache.org/docs/format/IPC.html#file-format).

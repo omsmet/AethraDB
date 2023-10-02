@@ -5,7 +5,6 @@ import AethraDB.evaluation.codegen.infrastructure.data.ArrowTableReader;
 import AethraDB.evaluation.general_support.ArrowOptimisations;
 import AethraDB.evaluation.general_support.hashmaps.Char_Arr_Hash_Function;
 import org.apache.arrow.memory.RootAllocator;
-import org.apache.calcite.util.ImmutableIntList;
 import org.openjdk.jmh.annotations.Benchmark;
 import org.openjdk.jmh.annotations.BenchmarkMode;
 import org.openjdk.jmh.annotations.Fork;
@@ -82,7 +81,7 @@ public class NonVectorisedNonSimd {
     public void trialSetup() throws Exception {
         // Setup the database
         this.rootAllocator = new RootAllocator();
-        ImmutableIntList columnsToProject = ImmutableIntList.of(4, 5, 6, 7, 8, 9, 10);
+        int[] columnsToProject = new int[] { 4, 5, 6, 7, 8, 9, 10 };
         this.lineitem = new ABQArrowTableReader(
                 new File(this.tpchInstance + "/lineitem.arrow"), this.rootAllocator, true, columnsToProject);
 

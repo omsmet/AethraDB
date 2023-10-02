@@ -17,6 +17,12 @@
 
 package org.apache.arrow.vector.util;
 
+import com.fasterxml.jackson.core.JsonGenerationException;
+import com.fasterxml.jackson.core.JsonGenerator;
+import com.fasterxml.jackson.databind.SerializerProvider;
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
+import com.fasterxml.jackson.databind.ser.std.StdSerializer;
+
 import java.io.DataInput;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -30,12 +36,6 @@ import java.nio.charset.MalformedInputException;
 import java.text.CharacterIterator;
 import java.text.StringCharacterIterator;
 import java.util.Arrays;
-
-import com.fasterxml.jackson.core.JsonGenerationException;
-import com.fasterxml.jackson.core.JsonGenerator;
-import com.fasterxml.jackson.databind.SerializerProvider;
-import com.fasterxml.jackson.databind.annotation.JsonSerialize;
-import com.fasterxml.jackson.databind.ser.std.StdSerializer;
 
 /**
  * A simplified byte wrapper similar to Hadoop's Text class without all the dependencies.

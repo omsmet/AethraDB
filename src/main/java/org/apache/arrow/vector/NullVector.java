@@ -17,12 +17,6 @@
 
 package org.apache.arrow.vector;
 
-import static org.apache.arrow.vector.complex.BaseRepeatedValueVector.DATA_VECTOR_NAME;
-
-import java.util.Collections;
-import java.util.Iterator;
-import java.util.List;
-
 import org.apache.arrow.memory.ArrowBuf;
 import org.apache.arrow.memory.BufferAllocator;
 import org.apache.arrow.memory.OutOfMemoryException;
@@ -38,6 +32,12 @@ import org.apache.arrow.vector.types.pojo.Field;
 import org.apache.arrow.vector.types.pojo.FieldType;
 import org.apache.arrow.vector.util.CallBack;
 import org.apache.arrow.vector.util.TransferPair;
+
+import java.util.Collections;
+import java.util.Iterator;
+import java.util.List;
+
+import static org.apache.arrow.vector.complex.BaseRepeatedValueVector.DATA_VECTOR_NAME;
 
 /**
  * A null type vector.

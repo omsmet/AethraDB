@@ -5,7 +5,6 @@ import AethraDB.evaluation.codegen.infrastructure.data.ArrowTableReader;
 import AethraDB.evaluation.general_support.ArrowOptimisations;
 import AethraDB.evaluation.general_support.hashmaps.Int_Hash_Function;
 import org.apache.arrow.memory.RootAllocator;
-import org.apache.calcite.util.ImmutableIntList;
 import org.openjdk.jmh.annotations.Benchmark;
 import org.openjdk.jmh.annotations.BenchmarkMode;
 import org.openjdk.jmh.annotations.Fork;
@@ -96,12 +95,15 @@ public class NonVectorisedNonSimd {
     public void trialSetup() throws Exception {
         // Setup the database
         this.rootAllocator = new RootAllocator();
+        int[] customerProjects = new int[] { 0, 6 };
         this.customer = new ABQArrowTableReader(
-                new File(this.tpchInstance + "/customer.arrow"), this.rootAllocator, true, ImmutableIntList.of(0, 6));
+                new File(this.tpchInstance + "/customer.arrow"), this.rootAllocator, true, customerProjects);
+        int[] orderProjects = new int[] { 0, 1, 4, 7 };
         this.orders = new ABQArrowTableReader(
-                new File(this.tpchInstance + "/orders.arrow"), this.rootAllocator, true, ImmutableIntList.of(0, 1, 4, 7));
+                new File(this.tpchInstance + "/orders.arrow"), this.rootAllocator, true, orderProjects);
+        int[] lineitemProjects = new int[] { 0, 5, 6, 10 };
         this.lineitem = new ABQArrowTableReader(
-                new File(this.tpchInstance + "/lineitem.arrow"), this.rootAllocator, true, ImmutableIntList.of(0, 5, 6, 10));
+                new File(this.tpchInstance + "/lineitem.arrow"), this.rootAllocator, true, lineitemProjects);
 
         // Initialise the hash-table
         this.aggregation_state_map = new AggregationMap();

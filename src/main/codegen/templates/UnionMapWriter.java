@@ -15,14 +15,8 @@
  * limitations under the License.
  */
 
-import org.apache.arrow.memory.ArrowBuf;
 import org.apache.arrow.vector.complex.writer.Decimal256Writer;
 import org.apache.arrow.vector.complex.writer.DecimalWriter;
-import org.apache.arrow.vector.holders.Decimal256Holder;
-import org.apache.arrow.vector.holders.DecimalHolder;
-
-import java.lang.UnsupportedOperationException;
-import java.math.BigDecimal;
 
 <@pp.dropOutputFile />
 <@pp.changeOutputFile name="/org/apache/arrow/vector/complex/impl/UnionMapWriter.java" />

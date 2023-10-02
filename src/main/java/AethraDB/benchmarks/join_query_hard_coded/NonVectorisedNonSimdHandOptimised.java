@@ -6,7 +6,6 @@ import AethraDB.evaluation.codegen.infrastructure.data.ABQArrowTableReader;
 import AethraDB.evaluation.codegen.infrastructure.data.ArrowTableReader;
 import AethraDB.evaluation.general_support.hashmaps.Int_Hash_Function;
 import org.apache.arrow.memory.RootAllocator;
-import org.apache.calcite.util.ImmutableIntList;
 import org.openjdk.jmh.annotations.Benchmark;
 import org.openjdk.jmh.annotations.BenchmarkMode;
 import org.openjdk.jmh.annotations.Fork;
@@ -112,9 +111,12 @@ public class NonVectorisedNonSimdHandOptimised {
     public void trialSetup() throws Exception {
         // Setup the database
         this.rootAllocator = new RootAllocator();
-        this.table_A = new ABQArrowTableReader(new File(this.tableFilePath + "/table_A.arrow"), this.rootAllocator, true, ImmutableIntList.of(0, 1));
-        this.table_B = new ABQArrowTableReader(new File(this.tableFilePath + "/table_B.arrow"), this.rootAllocator, true, ImmutableIntList.of(0));
-        this.table_C = new ABQArrowTableReader(new File(this.tableFilePath + "/table_C.arrow"), this.rootAllocator, true, ImmutableIntList.of(0));
+        int[] tableAProjects = new int[] { 0, 1 };
+        this.table_A = new ABQArrowTableReader(new File(this.tableFilePath + "/table_A.arrow"), this.rootAllocator, true, tableAProjects);
+        int[] tableBProjects = new int[] { 0 };
+        this.table_B = new ABQArrowTableReader(new File(this.tableFilePath + "/table_B.arrow"), this.rootAllocator, true, tableBProjects);
+        int[] tableCProjects = new int[] { 0 };
+        this.table_C = new ABQArrowTableReader(new File(this.tableFilePath + "/table_C.arrow"), this.rootAllocator, true, tableCProjects);
 
         // Compute the hash-table sizes as the correct power of two size
         int hashTableSize = 3 * 1024 * 1024;

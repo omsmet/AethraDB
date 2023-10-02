@@ -4,14 +4,12 @@ import AethraDB.benchmarks.util.ResultConsumptionOperator;
 import AethraDB.benchmarks.util.ResultConsumptionTarget;
 import AethraDB.evaluation.codegen.GeneratedQuery;
 import AethraDB.evaluation.codegen.QueryCodeGenerator;
-import AethraDB.evaluation.codegen.QueryTranslator;
 import AethraDB.evaluation.codegen.infrastructure.context.CodeGenContext;
 import AethraDB.evaluation.codegen.infrastructure.context.OptimisationContext;
 import AethraDB.evaluation.codegen.infrastructure.data.ArrowTableReader;
 import AethraDB.evaluation.codegen.operators.CodeGenOperator;
-import AethraDB.util.arrow.ArrowDatabase;
+import AethraDB.util.AethraDatabase;
 import org.apache.arrow.memory.RootAllocator;
-import org.apache.calcite.rel.RelNode;
 import org.openjdk.jmh.annotations.Benchmark;
 import org.openjdk.jmh.annotations.BenchmarkMode;
 import org.openjdk.jmh.annotations.Fork;
@@ -25,7 +23,6 @@ import org.openjdk.jmh.annotations.State;
 import org.openjdk.jmh.annotations.TearDown;
 
 import java.io.IOException;
-import java.io.StringReader;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -103,11 +100,6 @@ public class VectorisedNonSimd extends ResultConsumptionTarget {
             """;
 
     /**
-     * State: the database on which to execute the query.
-     */
-    private ArrowDatabase database;
-
-    /**
      * State: the generated query to execute/benchmark.
      */
     private GeneratedQuery generatedQuery;
@@ -182,29 +174,22 @@ public class VectorisedNonSimd extends ResultConsumptionTarget {
         // Setup the arrow root allocator
         RootAllocator arrowRootAllocator = new RootAllocator();
 
-        // Setup the database
-        this.database = new ArrowDatabase(this.tableFilePath);
-
         // Plan the query
-        RelNode plannedQuery = this.database.planQuery(new StringReader(query));
+        CodeGenOperator queryRootOperator = AethraDatabase.planQueryString(this.tableFilePath, query);
 
         // Create the contexts required for code generation
-        CodeGenContext cCtx = new CodeGenContext(database, arrowRootAllocator);
+        CodeGenContext cCtx = new CodeGenContext(arrowRootAllocator);
         OptimisationContext oCtx = new OptimisationContext();
-
-        // Generate code operator tree for the query
-        QueryTranslator queryTranslator = new QueryTranslator();
-        CodeGenOperator<?> queryRootOperator = queryTranslator.translate(plannedQuery, false);
 
         // Extract the expected result size to construct the int[] packaging operator
         Pattern keysPattern = Pattern.compile("keys\\_\\d+");
         Matcher keysMatcher = keysPattern.matcher(this.tableFilePath);
         keysMatcher.find();
         int numberKeys = Integer.parseInt(keysMatcher.group(0).split("_")[1]);
-        CodeGenOperator<?> packageOperator = new ResultPackageOperator(plannedQuery, queryRootOperator, numberKeys * 4);
+        CodeGenOperator packageOperator = new ResultPackageOperator(queryRootOperator, numberKeys * 4);
 
         // Construct the packaging and result consumption operators and generate the code
-        CodeGenOperator<RelNode> queryResultConsumptionOperator = new ResultConsumptionOperator(plannedQuery, packageOperator);
+        CodeGenOperator queryResultConsumptionOperator = new ResultConsumptionOperator(packageOperator);
         QueryCodeGenerator queryCodeGenerator = new QueryCodeGenerator(cCtx, oCtx, queryResultConsumptionOperator, true);
         this.generatedQuery = queryCodeGenerator.generateQuery(true);
         this.generatedQueryCCtx = this.generatedQuery.getCCtx();

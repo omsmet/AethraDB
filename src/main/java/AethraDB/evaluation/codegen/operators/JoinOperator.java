@@ -16,12 +16,6 @@ import AethraDB.evaluation.codegen.infrastructure.context.access_path.ScalarVari
 import AethraDB.evaluation.codegen.infrastructure.janino.JaninoControlGen;
 import AethraDB.evaluation.codegen.infrastructure.janino.JaninoOperatorGen;
 import AethraDB.evaluation.general_support.hashmaps.KeyMultiRecordMapGenerator;
-import org.apache.calcite.rel.core.JoinRelType;
-import org.apache.calcite.rel.logical.LogicalJoin;
-import org.apache.calcite.rex.RexCall;
-import org.apache.calcite.rex.RexInputRef;
-import org.apache.calcite.rex.RexNode;
-import org.apache.calcite.sql.SqlKind;
 import org.codehaus.janino.Java;
 
 import java.util.ArrayList;
@@ -66,25 +60,34 @@ import static AethraDB.evaluation.codegen.infrastructure.janino.JaninoVariableGe
  * {@link CodeGenOperator} which performs a join over two tables for a given join condition. All
  * joins implemented by this operator are currently hash-joins over a single equality predicate.
  */
-public class JoinOperator extends CodeGenOperator<LogicalJoin> {
-
-    /**
-     * The {@link RexCall} representing the (normalised) join condition implemented by this
-     * {@link JoinOperator}.
-     */
-    private final RexCall joinCondition;
+public class JoinOperator extends CodeGenOperator {
 
     /**
      * The {@link CodeGenOperator} producing the records to be joined by {@code this} on "left" side
      * of the join.
      */
-    private final CodeGenOperator<?> leftChild;
+    private final CodeGenOperator leftChild;
+
+    /**
+     * The index (in the result) of the left child ordinal to use for the equi-join condition.
+     */
+    private final int leftChildEquijoinIndex;
+
+    /**
+     * The number of columns in the left-child records.
+     */
+    private int leftChildColumnCount;
 
     /**
      * The {@link CodeGenOperator} producing the records to be joined by {@code this} on "right" side
      * of the join.
      */
-    private final CodeGenOperator<?> rightChild;
+    private final CodeGenOperator rightChild;
+
+    /**
+     * The index (in the result) of the right child ordinal to use for the equi-join condition.
+     */
+    private final int rightChildEquijoinIndex;
 
     /**
      * The generator used for creating the hash-map type that will be used to store the
@@ -103,15 +106,20 @@ public class JoinOperator extends CodeGenOperator<LogicalJoin> {
     private ArrayAccessPath preHashVectorAP;
 
     /**
+     * The total number of columns in the result.
+     */
+    private int resultColumnCount;
+
+    /**
      * The names of the result vectors of this operator in the vectorised paradigm.
      */
-    private final String[] resultVectorNames;
+    private String[] resultVectorNames;
 
     /**
      * The access paths indicating the vector types that should be exposed as the result of this
      * operator in the vectorised paradigm.
      */
-    private final ArrayAccessPath[] resultVectorDefinitions;
+    private ArrayAccessPath[] resultVectorDefinitions;
 
     /**
      * Boolean indicating if the consume method should perform a hash-table build or a hash-table probe.
@@ -121,66 +129,25 @@ public class JoinOperator extends CodeGenOperator<LogicalJoin> {
 
     /**
      * Creates a new {@link JoinOperator} instance for a specific sub-query.
-     * @param join The logical join (and sub-query) for which the operator is created.
-     * @param simdEnabled Whether the operator is allowed to use SIMD for processing.
      * @param leftChild The {@link CodeGenOperator} producing the left input side of the join.
      * @param rightChild The {@link CodeGenOperator} producing the right input side of the join.
+     * @param leftJoinColumnIndex The index (in the result) of the left child to use in the equi-join condition.
+     * @param rightJoinColumnIndex The index (in the result) of the right child to use in the equi-join condition.
      */
     public JoinOperator(
-            LogicalJoin join,
-            boolean simdEnabled,
-            CodeGenOperator<?> leftChild,
-            CodeGenOperator<?> rightChild
+            CodeGenOperator leftChild,
+            CodeGenOperator rightChild,
+            int leftJoinColumnIndex,
+            int rightJoinColumnIndex
     ) {
-        super(join, simdEnabled);
+        // Pre-conditions checked by planner library
         this.leftChild = leftChild;
         this.leftChild.setParent(this);
+        this.leftChildEquijoinIndex = leftJoinColumnIndex;
         this.rightChild = rightChild;
         this.rightChild.setParent(this);
+        this.rightChildEquijoinIndex = rightJoinColumnIndex;
         this.consumeInProbePhase = false;
-        this.resultVectorNames = new String[join.getRowType().getFieldCount()];
-        this.resultVectorDefinitions = new ArrayAccessPath[join.getRowType().getFieldCount()];
-
-        // Check pre-conditions
-        if (join.getJoinType() != JoinRelType.INNER)
-            throw new UnsupportedOperationException("JoinOperator currently only supports inner joins");
-
-        RexNode joinCondition = join.getCondition();
-        if (!(joinCondition instanceof RexCall joinConditionCall))
-            throw new UnsupportedOperationException("JoinOperator currently only supports join conditions wrapped in a RexCall");
-
-        if (joinConditionCall.getOperator().getKind() != SqlKind.EQUALS)
-            throw new UnsupportedOperationException("JoinOperator currently only supports equality join conditions");
-
-        if (joinConditionCall.getOperands().size() != 2)
-            throw new UnsupportedOperationException("JoinOperator currently only supports join conditions over two operands");
-
-        List<RexNode> joinConditionOperands = joinConditionCall.getOperands();
-        for (RexNode joinConditionOperand : joinConditionOperands) {
-            if (!(joinConditionOperand instanceof RexInputRef))
-                throw new UnsupportedOperationException("JoinOperator currently only supports join condition operands that refer to an input column");
-        }
-
-        if (joinConditionOperands.get(0).getType() != joinConditionOperands.get(1).getType())
-            throw new UnsupportedOperationException("JoinOperator expects the join condition operands to be of the same type");
-
-        // Join condition passes pre-condition, now re-order the predicate so it always has the
-        // lhs join column's predicate first, followed by the rhs join column predicate
-        RexInputRef firstRef = (RexInputRef) joinConditionOperands.get(0);
-        RexInputRef secondRef = (RexInputRef) joinConditionOperands.get(1);
-        List<RexNode> orderedJoinOperands = new ArrayList<>();
-        if (firstRef.getIndex() > secondRef.getIndex()) {
-            orderedJoinOperands.add(secondRef);
-            orderedJoinOperands.add(firstRef);
-        } else {
-            orderedJoinOperands.add(firstRef);
-            orderedJoinOperands.add(secondRef);
-        }
-
-        this.joinCondition = (RexCall) this.getLogicalSubplan().getCluster().getRexBuilder().makeCall(
-                joinConditionCall.getOperator(),
-                orderedJoinOperands
-        );
     }
 
     @Override
@@ -252,8 +219,7 @@ public class JoinOperator extends CodeGenOperator<LogicalJoin> {
         List<Java.Statement> codeGenResult = new ArrayList<>();
 
         // Check that we can handle the key type (casts valid due to pre-condition check in constructor)
-        RexInputRef buildKey = (RexInputRef) this.joinCondition.getOperands().get(0);
-        int buildKeyOrdinal = buildKey.getIndex();
+        int buildKeyOrdinal = this.leftChildEquijoinIndex;
         AccessPath buildKeyAP = cCtx.getCurrentOrdinalMapping().get(buildKeyOrdinal);
         QueryVariableType buildKeyOrdinalPrimitiveType = primitiveType(buildKeyAP.getType());
 
@@ -321,13 +287,12 @@ public class JoinOperator extends CodeGenOperator<LogicalJoin> {
         List<Java.Statement> codeGenResult = new ArrayList<>();
 
         // Check that we can handle the key type (casts valid due to pre-condition check in constructor)
-        RexInputRef buildKey = (RexInputRef) this.joinCondition.getOperands().get(1);
         // Need to convert the output ordinal to the right-input ordinal
-        int buildKeyOrdinal = buildKey.getIndex() - this.getLogicalSubplan().getLeft().getRowType().getFieldCount();
-        AccessPath buildKeyAP = cCtx.getCurrentOrdinalMapping().get(buildKeyOrdinal);
-        QueryVariableType buildKeyOrdinalPrimitiveType = primitiveType(buildKeyAP.getType());
+        int probeKeyOrdinal = this.rightChildEquijoinIndex - this.leftChildColumnCount;
+        AccessPath probeKeyAP = cCtx.getCurrentOrdinalMapping().get(probeKeyOrdinal);
+        QueryVariableType probeKeyOrdinalPrimitiveType = primitiveType(probeKeyAP.getType());
 
-        if (buildKeyOrdinalPrimitiveType != P_INT)
+        if (probeKeyOrdinalPrimitiveType != P_INT)
             throw new UnsupportedOperationException("JoinOperator.consumeNonVecProbe only supports integer join key columns");
 
         if (this.useSIMDNonVec(cCtx))
@@ -337,8 +302,8 @@ public class JoinOperator extends CodeGenOperator<LogicalJoin> {
         // and finally expose the resulting records
 
         // Obtain the local access path for the key column value
-        Java.Rvalue keyColumnRvalue = getRValueFromOrdinalAccessPathNonVec(cCtx, buildKeyOrdinal, codeGenResult);
-        buildKeyAP = cCtx.getCurrentOrdinalMapping().get(buildKeyOrdinal);
+        Java.Rvalue keyColumnRvalue = getRValueFromOrdinalAccessPathNonVec(cCtx, probeKeyOrdinal, codeGenResult);
+        probeKeyAP = cCtx.getCurrentOrdinalMapping().get(probeKeyOrdinal);
 
         // Compute the pre-hash value in a local variable
         var rightJoinKeyPreHash = new ScalarVariableAccessPath(cCtx.defineVariable("right_join_key_prehash"), P_LONG);
@@ -378,7 +343,7 @@ public class JoinOperator extends CodeGenOperator<LogicalJoin> {
                                 this.joinMapAP.read(),
                                 "getIndex",
                                 new Java.Rvalue[] {
-                                        ((ScalarVariableAccessPath) buildKeyAP).read(), // Cast valid due to local access path
+                                        ((ScalarVariableAccessPath) probeKeyAP).read(), // Cast valid due to local access path
                                         rightJoinKeyPreHash.read()
                                 }
                         )
@@ -442,17 +407,15 @@ public class JoinOperator extends CodeGenOperator<LogicalJoin> {
 
         // In the for-loop, expose the left-hand join columns as local variables
         // Also start updating the ordinal mapping
-        List<AccessPath> updatedOrdinalMapping =
-                new ArrayList<>(this.getLogicalSubplan().getRowType().getFieldCount());
+        List<AccessPath> updatedOrdinalMapping = new ArrayList<>(this.resultColumnCount);
 
-        int leftKeyOrdinalIndex = ((RexInputRef) this.joinCondition.getOperands().get(0)).getIndex();
         int numberOfLhsColumns = this.joinMapGenerator.valueVariableNames.length + 1; // add 1 for key column
         int currentLhsJoinMapValueColumnIndex = 0; // Need to account for the fact that the key is not duplicated in the map
         for (int i = 0; i < numberOfLhsColumns; i++) {
 
             // For the key, simply use the existing ordinal value
-            if (i == leftKeyOrdinalIndex) {
-                updatedOrdinalMapping.add(i, buildKeyAP);
+            if (i == this.leftChildEquijoinIndex) {
+                updatedOrdinalMapping.add(i, probeKeyAP);
                 continue;
             }
 
@@ -638,8 +601,7 @@ public class JoinOperator extends CodeGenOperator<LogicalJoin> {
     public List<Java.Statement> consumeVec(CodeGenContext cCtx, OptimisationContext oCtx) {
         // Set-up the current part of the result vector type initialisation
         List<AccessPath> currentOrdinalMapping = cCtx.getCurrentOrdinalMapping();
-        int vectorOffset = consumeInProbePhase ? this.leftChild.getLogicalSubplan().getRowType().getFieldCount()
-                                               : 0;
+        int vectorOffset = consumeInProbePhase ? this.leftChildColumnCount : 0;
         for (int i = 0; i < currentOrdinalMapping.size(); i++) {
             int outputVectorIndex = vectorOffset + i;
             QueryVariableType ordinalType = currentOrdinalMapping.get(i).getType();
@@ -678,8 +640,7 @@ public class JoinOperator extends CodeGenOperator<LogicalJoin> {
         List<Java.Statement> codeGenResult = new ArrayList<>();
 
         // Check that we can handle the key type (casts valid due to pre-condition check in constructor)
-        RexInputRef buildKey = (RexInputRef) this.joinCondition.getOperands().get(0);
-        int buildKeyOrdinal = buildKey.getIndex();
+        int buildKeyOrdinal = this.leftChildEquijoinIndex;
         List<AccessPath> currentOrdinalMapping = cCtx.getCurrentOrdinalMapping();
         AccessPath buildKeyAP = currentOrdinalMapping.get(buildKeyOrdinal);
         QueryVariableType buildKeyAPType = buildKeyAP.getType();
@@ -1174,11 +1135,11 @@ public class JoinOperator extends CodeGenOperator<LogicalJoin> {
         List<Java.Statement> codeGenResult = new ArrayList<>();
 
         // Check that we can handle the key type (casts valid due to pre-condition check in constructor)
-        RexInputRef buildKey = (RexInputRef) this.joinCondition.getOperands().get(1);
+        int probeKey = this.rightChildEquijoinIndex;
         // Need to convert the output ordinal to the right-input ordinal
-        int buildKeyOrdinal = buildKey.getIndex() - this.getLogicalSubplan().getLeft().getRowType().getFieldCount();
+        int probeKeyOrdinal = probeKey - this.leftChildColumnCount;
         List<AccessPath> currentOrdinalMapping = cCtx.getCurrentOrdinalMapping();
-        AccessPath buildKeyAP = currentOrdinalMapping.get(buildKeyOrdinal);
+        AccessPath buildKeyAP = currentOrdinalMapping.get(probeKeyOrdinal);
         QueryVariableType buildKeyAPType = buildKeyAP.getType();
         QueryVariableType buildKeyOrdinalPrimitiveType = primitiveType(buildKeyAP.getType());
 
@@ -1581,7 +1542,7 @@ public class JoinOperator extends CodeGenOperator<LogicalJoin> {
         // Firstly, set-up local variables for the right-hand column values
         Java.Rvalue[] rightJoinOrdinalValues = new Java.Rvalue[currentOrdinalMapping.size()];
         for (int i = 0; i < rightJoinOrdinalValues.length; i++) {
-            if (i == buildKeyOrdinal) {
+            if (i == probeKeyOrdinal) {
                 rightJoinOrdinalValues[i] = rightJoinKeyAP.read();
 
             } else {
@@ -1685,7 +1646,7 @@ public class JoinOperator extends CodeGenOperator<LogicalJoin> {
         int numberOfLhsColumns = this.joinMapGenerator.valueVariableNames.length + 1; // Add 1 for key column
         // Need to account for the join key de-duplication:
         // no need to construct the LHS key vector too, since it is a duplicate of the RHS key vector
-        int leftKeyIndex = ((RexInputRef) this.joinCondition.getOperands().get(0)).getIndex();
+        int leftKeyIndex = this.leftChildEquijoinIndex;
         int currentLhsValueColumnIndex = 0;
         for (int i = 0; i < numberOfLhsColumns; i++) {
             // Skip LHS key vector creation
@@ -1748,7 +1709,7 @@ public class JoinOperator extends CodeGenOperator<LogicalJoin> {
         for (int i = 0; i < this.resultVectorDefinitions.length; i++) {
             int resultVectorIndex = i;
             if (i == leftKeyIndex) {
-                resultVectorIndex = buildKey.getIndex();
+                resultVectorIndex = probeKey;
             }
 
             AccessPath resultVectorAP = new ArrayVectorAccessPath(
@@ -1779,16 +1740,26 @@ public class JoinOperator extends CodeGenOperator<LogicalJoin> {
             this.consumeInProbePhase = true;
 
             // Then introduce the class to store records of the left-child in the hash-table
-            int leftBuildKey = ((RexInputRef) this.joinCondition.getOperands().get(0)).getIndex();
             this.joinMapGenerator = joinMapGeneratorForRelation(
                     cCtx.getCurrentOrdinalMapping(),
-                    leftBuildKey
+                    this.leftChildEquijoinIndex
             );
+
+            // Store the number of columns in the left-child records
+            this.leftChildColumnCount = cCtx.getCurrentOrdinalMapping().size();
 
             // And build the hash table
             return vectorised ? this.consumeVecBuild(cCtx, oCtx) : this.consumeNonVecBuild(cCtx, oCtx);
 
         } else {
+            // Store the number of records in the right-child records
+            int rightChildColumnCount = cCtx.getCurrentOrdinalMapping().size();
+
+            // Initialise result structures
+            this.resultColumnCount = rightChildColumnCount + this.leftChildColumnCount;
+            this.resultVectorNames = new String[this.resultColumnCount];
+            this.resultVectorDefinitions = new ArrayAccessPath[this.resultColumnCount];
+
             // Perform the probe (which also has the parent operator consume the result)
             return vectorised ? this.consumeVecProbe(cCtx, oCtx) : this.consumeNonVecProbe(cCtx, oCtx);
 

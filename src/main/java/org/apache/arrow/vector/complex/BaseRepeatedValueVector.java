@@ -17,14 +17,6 @@
 
 package org.apache.arrow.vector.complex;
 
-import static org.apache.arrow.memory.util.LargeMemoryUtil.capAtMaxInt;
-
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.Iterator;
-import java.util.List;
-
 import org.apache.arrow.memory.ArrowBuf;
 import org.apache.arrow.memory.BufferAllocator;
 import org.apache.arrow.memory.util.CommonUtil;
@@ -44,6 +36,14 @@ import org.apache.arrow.vector.types.pojo.FieldType;
 import org.apache.arrow.vector.util.CallBack;
 import org.apache.arrow.vector.util.OversizedAllocationException;
 import org.apache.arrow.vector.util.SchemaChangeRuntimeException;
+
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.Iterator;
+import java.util.List;
+
+import static org.apache.arrow.memory.util.LargeMemoryUtil.capAtMaxInt;
 
 /** Base class for Vectors that contain repeated values. */
 public abstract class BaseRepeatedValueVector extends BaseValueVector implements RepeatedValueVector, BaseListVector {

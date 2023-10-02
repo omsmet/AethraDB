@@ -17,8 +17,6 @@
 
 package org.apache.arrow.vector.dictionary;
 
-import java.util.Collections;
-
 import org.apache.arrow.memory.BufferAllocator;
 import org.apache.arrow.memory.util.hash.ArrowBufHasher;
 import org.apache.arrow.memory.util.hash.SimpleHasher;
@@ -31,6 +29,8 @@ import org.apache.arrow.vector.ipc.message.ArrowFieldNode;
 import org.apache.arrow.vector.types.pojo.Field;
 import org.apache.arrow.vector.types.pojo.FieldType;
 import org.apache.arrow.vector.util.TransferPair;
+
+import java.util.Collections;
 
 /**
  * Sub fields encoder/decoder for Dictionary encoded {@link BaseListVector}.

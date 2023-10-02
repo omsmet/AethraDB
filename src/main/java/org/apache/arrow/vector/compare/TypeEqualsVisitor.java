@@ -17,9 +17,6 @@
 
 package org.apache.arrow.vector.compare;
 
-import java.util.List;
-import java.util.Objects;
-
 import org.apache.arrow.vector.BaseFixedWidthVector;
 import org.apache.arrow.vector.BaseLargeVariableWidthVector;
 import org.apache.arrow.vector.BaseVariableWidthVector;
@@ -33,6 +30,9 @@ import org.apache.arrow.vector.complex.ListVector;
 import org.apache.arrow.vector.complex.NonNullableStructVector;
 import org.apache.arrow.vector.complex.UnionVector;
 import org.apache.arrow.vector.types.pojo.Field;
+
+import java.util.List;
+import java.util.Objects;
 
 /**
  * Visitor to compare type equals for vectors.

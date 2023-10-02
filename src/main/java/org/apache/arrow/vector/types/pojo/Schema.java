@@ -21,7 +21,11 @@
 package org.apache.arrow.vector.types.pojo;
 
 
-import static org.apache.arrow.vector.types.pojo.Field.convertField;
+import com.google.flatbuffers.FlatBufferBuilder;
+import org.apache.arrow.flatbuf.Endianness;
+import org.apache.arrow.flatbuf.KeyValue;
+import org.apache.arrow.util.Collections2;
+import org.apache.arrow.vector.ipc.message.FBSerializables;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
@@ -34,12 +38,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
-import org.apache.arrow.flatbuf.Endianness;
-import org.apache.arrow.flatbuf.KeyValue;
-import org.apache.arrow.util.Collections2;
-import org.apache.arrow.vector.ipc.message.FBSerializables;
-
-import com.google.flatbuffers.FlatBufferBuilder;
+import static org.apache.arrow.vector.types.pojo.Field.convertField;
 
 /**
  * An Arrow Schema.

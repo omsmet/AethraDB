@@ -17,14 +17,14 @@
 
 package org.apache.arrow.vector;
 
-import static org.apache.arrow.memory.util.LargeMemoryUtil.checkedCastToInt;
-
 import org.apache.arrow.memory.ArrowBuf;
 import org.apache.arrow.memory.BoundsChecking;
 import org.apache.arrow.memory.BufferAllocator;
 import org.apache.arrow.memory.util.MemoryUtil;
 import org.apache.arrow.vector.ipc.message.ArrowFieldNode;
 import org.apache.arrow.vector.util.DataSizeRoundingUtil;
+
+import static org.apache.arrow.memory.util.LargeMemoryUtil.checkedCastToInt;
 
 
 /**

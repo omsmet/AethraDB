@@ -15,9 +15,7 @@
  * limitations under the License.
  */
 
-import org.apache.arrow.util.Preconditions;
 import org.apache.arrow.vector.complex.impl.NullableStructWriterFactory;
-import org.apache.arrow.vector.types.Types;
 
 <@pp.dropOutputFile />
 <@pp.changeOutputFile name="/org/apache/arrow/vector/complex/impl/UnionWriter.java" />

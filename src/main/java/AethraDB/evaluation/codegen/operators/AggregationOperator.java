@@ -21,12 +21,10 @@ import AethraDB.evaluation.codegen.infrastructure.janino.JaninoGeneralGen;
 import AethraDB.evaluation.codegen.infrastructure.janino.JaninoOperatorGen;
 import AethraDB.evaluation.general_support.hashmaps.Int_Hash_Function;
 import AethraDB.evaluation.general_support.hashmaps.KeyValueMapGenerator;
-import org.apache.calcite.rel.core.AggregateCall;
-import org.apache.calcite.rel.logical.LogicalAggregate;
-import org.apache.calcite.sql.SqlAggFunction;
-import org.apache.calcite.sql.fun.SqlCountAggFunction;
-import org.apache.calcite.sql.fun.SqlSumEmptyIsZeroAggFunction;
-import org.apache.calcite.util.ImmutableBitSet;
+import AethraDB.util.language.AethraExpression;
+import AethraDB.util.language.function.AethraFunction;
+import AethraDB.util.language.function.aggregation.AethraCountAggregation;
+import AethraDB.util.language.function.aggregation.AethraSumAggregation;
 import org.codehaus.commons.compiler.CompileException;
 import org.codehaus.janino.Java;
 
@@ -74,12 +72,12 @@ import static AethraDB.evaluation.codegen.infrastructure.janino.JaninoVariableGe
 /**
  * A {@link CodeGenOperator} which computes some aggregation function over the records.
  */
-public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
+public class AggregationOperator extends CodeGenOperator {
 
     /**
      * The {@link CodeGenOperator} producing the records to be aggregated by {@code this}.
      */
-    private final CodeGenOperator<?> child;
+    private final CodeGenOperator child;
 
     /**
      * Whether this aggregation represents a group-by aggregation.
@@ -144,76 +142,58 @@ public class AggregationOperator extends CodeGenOperator<LogicalAggregate> {
 
     /**
      * Create a {@link AggregationOperator} instance for a specific sub-query.
-     * @param aggregation The logical aggregation (and sub-query) for which the operator is created.
-     * @param simdEnabled Whether the operator is allowed to use SIMD for processing.
      * @param child The {@link CodeGenOperator} producing the records to be aggregated.
+     * @param groupByAggregation Whether this aggregation is a grouping aggregation.
+     * @param groupByColumnIndices The columns to group the aggregations by if {@code groupByAggregation == true}.
+     * @param aggregationExpressions The expressions specifying the aggregation to be performed.
      */
     public AggregationOperator(
-            LogicalAggregate aggregation,
-            boolean simdEnabled,
-            CodeGenOperator<?> child
+            CodeGenOperator child,
+            boolean groupByAggregation,
+            int[] groupByColumnIndices,
+            AethraExpression[] aggregationExpressions
     ) {
-        super(aggregation, simdEnabled);
         this.child = child;
         this.child.setParent(this);
 
-        // Check pre-conditions
-        if (this.getLogicalSubplan().getGroupSets().size() != 1)
-            throw new UnsupportedOperationException(
-                    "AggregationOperator: We expect exactly one GroupSet to exist in the logical plan");
-
-        for (AggregateCall call : this.getLogicalSubplan().getAggCallList())
-            if (call.isDistinct())
-                throw new UnsupportedOperationException(
-                        "AggregationOperator does not support DISTINCT keyword");
-
+        // Pre-conditions checked by planner library
         // Classify all aggregation functions
-        ImmutableBitSet groupBySet = this.getLogicalSubplan().getGroupSet();
-        int numberOfGroupByKeys = groupBySet.cardinality();
-        this.groupByAggregation = numberOfGroupByKeys > 0;
-        if (this.groupByAggregation)
-            this.groupByKeyColumnIndices = groupBySet.toArray();
-        else
-            this.groupByKeyColumnIndices = null;
+        this.groupByAggregation = groupByAggregation;
+        this.groupByKeyColumnIndices = groupByColumnIndices;
 
-        this.aggregationFunctions = new AggregationFunction[aggregation.getAggCallList().size()];
+        this.aggregationFunctions = new AggregationFunction[aggregationExpressions.length];
         this.aggregationFunctionInputOrdinals = new int[this.aggregationFunctions.length][];
         for (int i = 0; i < this.aggregationFunctions.length; i++) {
-            AggregateCall call = aggregation.getAggCallList().get(i);
-            SqlAggFunction aggregationFunction = call.getAggregation();
+            AethraExpression function = aggregationExpressions[i];
+            if (!(function instanceof AethraFunction aggregationFunction))
+                throw new IllegalStateException("AggregationOperator should only receive AethraFunction aggregation expressions");
 
             if (!this.groupByAggregation) { // Simple non-group-by aggregations
-                if (aggregationFunction instanceof SqlCountAggFunction) {
+                if (aggregationFunction instanceof AethraCountAggregation) {
                     this.aggregationFunctions[i] = AggregationFunction.NG_COUNT;
                     this.aggregationFunctionInputOrdinals[i] = new int[0];
 
-                } else if (aggregationFunction instanceof SqlSumEmptyIsZeroAggFunction) {
-                    if (call.getArgList().size() != 1)
-                        throw new UnsupportedOperationException("AggregationOperator expects exactly one input ordinal for a SUM aggregation function");
-
+                } else if (aggregationFunction instanceof AethraSumAggregation asa) {
                     this.aggregationFunctions[i] = AggregationFunction.NG_SUM;
-                    this.aggregationFunctionInputOrdinals[i] = new int[] { call.getArgList().get(0) };
+                    this.aggregationFunctionInputOrdinals[i] = new int[] { asa.summand.columnIndex };
 
                 } else {
                     throw new UnsupportedOperationException(
-                            "AggregationOperator does not support this non-group-by aggregation function " + aggregationFunction.getName());
+                            "AggregationOperator does not support this non-group-by aggregation function " + aggregationFunction.getKind());
                 }
 
             } else { // Group-by aggregations
-                if (aggregationFunction instanceof SqlSumEmptyIsZeroAggFunction) {
-                    if (call.getArgList().size() != 1)
-                        throw new UnsupportedOperationException("AggregationOperator expects exactly one input ordinal for a SUM aggregation function");
-
+                if (aggregationFunction instanceof AethraSumAggregation asa) {
                     this.aggregationFunctions[i] = AggregationFunction.G_SUM;
-                    this.aggregationFunctionInputOrdinals[i] = new int[] { call.getArgList().get(0) };
+                    this.aggregationFunctionInputOrdinals[i] = new int[] { asa.summand.columnIndex };
 
-                } else if (aggregationFunction instanceof SqlCountAggFunction) {
+                } else if (aggregationFunction instanceof AethraCountAggregation) {
                     this.aggregationFunctions[i] = AggregationFunction.G_COUNT;
                     this.aggregationFunctionInputOrdinals[i] = new int[0];
 
                 } else {
                     throw new UnsupportedOperationException(
-                            "AggregationOperator does not support this group-by aggregation function " + aggregationFunction.getName());
+                            "AggregationOperator does not support this group-by aggregation function " + aggregationFunction.getKind());
                 }
 
             }

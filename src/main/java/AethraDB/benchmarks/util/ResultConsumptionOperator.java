@@ -6,7 +6,6 @@ import AethraDB.evaluation.codegen.infrastructure.context.access_path.AccessPath
 import AethraDB.evaluation.codegen.infrastructure.context.access_path.ArrayAccessPath;
 import AethraDB.evaluation.codegen.infrastructure.context.access_path.ScalarVariableAccessPath;
 import AethraDB.evaluation.codegen.operators.CodeGenOperator;
-import org.apache.calcite.rel.RelNode;
 import org.codehaus.janino.Java;
 
 import java.util.ArrayList;
@@ -20,20 +19,18 @@ import static AethraDB.evaluation.codegen.infrastructure.janino.JaninoMethodGen.
 /**
  * {@link CodeGenOperator} for transferring the result of a generated query to a JMH benchmark.
  */
-public class ResultConsumptionOperator extends CodeGenOperator<RelNode> {
+public class ResultConsumptionOperator extends CodeGenOperator {
 
     /**
      * The {@link CodeGenOperator} producing the query result that is to be transferred to a benchmark.
      */
-    private final CodeGenOperator<?> child;
+    private final CodeGenOperator child;
 
     /**
      * Create an {@link ResultConsumptionOperator} instance for a specific query.
-     * @param logicalSubplan The logical plan of the query for which the operator is created.
      * @param child The {@link CodeGenOperator} producing the actual query result.
      */
-    public ResultConsumptionOperator(RelNode logicalSubplan, CodeGenOperator<?> child) {
-        super(logicalSubplan, false);
+    public ResultConsumptionOperator(CodeGenOperator child) {
         this.child = child;
         this.child.setParent(this);
     }

@@ -17,8 +17,6 @@
 
 package org.apache.arrow.vector.complex.impl;
 
-import static org.apache.arrow.memory.util.LargeMemoryUtil.checkedCastToInt;
-
 import org.apache.arrow.vector.ValueVector;
 import org.apache.arrow.vector.complex.LargeListVector;
 import org.apache.arrow.vector.complex.reader.FieldReader;
@@ -26,6 +24,8 @@ import org.apache.arrow.vector.complex.writer.FieldWriter;
 import org.apache.arrow.vector.holders.UnionHolder;
 import org.apache.arrow.vector.types.Types.MinorType;
 import org.apache.arrow.vector.types.pojo.Field;
+
+import static org.apache.arrow.memory.util.LargeMemoryUtil.checkedCastToInt;
 
 /**
  * {@link FieldReader} for list of union types.

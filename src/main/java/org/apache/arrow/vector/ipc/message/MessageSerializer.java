@@ -17,13 +17,7 @@
 
 package org.apache.arrow.vector.ipc.message;
 
-import static org.apache.arrow.memory.util.LargeMemoryUtil.checkedCastToInt;
-
-import java.io.IOException;
-import java.nio.ByteBuffer;
-import java.util.ArrayList;
-import java.util.List;
-
+import com.google.flatbuffers.FlatBufferBuilder;
 import org.apache.arrow.flatbuf.Buffer;
 import org.apache.arrow.flatbuf.DictionaryBatch;
 import org.apache.arrow.flatbuf.FieldNode;
@@ -39,7 +33,12 @@ import org.apache.arrow.vector.ipc.ReadChannel;
 import org.apache.arrow.vector.ipc.WriteChannel;
 import org.apache.arrow.vector.types.pojo.Schema;
 
-import com.google.flatbuffers.FlatBufferBuilder;
+import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.util.ArrayList;
+import java.util.List;
+
+import static org.apache.arrow.memory.util.LargeMemoryUtil.checkedCastToInt;
 
 /**
  * Utility class for serializing Messages. Messages are all serialized a similar way.

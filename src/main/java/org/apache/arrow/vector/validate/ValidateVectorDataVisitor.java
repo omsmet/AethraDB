@@ -17,8 +17,6 @@
 
 package org.apache.arrow.vector.validate;
 
-import static org.apache.arrow.vector.validate.ValidateUtil.validateOrThrow;
-
 import org.apache.arrow.memory.ArrowBuf;
 import org.apache.arrow.vector.BaseFixedWidthVector;
 import org.apache.arrow.vector.BaseLargeVariableWidthVector;
@@ -33,6 +31,8 @@ import org.apache.arrow.vector.complex.LargeListVector;
 import org.apache.arrow.vector.complex.ListVector;
 import org.apache.arrow.vector.complex.NonNullableStructVector;
 import org.apache.arrow.vector.complex.UnionVector;
+
+import static org.apache.arrow.vector.validate.ValidateUtil.validateOrThrow;
 
 /**
  * Utility for validating vector data.

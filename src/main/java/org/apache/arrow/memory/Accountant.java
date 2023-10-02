@@ -17,11 +17,10 @@
 
 package org.apache.arrow.memory;
 
-import java.util.concurrent.atomic.AtomicLong;
+import org.apache.arrow.util.Preconditions;
 
 import javax.annotation.concurrent.ThreadSafe;
-
-import org.apache.arrow.util.Preconditions;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Provides a concurrent way to manage account for memory usage without locking. Used as basis

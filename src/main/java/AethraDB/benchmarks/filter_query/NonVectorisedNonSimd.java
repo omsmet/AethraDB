@@ -4,14 +4,12 @@ import AethraDB.benchmarks.util.ResultConsumptionOperator;
 import AethraDB.benchmarks.util.ResultConsumptionTarget;
 import AethraDB.evaluation.codegen.GeneratedQuery;
 import AethraDB.evaluation.codegen.QueryCodeGenerator;
-import AethraDB.evaluation.codegen.QueryTranslator;
 import AethraDB.evaluation.codegen.infrastructure.context.CodeGenContext;
 import AethraDB.evaluation.codegen.infrastructure.context.OptimisationContext;
 import AethraDB.evaluation.codegen.infrastructure.data.ArrowTableReader;
 import AethraDB.evaluation.codegen.operators.CodeGenOperator;
-import AethraDB.util.arrow.ArrowDatabase;
+import AethraDB.util.AethraDatabase;
 import org.apache.arrow.memory.RootAllocator;
-import org.apache.calcite.rel.RelNode;
 import org.openjdk.jmh.annotations.Benchmark;
 import org.openjdk.jmh.annotations.BenchmarkMode;
 import org.openjdk.jmh.annotations.Fork;
@@ -25,7 +23,6 @@ import org.openjdk.jmh.annotations.State;
 import org.openjdk.jmh.annotations.TearDown;
 
 import java.io.IOException;
-import java.io.StringReader;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -70,11 +67,6 @@ public class NonVectorisedNonSimd extends ResultConsumptionTarget {
             """;
 
     /**
-     * State: the database on which to execute the query.
-     */
-    private ArrowDatabase database;
-
-    /**
      * State: the generated query to execute/benchmark.
      */
     private GeneratedQuery generatedQuery;
@@ -112,20 +104,15 @@ public class NonVectorisedNonSimd extends ResultConsumptionTarget {
         // Setup the arrow root allocator
         RootAllocator arrowRootAllocator = new RootAllocator();
 
-        // Setup the database
-        this.database = new ArrowDatabase(this.tableFilePath);
-
         // Plan the query
-        RelNode plannedQuery = this.database.planQuery(new StringReader(query));
+        CodeGenOperator queryRootOperator = AethraDatabase.planQueryString(this.tableFilePath, query);
 
         // Create the contexts required for code generation
-        CodeGenContext cCtx = new CodeGenContext(database, arrowRootAllocator);
+        CodeGenContext cCtx = new CodeGenContext(arrowRootAllocator);
         OptimisationContext oCtx = new OptimisationContext();
 
         // Generate code for the query
-        QueryTranslator queryTranslator = new QueryTranslator();
-        CodeGenOperator<?> queryRootOperator = queryTranslator.translate(plannedQuery, false);
-        CodeGenOperator<RelNode> queryResultConsumptionOperator = new ResultConsumptionOperator(plannedQuery, queryRootOperator);
+        CodeGenOperator queryResultConsumptionOperator = new ResultConsumptionOperator(queryRootOperator);
         QueryCodeGenerator queryCodeGenerator = new QueryCodeGenerator(cCtx, oCtx, queryResultConsumptionOperator, false);
         this.generatedQuery = queryCodeGenerator.generateQuery(true);
         this.generatedQueryCCtx = this.generatedQuery.getCCtx();

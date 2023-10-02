@@ -17,21 +17,20 @@
 
 package org.apache.arrow.vector.ipc.message;
 
-import static org.apache.arrow.vector.ipc.message.FBSerializables.writeAllStructsToVector;
-import static org.apache.arrow.vector.ipc.message.FBSerializables.writeKeyValues;
-
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-
+import com.google.flatbuffers.FlatBufferBuilder;
 import org.apache.arrow.flatbuf.Block;
 import org.apache.arrow.flatbuf.Footer;
 import org.apache.arrow.flatbuf.KeyValue;
 import org.apache.arrow.vector.types.MetadataVersion;
 import org.apache.arrow.vector.types.pojo.Schema;
 
-import com.google.flatbuffers.FlatBufferBuilder;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+import static org.apache.arrow.vector.ipc.message.FBSerializables.writeAllStructsToVector;
+import static org.apache.arrow.vector.ipc.message.FBSerializables.writeKeyValues;
 
 /** Footer metadata for the arrow file format. */
 public class ArrowFooter implements FBSerializable {

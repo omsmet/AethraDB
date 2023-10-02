@@ -17,14 +17,14 @@
 
 package org.apache.arrow.memory;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.io.IOException;
 import java.net.URL;
 import java.util.Enumeration;
 import java.util.LinkedHashSet;
 import java.util.Set;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * Static method to ensure we have a RootAllocator on the classpath and report which one is used.

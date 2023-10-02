@@ -17,14 +17,6 @@
 
 package org.apache.arrow.vector.complex;
 
-import static org.apache.arrow.util.Preconditions.checkNotNull;
-
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-
 import org.apache.arrow.memory.ArrowBuf;
 import org.apache.arrow.memory.BufferAllocator;
 import org.apache.arrow.memory.util.ByteFunctionHelpers;
@@ -44,6 +36,14 @@ import org.apache.arrow.vector.types.pojo.FieldType;
 import org.apache.arrow.vector.util.CallBack;
 import org.apache.arrow.vector.util.JsonStringHashMap;
 import org.apache.arrow.vector.util.TransferPair;
+
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+
+import static org.apache.arrow.util.Preconditions.checkNotNull;
 
 /**
  * A struct vector that has no null values (and no validity buffer).

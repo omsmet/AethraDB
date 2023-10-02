@@ -15,14 +15,6 @@
  * limitations under the License.
  */
 
-import java.lang.Override;
-import java.util.List;
-
-import org.apache.arrow.record.TransferPair;
-import org.apache.arrow.vector.complex.IndexHolder;
-import org.apache.arrow.vector.complex.writer.IntervalWriter;
-import org.apache.arrow.vector.complex.writer.BaseWriter.StructWriter;
-
 <@pp.dropOutputFile />
 <#list vv.types as type>
 <#list type.minor as minor>

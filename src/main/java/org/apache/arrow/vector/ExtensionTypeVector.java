@@ -17,9 +17,6 @@
 
 package org.apache.arrow.vector;
 
-import java.util.Iterator;
-import java.util.List;
-
 import org.apache.arrow.memory.ArrowBuf;
 import org.apache.arrow.memory.BufferAllocator;
 import org.apache.arrow.memory.OutOfMemoryException;
@@ -31,6 +28,9 @@ import org.apache.arrow.vector.types.Types.MinorType;
 import org.apache.arrow.vector.types.pojo.Field;
 import org.apache.arrow.vector.util.CallBack;
 import org.apache.arrow.vector.util.TransferPair;
+
+import java.util.Iterator;
+import java.util.List;
 
 /**
  * A vector that wraps an underlying vector, used to help implement extension types.

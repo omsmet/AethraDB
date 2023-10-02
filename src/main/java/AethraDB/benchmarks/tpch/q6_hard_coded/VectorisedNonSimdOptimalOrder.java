@@ -8,7 +8,6 @@ import AethraDB.evaluation.vector_support.VectorisedAggregationOperators;
 import AethraDB.evaluation.vector_support.VectorisedArithmeticOperators;
 import AethraDB.evaluation.vector_support.VectorisedFilterOperators;
 import org.apache.arrow.memory.RootAllocator;
-import org.apache.calcite.util.ImmutableIntList;
 import org.openjdk.jmh.annotations.Benchmark;
 import org.openjdk.jmh.annotations.BenchmarkMode;
 import org.openjdk.jmh.annotations.Fork;
@@ -75,8 +74,9 @@ public class VectorisedNonSimdOptimalOrder {
     public void trialSetup() throws Exception {
         // Setup the database
         this.rootAllocator = new RootAllocator();
+        int[] lineitemProjects = new int[] { 4, 5, 6, 10 };
         this.lineitem = new ABQArrowTableReader(
-                new File(this.tpchInstance + "/lineitem.arrow"), this.rootAllocator, true, ImmutableIntList.of(4, 5, 6, 10));
+                new File(this.tpchInstance + "/lineitem.arrow"), this.rootAllocator, true, lineitemProjects);
 
         // Setup the allocation manager
         this.allocationManager = new BufferPoolAllocationManager(16);

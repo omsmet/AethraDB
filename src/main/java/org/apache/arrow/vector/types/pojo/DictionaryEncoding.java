@@ -17,13 +17,12 @@
 
 package org.apache.arrow.vector.types.pojo;
 
-import java.util.Objects;
-
-import org.apache.arrow.vector.types.pojo.ArrowType.Int;
-
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonGetter;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import org.apache.arrow.vector.types.pojo.ArrowType.Int;
+
+import java.util.Objects;
 
 /**
  * A POJO representation of Arrow Dictionary metadata.

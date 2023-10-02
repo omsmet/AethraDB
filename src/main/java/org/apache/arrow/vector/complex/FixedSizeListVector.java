@@ -17,19 +17,6 @@
 
 package org.apache.arrow.vector.complex;
 
-import static java.util.Collections.singletonList;
-import static org.apache.arrow.memory.util.LargeMemoryUtil.capAtMaxInt;
-import static org.apache.arrow.memory.util.LargeMemoryUtil.checkedCastToInt;
-import static org.apache.arrow.util.Preconditions.checkArgument;
-import static org.apache.arrow.vector.complex.BaseRepeatedValueVector.DATA_VECTOR_NAME;
-
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Objects;
-
 import org.apache.arrow.memory.ArrowBuf;
 import org.apache.arrow.memory.BufferAllocator;
 import org.apache.arrow.memory.OutOfMemoryException;
@@ -59,6 +46,19 @@ import org.apache.arrow.vector.util.JsonStringArrayList;
 import org.apache.arrow.vector.util.OversizedAllocationException;
 import org.apache.arrow.vector.util.SchemaChangeRuntimeException;
 import org.apache.arrow.vector.util.TransferPair;
+
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Objects;
+
+import static java.util.Collections.singletonList;
+import static org.apache.arrow.memory.util.LargeMemoryUtil.capAtMaxInt;
+import static org.apache.arrow.memory.util.LargeMemoryUtil.checkedCastToInt;
+import static org.apache.arrow.util.Preconditions.checkArgument;
+import static org.apache.arrow.vector.complex.BaseRepeatedValueVector.DATA_VECTOR_NAME;
 
 /** A ListVector where every list value is of the same size. */
 public class FixedSizeListVector extends BaseValueVector implements BaseListVector, PromotableVector {

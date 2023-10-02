@@ -1,7 +1,8 @@
 package AethraDB.evaluation.codegen.infrastructure.context;
 
 import AethraDB.evaluation.codegen.infrastructure.janino.JaninoGeneralGen;
-import org.apache.calcite.sql.type.SqlTypeName;
+import org.apache.arrow.vector.types.FloatingPointPrecision;
+import org.apache.arrow.vector.types.pojo.ArrowType;
 import org.codehaus.commons.compiler.Location;
 import org.codehaus.janino.Java;
 
@@ -17,20 +18,6 @@ public final class QueryVariableTypeMethods {
         return switch (type) {
             case P_BOOLEAN, P_DOUBLE, P_FLOAT, P_INT, P_INT_DATE, P_LONG -> true;
             default -> false;
-        };
-    }
-
-    /**
-     * Method to translate a SQL type to a primitive type.
-     */
-    public static QueryVariableType sqlTypeToPrimitiveType(SqlTypeName sqlType) {
-        return switch (sqlType) {
-            case DOUBLE -> QueryVariableType.P_DOUBLE;
-            case FLOAT -> QueryVariableType.P_FLOAT;
-            case INTEGER -> QueryVariableType.P_INT;
-            case BIGINT -> QueryVariableType.P_LONG;
-            default ->
-                    throw new IllegalArgumentException("sqlTypeToPrimitiveType does not support type " + sqlType.getName());
         };
     }
 
@@ -131,20 +118,25 @@ public final class QueryVariableTypeMethods {
     }
 
     /**
-     * Method to get an Arrow vector type for a SQL type.
+     * Method to get an Arrow vector type from an {@link ArrowType}.
      */
-    public static QueryVariableType sqlTypeToArrowVectorType(SqlTypeName sqlType) {
-        return switch (sqlType) {
-            case BIGINT -> QueryVariableType.ARROW_LONG_VECTOR;
-            case CHAR -> QueryVariableType.ARROW_FIXED_LENGTH_BINARY_VECTOR;
-            case DATE -> QueryVariableType.ARROW_DATE_VECTOR;
-            case DOUBLE -> QueryVariableType.ARROW_DOUBLE_VECTOR;
-            case FLOAT -> QueryVariableType.ARROW_FLOAT_VECTOR;
-            case INTEGER -> QueryVariableType.ARROW_INT_VECTOR;
-            case VARCHAR -> QueryVariableType.ARROW_VARCHAR_VECTOR;
-            default ->
-                    throw new IllegalArgumentException("sqlTypeToArrowVectorType does not support type " + sqlType.getName());
-        };
+    public static QueryVariableType arrowTypeToArrowVectorType(ArrowType arrowType) {
+        if (arrowType instanceof ArrowType.FixedSizeBinary)
+            return QueryVariableType.ARROW_FIXED_LENGTH_BINARY_VECTOR;
+        else if (arrowType instanceof ArrowType.Int intat && intat.getBitWidth() == 32)
+            return QueryVariableType.ARROW_INT_VECTOR;
+        else if (arrowType instanceof ArrowType.Int intat && intat.getBitWidth() == 64)
+            return QueryVariableType.ARROW_LONG_VECTOR;
+        else if (arrowType instanceof ArrowType.Utf8)
+            return QueryVariableType.ARROW_VARCHAR_VECTOR;
+        else if (arrowType instanceof ArrowType.Date)
+            return QueryVariableType.ARROW_DATE_VECTOR;
+        else if (arrowType instanceof ArrowType.FloatingPoint fpat && fpat.getPrecision() == FloatingPointPrecision.DOUBLE)
+            return QueryVariableType.ARROW_DOUBLE_VECTOR;
+        else if (arrowType instanceof ArrowType.FloatingPoint fpat && fpat.getPrecision() == FloatingPointPrecision.HALF)
+            return QueryVariableType.ARROW_FLOAT_VECTOR;
+        else
+            throw new UnsupportedOperationException("QueryVariableTypeMethods.arrowTypeToArrowVectorType does not support " + arrowType);
     }
 
     /**

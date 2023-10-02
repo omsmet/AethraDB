@@ -17,16 +17,6 @@
 
 package org.apache.arrow.vector.table;
 
-import java.math.BigDecimal;
-import java.nio.charset.Charset;
-import java.nio.charset.StandardCharsets;
-import java.time.Duration;
-import java.time.LocalDateTime;
-import java.time.Period;
-import java.util.Iterator;
-import java.util.List;
-import java.util.NoSuchElementException;
-
 import org.apache.arrow.memory.ArrowBuf;
 import org.apache.arrow.vector.BigIntVector;
 import org.apache.arrow.vector.BitVector;
@@ -100,6 +90,16 @@ import org.apache.arrow.vector.holders.NullableUInt1Holder;
 import org.apache.arrow.vector.holders.NullableUInt2Holder;
 import org.apache.arrow.vector.holders.NullableUInt4Holder;
 import org.apache.arrow.vector.holders.NullableUInt8Holder;
+
+import java.math.BigDecimal;
+import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
+import java.time.Duration;
+import java.time.LocalDateTime;
+import java.time.Period;
+import java.util.Iterator;
+import java.util.List;
+import java.util.NoSuchElementException;
 
 /**
  * Row is a positionable, immutable cursor backed by a {@link Table}.

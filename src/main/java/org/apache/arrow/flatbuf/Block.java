@@ -18,10 +18,11 @@
 
 package org.apache.arrow.flatbuf;
 
-import java.nio.*;
-import java.lang.*;
-import java.util.*;
-import com.google.flatbuffers.*;
+import com.google.flatbuffers.BaseVector;
+import com.google.flatbuffers.FlatBufferBuilder;
+import com.google.flatbuffers.Struct;
+
+import java.nio.ByteBuffer;
 
 @SuppressWarnings("unused")
 public final class Block extends Struct {

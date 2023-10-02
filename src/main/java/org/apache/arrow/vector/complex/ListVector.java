@@ -17,17 +17,6 @@
 
 package org.apache.arrow.vector.complex;
 
-import static java.util.Collections.singletonList;
-import static org.apache.arrow.memory.util.LargeMemoryUtil.capAtMaxInt;
-import static org.apache.arrow.memory.util.LargeMemoryUtil.checkedCastToInt;
-import static org.apache.arrow.util.Preconditions.checkArgument;
-import static org.apache.arrow.util.Preconditions.checkNotNull;
-
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.List;
-
 import org.apache.arrow.memory.ArrowBuf;
 import org.apache.arrow.memory.BufferAllocator;
 import org.apache.arrow.memory.OutOfMemoryException;
@@ -57,6 +46,17 @@ import org.apache.arrow.vector.util.CallBack;
 import org.apache.arrow.vector.util.JsonStringArrayList;
 import org.apache.arrow.vector.util.OversizedAllocationException;
 import org.apache.arrow.vector.util.TransferPair;
+
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
+
+import static java.util.Collections.singletonList;
+import static org.apache.arrow.memory.util.LargeMemoryUtil.capAtMaxInt;
+import static org.apache.arrow.memory.util.LargeMemoryUtil.checkedCastToInt;
+import static org.apache.arrow.util.Preconditions.checkArgument;
+import static org.apache.arrow.util.Preconditions.checkNotNull;
 
 /**
  * A list vector contains lists of a specific type of elements.  Its structure contains 3 elements.

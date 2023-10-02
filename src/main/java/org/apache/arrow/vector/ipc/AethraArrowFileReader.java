@@ -22,7 +22,6 @@ import org.apache.arrow.vector.types.pojo.Field;
 import org.apache.arrow.vector.types.pojo.Schema;
 import org.apache.arrow.vector.util.DataSizeRoundingUtil;
 import org.apache.arrow.vector.validate.MetadataV4UnionChecker;
-import org.apache.calcite.util.ImmutableIntList;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -57,23 +56,23 @@ public class AethraArrowFileReader extends ArrowReader {
     private int currentRecordBatch = 0;
 
     private AethraArrowFileReader(
-            SeekableReadChannel in, BufferAllocator allocator, CompressionCodec.Factory compressionFactory, ImmutableIntList columnsToRead) {
+            SeekableReadChannel in, BufferAllocator allocator, CompressionCodec.Factory compressionFactory, int[] columnsToRead) {
         super(allocator, compressionFactory);
         this.in = in;
-        this.columnsToRead = columnsToRead.toIntArray();
+        this.columnsToRead = columnsToRead;
         this.columnEnabled = null;
     }
 
     private AethraArrowFileReader(
-            SeekableByteChannel in, BufferAllocator allocator, CompressionCodec.Factory compressionFactory, ImmutableIntList columnsToRead) {
+            SeekableByteChannel in, BufferAllocator allocator, CompressionCodec.Factory compressionFactory, int[] columnsToRead) {
         this(new SeekableReadChannel(in), allocator, compressionFactory, columnsToRead);
     }
 
-    private AethraArrowFileReader(SeekableReadChannel in, BufferAllocator allocator, ImmutableIntList columnsToRead) {
+    private AethraArrowFileReader(SeekableReadChannel in, BufferAllocator allocator, int[] columnsToRead) {
         this(in, allocator, NoCompressionCodec.Factory.INSTANCE, columnsToRead);
     }
 
-    public AethraArrowFileReader(SeekableByteChannel in, BufferAllocator allocator, ImmutableIntList columnsToRead) {
+    public AethraArrowFileReader(SeekableByteChannel in, BufferAllocator allocator, int[] columnsToRead) {
         this(new SeekableReadChannel(in), allocator, columnsToRead);
     }
 

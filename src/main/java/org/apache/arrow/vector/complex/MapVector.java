@@ -17,10 +17,6 @@
 
 package org.apache.arrow.vector.complex;
 
-import static org.apache.arrow.util.Preconditions.checkArgument;
-
-import java.util.List;
-
 import org.apache.arrow.memory.BufferAllocator;
 import org.apache.arrow.util.Preconditions;
 import org.apache.arrow.vector.AddOrGetResult;
@@ -37,6 +33,10 @@ import org.apache.arrow.vector.types.pojo.Field;
 import org.apache.arrow.vector.types.pojo.FieldType;
 import org.apache.arrow.vector.util.CallBack;
 import org.apache.arrow.vector.util.TransferPair;
+
+import java.util.List;
+
+import static org.apache.arrow.util.Preconditions.checkArgument;
 
 /**
  * A MapVector is used to store entries of key/value pairs. It is a container vector that is

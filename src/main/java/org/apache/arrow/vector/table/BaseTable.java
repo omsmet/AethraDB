@@ -17,12 +17,6 @@
 
 package org.apache.arrow.vector.table;
 
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.stream.Collectors;
-
 import org.apache.arrow.util.AutoCloseables;
 import org.apache.arrow.util.Preconditions;
 import org.apache.arrow.vector.FieldVector;
@@ -35,6 +29,12 @@ import org.apache.arrow.vector.dictionary.DictionaryProvider;
 import org.apache.arrow.vector.types.pojo.Field;
 import org.apache.arrow.vector.types.pojo.Schema;
 import org.apache.arrow.vector.util.TransferPair;
+
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * Abstract base class for Table.

@@ -17,11 +17,11 @@
 
 package org.apache.arrow.vector.compare;
 
-import static org.apache.arrow.vector.compare.RangeEqualsVisitor.DEFAULT_TYPE_COMPARATOR;
+import org.apache.arrow.vector.ValueVector;
 
 import java.util.function.BiFunction;
 
-import org.apache.arrow.vector.ValueVector;
+import static org.apache.arrow.vector.compare.RangeEqualsVisitor.DEFAULT_TYPE_COMPARATOR;
 
 /**
  * Visitor to compare vectors equal.

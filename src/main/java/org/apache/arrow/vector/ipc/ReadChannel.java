@@ -17,13 +17,13 @@
 
 package org.apache.arrow.vector.ipc;
 
-import java.io.IOException;
-import java.nio.ByteBuffer;
-import java.nio.channels.ReadableByteChannel;
-
 import org.apache.arrow.memory.ArrowBuf;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.nio.channels.ReadableByteChannel;
 
 /**
  * Adapter around {@link ReadableByteChannel} that reads into {@linkplain ArrowBuf}s.

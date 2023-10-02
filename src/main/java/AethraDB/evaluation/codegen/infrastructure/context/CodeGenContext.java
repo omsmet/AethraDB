@@ -7,9 +7,8 @@ import AethraDB.evaluation.codegen.infrastructure.data.ArrowTableReader;
 import AethraDB.evaluation.codegen.infrastructure.data.BufferPoolAllocationManager;
 import AethraDB.evaluation.codegen.infrastructure.janino.JaninoGeneralGen;
 import AethraDB.evaluation.codegen.infrastructure.janino.JaninoVariableGen;
-import AethraDB.util.arrow.ArrowDatabase;
 import org.apache.arrow.memory.RootAllocator;
-import org.apache.calcite.util.Pair;
+import org.apache.commons.lang3.tuple.Pair;
 import org.codehaus.janino.Java;
 
 import java.util.ArrayList;
@@ -25,11 +24,6 @@ import java.util.Stack;
  * during execution.
  */
 public class CodeGenContext implements AutoCloseable {
-
-    /**
-     * The {@link ArrowDatabase} over which the generated query code is to be executed.
-     */
-    private final ArrowDatabase database;
 
     /**
      * Stack for keeping track of the defined variables at different stages of the code generation process.
@@ -89,12 +83,9 @@ public class CodeGenContext implements AutoCloseable {
 
     /**
      * Creates a new empty {@link CodeGenContext} instance.
-     * @param arrowDatabase The database over which the generated query code is to be executed.
      * @param rootAllocator The {@link RootAllocator} to use for arrow operations.
      */
-    public CodeGenContext(ArrowDatabase arrowDatabase, RootAllocator rootAllocator) {
-        this.database = arrowDatabase;
-
+    public CodeGenContext(RootAllocator rootAllocator) {
         this.definedVariables = new Stack<>();
         this.currentDefinedVariables = new HashSet<>();
 
@@ -112,13 +103,6 @@ public class CodeGenContext implements AutoCloseable {
         this.arrowTableReaders = new ArrayList<>();
         this.allocationManager = new BufferPoolAllocationManager(8);
         this.resultConsumptionTarget = null;
-    }
-
-    /**
-     * Method for accessing the database over which the query is to be executed.
-     */
-    public ArrowDatabase getDatabase() {
-        return this.database;
     }
 
     /**
@@ -227,7 +211,7 @@ public class CodeGenContext implements AutoCloseable {
         List<String> deallocationVariables = this.queryGlobalVariablesToDeallocate;
 
         // Return the allocation statements
-        return new Pair<>(allocationStatements, deallocationVariables);
+        return Pair.of(allocationStatements, deallocationVariables);
     }
 
     /**

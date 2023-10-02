@@ -17,10 +17,10 @@
 
 package org.apache.arrow.vector.types.pojo;
 
+import org.apache.arrow.vector.types.pojo.ArrowType.ExtensionType;
+
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
-
-import org.apache.arrow.vector.types.pojo.ArrowType.ExtensionType;
 
 /**
  * A registry of recognized extension types.

@@ -17,8 +17,6 @@
 
 package org.apache.arrow.vector.validate;
 
-import java.util.List;
-
 import org.apache.arrow.memory.ArrowBuf;
 import org.apache.arrow.vector.BaseFixedWidthVector;
 import org.apache.arrow.vector.BaseLargeVariableWidthVector;
@@ -36,6 +34,8 @@ import org.apache.arrow.vector.complex.NonNullableStructVector;
 import org.apache.arrow.vector.complex.UnionVector;
 import org.apache.arrow.vector.types.pojo.Field;
 import org.apache.arrow.vector.util.ValueVectorUtility;
+
+import java.util.List;
 
 /**
  * Visitor to validate vector (without validating data).

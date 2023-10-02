@@ -17,7 +17,6 @@
 
 import org.apache.arrow.vector.complex.StructVector;
 import org.apache.arrow.vector.complex.impl.NullableStructWriterFactory;
-import org.apache.arrow.vector.types.Types;
 
 <@pp.dropOutputFile />
 <@pp.changeOutputFile name="/org/apache/arrow/vector/complex/impl/DenseUnionWriter.java" />

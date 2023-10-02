@@ -17,10 +17,21 @@
 
 package org.apache.arrow.vector.types.pojo;
 
-import static org.apache.arrow.util.Preconditions.checkNotNull;
-import static org.apache.arrow.vector.complex.BaseRepeatedValueVector.DATA_VECTOR_NAME;
-import static org.apache.arrow.vector.types.pojo.ArrowType.getTypeForField;
-import static org.apache.arrow.vector.types.pojo.Schema.convertMetadata;
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.annotation.JsonInclude.Include;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.google.flatbuffers.FlatBufferBuilder;
+import org.apache.arrow.flatbuf.KeyValue;
+import org.apache.arrow.flatbuf.Type;
+import org.apache.arrow.memory.BufferAllocator;
+import org.apache.arrow.util.Collections2;
+import org.apache.arrow.vector.FieldVector;
+import org.apache.arrow.vector.TypeLayout;
+import org.apache.arrow.vector.types.pojo.ArrowType.ExtensionType;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -32,22 +43,10 @@ import java.util.Map.Entry;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
-import org.apache.arrow.flatbuf.KeyValue;
-import org.apache.arrow.flatbuf.Type;
-import org.apache.arrow.memory.BufferAllocator;
-import org.apache.arrow.util.Collections2;
-import org.apache.arrow.vector.FieldVector;
-import org.apache.arrow.vector.TypeLayout;
-import org.apache.arrow.vector.types.pojo.ArrowType.ExtensionType;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import com.fasterxml.jackson.annotation.JsonCreator;
-import com.fasterxml.jackson.annotation.JsonIgnore;
-import com.fasterxml.jackson.annotation.JsonInclude;
-import com.fasterxml.jackson.annotation.JsonInclude.Include;
-import com.fasterxml.jackson.annotation.JsonProperty;
-import com.google.flatbuffers.FlatBufferBuilder;
+import static org.apache.arrow.util.Preconditions.checkNotNull;
+import static org.apache.arrow.vector.complex.BaseRepeatedValueVector.DATA_VECTOR_NAME;
+import static org.apache.arrow.vector.types.pojo.ArrowType.getTypeForField;
+import static org.apache.arrow.vector.types.pojo.Schema.convertMetadata;
 
 /**
  * A POJO abstraction for the Flatbuffer description of Vector Type.

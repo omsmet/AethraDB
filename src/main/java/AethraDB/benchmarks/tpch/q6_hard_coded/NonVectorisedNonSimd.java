@@ -3,7 +3,6 @@ package AethraDB.benchmarks.tpch.q6_hard_coded;
 import AethraDB.evaluation.codegen.infrastructure.data.ABQArrowTableReader;
 import AethraDB.evaluation.codegen.infrastructure.data.ArrowTableReader;
 import org.apache.arrow.memory.RootAllocator;
-import org.apache.calcite.util.ImmutableIntList;
 import org.openjdk.jmh.annotations.Benchmark;
 import org.openjdk.jmh.annotations.BenchmarkMode;
 import org.openjdk.jmh.annotations.Fork;
@@ -65,8 +64,9 @@ public class NonVectorisedNonSimd {
     public void trialSetup() throws Exception {
         // Setup the database
         this.rootAllocator = new RootAllocator();
+        int[] lineitemProjects = new int[] { 4, 5, 6, 10 };
         this.lineitem = new ABQArrowTableReader(
-                new File(this.tpchInstance + "/lineitem.arrow"), this.rootAllocator, true, ImmutableIntList.of(4, 5, 6, 10));
+                new File(this.tpchInstance + "/lineitem.arrow"), this.rootAllocator, true, lineitemProjects);
 
         // Initialise the result
         this.sumResult = -1d;

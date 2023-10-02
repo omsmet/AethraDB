@@ -17,9 +17,9 @@
 
 package org.apache.arrow.vector.ipc.message;
 
-import java.nio.ByteBuffer;
-
 import org.apache.arrow.flatbuf.Message;
+
+import java.nio.ByteBuffer;
 
 /**
  * Class to hold resulting Message metadata and buffer containing the serialized Flatbuffer

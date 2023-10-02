@@ -17,10 +17,10 @@
 
 package org.apache.arrow.vector.util;
 
-import java.util.LinkedHashMap;
-
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+
+import java.util.LinkedHashMap;
 
 /**
  * Simple class that extends the regular java.util.HashMap but overrides the

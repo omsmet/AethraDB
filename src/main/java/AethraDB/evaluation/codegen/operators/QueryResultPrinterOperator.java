@@ -10,7 +10,6 @@ import AethraDB.evaluation.codegen.infrastructure.context.access_path.ArrowVecto
 import AethraDB.evaluation.codegen.infrastructure.context.access_path.ArrowVectorWithValidityMaskAccessPath;
 import AethraDB.evaluation.codegen.infrastructure.context.access_path.ScalarVariableAccessPath;
 import AethraDB.evaluation.codegen.infrastructure.janino.JaninoMethodGen;
-import org.apache.calcite.rel.RelNode;
 import org.codehaus.janino.Java;
 
 import java.util.ArrayList;
@@ -29,12 +28,12 @@ import static AethraDB.evaluation.codegen.infrastructure.janino.JaninoOperatorGe
  * A {@link CodeGenOperator} which can be the top-level operator of a {@link CodeGenOperator} tree
  * and simply prints all results to the standard output.
  */
-public class QueryResultPrinterOperator extends CodeGenOperator<RelNode> {
+public class QueryResultPrinterOperator extends CodeGenOperator {
 
     /**
      * The {@link CodeGenOperator} producing the query result that is printed by {@code this}.
      */
-    private final CodeGenOperator<?> child;
+    private final CodeGenOperator child;
 
     /**
      * Boolean keeping track of whether standard date definitions have already been added to the code.
@@ -48,11 +47,9 @@ public class QueryResultPrinterOperator extends CodeGenOperator<RelNode> {
 
     /**
      * Create an {@link QueryResultPrinterOperator} instance for a specific query.
-     * @param logicalSubplan The logical plan of the query for which the operator is created.
      * @param child The {@link CodeGenOperator} producing the actual query result.
      */
-    public QueryResultPrinterOperator(RelNode logicalSubplan, CodeGenOperator<?> child) {
-        super(logicalSubplan, false);
+    public QueryResultPrinterOperator(CodeGenOperator child) {
         this.child = child;
         this.child.setParent(this);
         this.dateDefinitionsPresent = false;

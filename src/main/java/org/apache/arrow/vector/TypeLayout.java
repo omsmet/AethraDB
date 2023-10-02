@@ -17,12 +17,6 @@
 
 package org.apache.arrow.vector;
 
-import static java.util.Arrays.asList;
-
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-
 import org.apache.arrow.util.Preconditions;
 import org.apache.arrow.vector.BufferLayout.BufferType;
 import org.apache.arrow.vector.types.pojo.ArrowType;
@@ -46,6 +40,12 @@ import org.apache.arrow.vector.types.pojo.ArrowType.Time;
 import org.apache.arrow.vector.types.pojo.ArrowType.Timestamp;
 import org.apache.arrow.vector.types.pojo.ArrowType.Union;
 import org.apache.arrow.vector.types.pojo.ArrowType.Utf8;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+
+import static java.util.Arrays.asList;
 
 /**
  * The buffer layout of vectors for a given type.

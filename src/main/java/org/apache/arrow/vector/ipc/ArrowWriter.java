@@ -17,15 +17,6 @@
 
 package org.apache.arrow.vector.ipc;
 
-import java.io.IOException;
-import java.nio.channels.WritableByteChannel;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Optional;
-import java.util.Set;
-
 import org.apache.arrow.vector.FieldVector;
 import org.apache.arrow.vector.VectorSchemaRoot;
 import org.apache.arrow.vector.VectorUnloader;
@@ -45,6 +36,15 @@ import org.apache.arrow.vector.util.DictionaryUtility;
 import org.apache.arrow.vector.validate.MetadataV4UnionChecker;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.io.IOException;
+import java.nio.channels.WritableByteChannel;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Optional;
+import java.util.Set;
 
 /**
  * Abstract base class for implementing Arrow writers for IPC over a WriteChannel.

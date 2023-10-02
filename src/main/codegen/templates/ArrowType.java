@@ -15,6 +15,9 @@
  * limitations under the License.
  */
 
+import ArrowType.$;
+import ArrowType.ArrowTypeVisitor;
+
 <@pp.dropOutputFile />
 <@pp.changeOutputFile name="/org/apache/arrow/vector/types/pojo/ArrowType.java" />
 <#include "/@includes/license.ftl" />

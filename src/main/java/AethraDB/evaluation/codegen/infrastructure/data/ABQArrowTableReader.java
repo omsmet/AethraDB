@@ -14,7 +14,6 @@ import org.apache.arrow.vector.VectorSchemaRoot;
 import org.apache.arrow.vector.ipc.AethraArrowFileReader;
 import org.apache.arrow.vector.ipc.ArrowFileReader;
 import org.apache.arrow.vector.ipc.ArrowReader;
-import org.apache.calcite.util.ImmutableIntList;
 
 import java.io.Closeable;
 import java.io.File;
@@ -69,7 +68,7 @@ public class ABQArrowTableReader extends ArrowTableReader {
      * @param columnsToProject The columns of the {@code arrowFile} to actually project out.
      * @throws FileNotFoundException When the specified Arrow file cannot be found.
      */
-    public ABQArrowTableReader(File arrowFile, RootAllocator rootAllocator, boolean useProjectingArrowReader, ImmutableIntList columnsToProject) throws Exception {
+    public ABQArrowTableReader(File arrowFile, RootAllocator rootAllocator, boolean useProjectingArrowReader, int[] columnsToProject) throws Exception {
         super(arrowFile, rootAllocator, useProjectingArrowReader, columnsToProject);
         this.loadNextBatchResultQueue = new ArrayBlockingQueue<>(QUEUE_CAPACITY);
         this.fieldVectorQueue = new ArrayBlockingQueue<>(QUEUE_CAPACITY);
@@ -199,7 +198,7 @@ public class ABQArrowTableReader extends ArrowTableReader {
                 File arrowFile,
                 BufferAllocator tableAllocator,
                 boolean useProjectingArrowReader,
-                ImmutableIntList columnsToProject,
+                int[] columnsToProject,
                 ArrayBlockingQueue<Boolean> loadNextBatchTargetQueue,
                 ArrayBlockingQueue<FieldVector[]> fieldVectorTargetQueue
         ) throws IOException {
@@ -211,7 +210,7 @@ public class ABQArrowTableReader extends ArrowTableReader {
                 this.tableFileReader = new ArrowFileReader(this.tableInputStream.getChannel(), this.tableAllocator);
             this.schemaRoot = this.tableFileReader.getVectorSchemaRoot();
             this.columnCount = schemaRoot.getFieldVectors().size();
-            this.columnsToProject = columnsToProject.toIntArray();
+            this.columnsToProject = columnsToProject;
             this.loadNextBatchTargetQueue = loadNextBatchTargetQueue;
             this.fieldVectorTargetQueue = fieldVectorTargetQueue;
         }

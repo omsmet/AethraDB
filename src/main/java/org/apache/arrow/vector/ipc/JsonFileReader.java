@@ -17,29 +17,12 @@
 
 package org.apache.arrow.vector.ipc;
 
-import static com.fasterxml.jackson.core.JsonToken.END_ARRAY;
-import static com.fasterxml.jackson.core.JsonToken.END_OBJECT;
-import static com.fasterxml.jackson.core.JsonToken.START_ARRAY;
-import static com.fasterxml.jackson.core.JsonToken.START_OBJECT;
-import static java.nio.charset.StandardCharsets.UTF_8;
-import static org.apache.arrow.vector.BufferLayout.BufferType.DATA;
-import static org.apache.arrow.vector.BufferLayout.BufferType.OFFSET;
-import static org.apache.arrow.vector.BufferLayout.BufferType.TYPE;
-import static org.apache.arrow.vector.BufferLayout.BufferType.VALIDITY;
-
-import java.io.File;
-import java.io.IOException;
-import java.math.BigDecimal;
-import java.math.BigInteger;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Set;
-
+import com.fasterxml.jackson.core.JsonParseException;
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.core.JsonToken;
+import com.fasterxml.jackson.databind.MapperFeature;
+import com.fasterxml.jackson.databind.MappingJsonFactory;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.arrow.memory.ArrowBuf;
 import org.apache.arrow.memory.BufferAllocator;
 import org.apache.arrow.util.Preconditions;
@@ -70,12 +53,28 @@ import org.apache.arrow.vector.util.DictionaryUtility;
 import org.apache.commons.codec.DecoderException;
 import org.apache.commons.codec.binary.Hex;
 
-import com.fasterxml.jackson.core.JsonParseException;
-import com.fasterxml.jackson.core.JsonParser;
-import com.fasterxml.jackson.core.JsonToken;
-import com.fasterxml.jackson.databind.MapperFeature;
-import com.fasterxml.jackson.databind.MappingJsonFactory;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import java.io.File;
+import java.io.IOException;
+import java.math.BigDecimal;
+import java.math.BigInteger;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+
+import static com.fasterxml.jackson.core.JsonToken.END_ARRAY;
+import static com.fasterxml.jackson.core.JsonToken.END_OBJECT;
+import static com.fasterxml.jackson.core.JsonToken.START_ARRAY;
+import static com.fasterxml.jackson.core.JsonToken.START_OBJECT;
+import static java.nio.charset.StandardCharsets.UTF_8;
+import static org.apache.arrow.vector.BufferLayout.BufferType.DATA;
+import static org.apache.arrow.vector.BufferLayout.BufferType.OFFSET;
+import static org.apache.arrow.vector.BufferLayout.BufferType.TYPE;
+import static org.apache.arrow.vector.BufferLayout.BufferType.VALIDITY;
 
 /**
  * A reader for JSON files that translates them into vectors. This reader is used for integration tests.

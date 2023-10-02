@@ -17,12 +17,12 @@
 
 package org.apache.arrow.vector.util;
 
-import java.util.Iterator;
-
 import org.apache.arrow.memory.util.ArrowBufPointer;
 import org.apache.arrow.memory.util.hash.ArrowBufHasher;
 import org.apache.arrow.memory.util.hash.SimpleHasher;
 import org.apache.arrow.vector.ElementAddressableVector;
+
+import java.util.Iterator;
 
 /**
  * Iterator for traversing elements of a {@link ElementAddressableVector}.

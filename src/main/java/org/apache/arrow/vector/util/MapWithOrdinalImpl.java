@@ -17,6 +17,12 @@
 
 package org.apache.arrow.vector.util;
 
+import io.netty.util.collection.IntObjectHashMap;
+import io.netty.util.collection.IntObjectMap;
+import org.apache.arrow.util.Preconditions;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.util.AbstractMap;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -26,13 +32,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
-
-import org.apache.arrow.util.Preconditions;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import io.netty.util.collection.IntObjectHashMap;
-import io.netty.util.collection.IntObjectMap;
 
 /**
  * An implementation of map that supports constant time look-up by a generic key or an ordinal.

@@ -17,8 +17,6 @@
 
 package org.apache.arrow.vector;
 
-import static org.apache.arrow.vector.NullCheckingForGet.NULL_CHECKING_ENABLED;
-
 import org.apache.arrow.memory.ArrowBuf;
 import org.apache.arrow.memory.BufferAllocator;
 import org.apache.arrow.vector.complex.impl.UInt2ReaderImpl;
@@ -30,6 +28,8 @@ import org.apache.arrow.vector.types.pojo.Field;
 import org.apache.arrow.vector.types.pojo.FieldType;
 import org.apache.arrow.vector.util.TransferPair;
 import org.apache.arrow.vector.util.ValueVectorUtility;
+
+import static org.apache.arrow.vector.NullCheckingForGet.NULL_CHECKING_ENABLED;
 
 /**
  * UInt2Vector implements a fixed width (2 bytes) vector of
