@@ -123,7 +123,7 @@ public class CodeGenContext implements AutoCloseable {
     }
 
     /**
-     * Method for defining a new variable in the current code generation context.
+     * Method for defining a new variable name in the current code generation context.
      * @param preferredName The preferred name of the variable to be defined.
      * @return The actual name that was defined for the variable (to prevent name clashes).
      */
@@ -140,20 +140,11 @@ public class CodeGenContext implements AutoCloseable {
     }
 
     /**
-     * Method to define a query-global variable that will be allocated at the start of the query and
-     * released after it.
-     * @param preferredName The preferred name of the variable to allocate.
-     * @param typeToAllocate The type that the variable should get.
-     * @param initialisationStatement The statement to initialise the scan surrounding variable.
-     * @param deallocate Whether the {@link AllocationManager} should deallocate the variable too.
-     * @return The actual name of the allocated variable.
+     * Method for defining a new variable name, which will be unique in a query-global sense.
+     * @param preferredName The preferred name of the variable to be defined.
+     * @return The actual name that was defined for the variable (to prevent name clashes).
      */
-    public String defineQueryGlobalVariable(
-            String preferredName,
-            Java.Type typeToAllocate,
-            Java.ArrayInitializerOrRvalue initialisationStatement,
-            boolean deallocate
-    ) {
+    public String claimGlobalVariableName(String preferredName) {
         // Find a globally available name
         String actualName = preferredName;
         int postfix = 0;
@@ -179,23 +170,44 @@ public class CodeGenContext implements AutoCloseable {
             definedNamesAtStage.add(actualName);
         this.currentDefinedVariables.add(actualName);
 
+        return actualName;
+    }
+
+    /**
+     * Method to define a query-global variable that will be allocated at the start of the query and
+     * released after it.
+     * @param preferredName The preferred name of the variable to allocate.
+     * @param typeToAllocate The type that the variable should get.
+     * @param initialisationStatement The statement to initialise the scan surrounding variable.
+     * @param deallocate Whether the {@link AllocationManager} should deallocate the variable too.
+     * @return The actual name of the allocated variable.
+     */
+    public String defineQueryGlobalVariable(
+            String preferredName,
+            Java.Type typeToAllocate,
+            Java.ArrayInitializerOrRvalue initialisationStatement,
+            boolean deallocate
+    ) {
+        // First find a name for the query global variable
+        String variableName = claimGlobalVariableName(preferredName);
+
         // Schedule the variable for allocation
-        this.queryGlobalVariables.add(actualName);
+        this.queryGlobalVariables.add(variableName);
         this.queryGlobalVariableDeclarations.add(
                 JaninoVariableGen.createLocalVariable(
                         JaninoGeneralGen.getLocation(),
                         typeToAllocate,
-                        actualName,
+                        variableName,
                         initialisationStatement
                 )
         );
 
         // Schedule the variable for dealloation if necessary
         if (deallocate)
-            this.queryGlobalVariablesToDeallocate.add(actualName);
+            this.queryGlobalVariablesToDeallocate.add(variableName);
 
         // Return the allocated variable's name
-        return actualName;
+        return variableName;
     }
 
     /**

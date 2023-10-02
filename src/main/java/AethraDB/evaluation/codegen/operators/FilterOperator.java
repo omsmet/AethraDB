@@ -16,6 +16,7 @@ import AethraDB.util.language.function.logic.AethraAndFunction;
 import AethraDB.util.language.value.AethraInputRef;
 import AethraDB.util.language.value.literal.AethraDateDayLiteral;
 import AethraDB.util.language.value.literal.AethraDateIntervalLiteral;
+import AethraDB.util.language.value.literal.AethraDoubleLiteral;
 import AethraDB.util.language.value.literal.AethraIntegerLiteral;
 import AethraDB.util.language.value.literal.AethraLiteral;
 import AethraDB.util.language.value.literal.AethraStringLiteral;
@@ -45,6 +46,7 @@ import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableTy
 import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableTypeMethods.toJavaType;
 import static AethraDB.evaluation.codegen.infrastructure.janino.JaninoControlGen.createIfNotContinue;
 import static AethraDB.evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createAmbiguousNameRef;
+import static AethraDB.evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createFloatingPointLiteral;
 import static AethraDB.evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createInitialisedByteArray;
 import static AethraDB.evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createIntegerLiteral;
 import static AethraDB.evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createPrimitiveArrayType;
@@ -410,6 +412,10 @@ public class FilterOperator extends CodeGenOperator {
             rhsScalar = createIntegerLiteral(getLocation(), rhsLit.unixDay);
             rhsScalarType = P_INT_DATE;
 
+        } else if (rhs instanceof AethraDoubleLiteral rhsLit) {
+            rhsScalar = createFloatingPointLiteral(getLocation(), rhsLit.value);
+            rhsScalarType = P_DOUBLE;
+
         } else if (rhs instanceof AethraIntegerLiteral rhsLit) {
             rhsScalar = createIntegerLiteral(getLocation(), rhsLit.value);
             rhsScalarType = P_INT;
@@ -417,6 +423,11 @@ public class FilterOperator extends CodeGenOperator {
         } else if (rhs instanceof AethraStringLiteral rhsLit) {
             rhsScalar = createInitialisedByteArray(getLocation(), rhsLit.value);
             rhsScalarType = S_FL_BIN;
+
+        } else if (rhs instanceof AethraBinaryFunction abf && abf.firstOperand instanceof AethraDateDayLiteral) {
+            // Deal with special date specification format
+            rhsScalar = createIntegerLiteral(getLocation(), translateToUnixDay(rhs));
+            rhsScalarType = P_INT_DATE;
 
         } else throw new UnsupportedOperationException("FilterOperator.consumeVecComparisonOperator does not support this right-hand operator");
 

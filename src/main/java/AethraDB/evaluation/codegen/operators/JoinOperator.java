@@ -113,13 +113,13 @@ public class JoinOperator extends CodeGenOperator {
     /**
      * The names of the result vectors of this operator in the vectorised paradigm.
      */
-    private String[] resultVectorNames;
+    private ArrayList<String> resultVectorNames;
 
     /**
      * The access paths indicating the vector types that should be exposed as the result of this
      * operator in the vectorised paradigm.
      */
-    private ArrayAccessPath[] resultVectorDefinitions;
+    private ArrayList<ArrayAccessPath> resultVectorDefinitions;
 
     /**
      * Boolean indicating if the consume method should perform a hash-table build or a hash-table probe.
@@ -148,6 +148,9 @@ public class JoinOperator extends CodeGenOperator {
         this.rightChild.setParent(this);
         this.rightChildEquijoinIndex = rightJoinColumnIndex;
         this.consumeInProbePhase = false;
+
+        this.resultVectorNames = new ArrayList<>();
+        this.resultVectorDefinitions = new ArrayList<>();
     }
 
     @Override
@@ -474,10 +477,6 @@ public class JoinOperator extends CodeGenOperator {
         // Reserve a name for the join map and set its access path
         this.joinMapAP = new MapAccessPath(cCtx.defineVariable("join_map"), MAP_GENERATED);
 
-        // Reserve the names for the result vectors
-        for (int i = 0; i < this.resultVectorNames.length; i++)
-            this.resultVectorNames[i] = cCtx.defineVariable("join_result_vector_ord_" + i);
-
         // For vectorised implementations, allocate a pre-hash vector
         this.preHashVectorAP = new ArrayAccessPath(cCtx.defineVariable("pre_hash_vector"), P_A_LONG);
         codeGenResult.add(
@@ -531,8 +530,8 @@ public class JoinOperator extends CodeGenOperator {
         cCtx.popCodeGenContext();
 
         // Allocate the result vectors first
-        for (int i = 0; i < this.resultVectorDefinitions.length; i++) {
-            ArrayAccessPath vectorDescription = this.resultVectorDefinitions[i];
+        for (int i = 0; i < this.resultVectorDefinitions.size(); i++) {
+            ArrayAccessPath vectorDescription = this.resultVectorDefinitions.get(i);
             String instantiationMethod = switch (vectorDescription.getType()) {
                 case P_A_BOOLEAN -> "getBooleanVector";
                 case P_A_DOUBLE -> "getDoubleVector";
@@ -579,7 +578,7 @@ public class JoinOperator extends CodeGenOperator {
         );
 
         // And deallocate the result vectors
-        for (int i = 0; i < this.resultVectorDefinitions.length; i++) {
+        for (int i = 0; i < this.resultVectorDefinitions.size(); i++) {
             codeGenResult.add(
                     createMethodInvocationStm(
                             getLocation(),
@@ -589,7 +588,7 @@ public class JoinOperator extends CodeGenOperator {
                                     "getAllocationManager"
                             ),
                             "release",
-                            new Java.Rvalue[] { this.resultVectorDefinitions[i].read() }
+                            new Java.Rvalue[] { this.resultVectorDefinitions.get(i).read() }
                     )
             );
         }
@@ -619,11 +618,12 @@ public class JoinOperator extends CodeGenOperator {
                 primitiveArrayType = primitiveArrayTypeForPrimitive(primitiveOrdinalType);
             }
 
-            this.resultVectorDefinitions[outputVectorIndex] =
+            this.resultVectorNames.add(cCtx.claimGlobalVariableName("join_result_vector_ord_" + outputVectorIndex));
+            this.resultVectorDefinitions.add(
                     new ArrayAccessPath(
-                            this.resultVectorNames[outputVectorIndex],
+                            this.resultVectorNames.get(outputVectorIndex),
                             primitiveArrayType
-                    );
+                    ));
         }
 
         // Now to the actual consume task
@@ -1658,7 +1658,7 @@ public class JoinOperator extends CodeGenOperator {
                             getLocation(),
                             createArrayElementAccessExpr(
                                     getLocation(),
-                                    this.resultVectorDefinitions[i].read(),
+                                    this.resultVectorDefinitions.get(i).read(),
                                     currentResultIndexAP.read()
                             ),
                             createArrayElementAccessExpr(
@@ -1686,7 +1686,7 @@ public class JoinOperator extends CodeGenOperator {
                             getLocation(),
                             createArrayElementAccessExpr(
                                     getLocation(),
-                                    this.resultVectorDefinitions[resultIndex].read(),
+                                    this.resultVectorDefinitions.get(resultIndex).read(),
                                     currentResultIndexAP.read()
                             ),
                             rightJoinOrdinalValues[i]
@@ -1705,17 +1705,17 @@ public class JoinOperator extends CodeGenOperator {
 
         // End of the inner result vector construction loop
         // Set-up the correct ordinal mapping, link the LHS key column to the RHS key column to avoid duplication
-        List<AccessPath> resultVectorAPs = new ArrayList<>(this.resultVectorDefinitions.length);
-        for (int i = 0; i < this.resultVectorDefinitions.length; i++) {
+        List<AccessPath> resultVectorAPs = new ArrayList<>(this.resultVectorDefinitions.size());
+        for (int i = 0; i < this.resultVectorDefinitions.size(); i++) {
             int resultVectorIndex = i;
             if (i == leftKeyIndex) {
                 resultVectorIndex = probeKey;
             }
 
             AccessPath resultVectorAP = new ArrayVectorAccessPath(
-                    this.resultVectorDefinitions[resultVectorIndex],
+                    this.resultVectorDefinitions.get(resultVectorIndex),
                     currentResultIndexAP,
-                    vectorTypeForPrimitiveArrayType(this.resultVectorDefinitions[resultVectorIndex].getType())
+                    vectorTypeForPrimitiveArrayType(this.resultVectorDefinitions.get(resultVectorIndex).getType())
             );
             resultVectorAPs.add(i, resultVectorAP);
         }
@@ -1757,8 +1757,6 @@ public class JoinOperator extends CodeGenOperator {
 
             // Initialise result structures
             this.resultColumnCount = rightChildColumnCount + this.leftChildColumnCount;
-            this.resultVectorNames = new String[this.resultColumnCount];
-            this.resultVectorDefinitions = new ArrayAccessPath[this.resultColumnCount];
 
             // Perform the probe (which also has the parent operator consume the result)
             return vectorised ? this.consumeVecProbe(cCtx, oCtx) : this.consumeNonVecProbe(cCtx, oCtx);
