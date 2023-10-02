@@ -256,14 +256,14 @@ public class AethraQueryDecoder {
 
         } else if (function.startsWith("=")) {
             return new AethraBinaryFunction(AethraFunction.Kind.EQ, convertedOperands[0], convertedOperands[1]);
-        } else if (function.startsWith(">")) {
-            return new AethraBinaryFunction(AethraFunction.Kind.GT, convertedOperands[0], convertedOperands[1]);
         } else if (function.startsWith(">=")) {
             return new AethraBinaryFunction(AethraFunction.Kind.GTE, convertedOperands[0], convertedOperands[1]);
-        } else if (function.startsWith("<")) {
-            return new AethraBinaryFunction(AethraFunction.Kind.LT, convertedOperands[0], convertedOperands[1]);
+        } else if (function.startsWith(">")) {
+            return new AethraBinaryFunction(AethraFunction.Kind.GT, convertedOperands[0], convertedOperands[1]);
         } else if (function.startsWith("<=")) {
             return new AethraBinaryFunction(AethraFunction.Kind.LTE, convertedOperands[0], convertedOperands[1]);
+        } else if (function.startsWith("<")) {
+            return new AethraBinaryFunction(AethraFunction.Kind.LT, convertedOperands[0], convertedOperands[1]);
 
         } else if (function.startsWith("+")) {
             return new AethraBinaryFunction(AethraFunction.Kind.ADD, convertedOperands[0], convertedOperands[1]);
