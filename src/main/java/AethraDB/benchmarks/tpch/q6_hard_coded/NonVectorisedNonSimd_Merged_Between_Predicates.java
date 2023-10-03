@@ -25,7 +25,7 @@ import java.util.concurrent.TimeUnit;
  * generation without SIMD-ed operators, but while not actually invoking the code generator itself.
  */
 @State(Scope.Benchmark)
-public class NonVectorisedNonSimdOptimalOrder {
+public class NonVectorisedNonSimd_Merged_Between_Predicates {
 
     /**
      * Different instances of the TPC-H database can be tested using this benchmark.
@@ -133,30 +133,18 @@ public class NonVectorisedNonSimdOptimalOrder {
             org.apache.arrow.vector.DateDayVector lineitem_vc_3 = ((org.apache.arrow.vector.DateDayVector) lineitem.getVector(10));
             int recordCount = lineitem_vc_0.getValueCount();
             for (int aviv = 0; aviv < recordCount; aviv++) {
-                // Max date
                 int ordinal_value = lineitem_vc_3.get(aviv);
-                if (!((ordinal_value < 9131))) {
+                if (!(ordinal_value >= 8766 && ordinal_value < 9131)) {
                     continue;
                 }
-                // Max quantity
+                double ordinal_value_0 = lineitem_vc_2.get(aviv);
+                if (!(ordinal_value_0 >= 0.05 && ordinal_value_0 <= 0.07)) {
+                    continue;
+                }
                 double ordinal_value_1 = lineitem_vc_0.get(aviv);
                 if (!((ordinal_value_1 < 24))) {
                     continue;
                 }
-                // Min discount
-                double ordinal_value_0 = lineitem_vc_2.get(aviv);
-                if (!((ordinal_value_0 >= 0.05))) {
-                    continue;
-                }
-                // Min date
-                if (!((ordinal_value >= 8766))) {
-                    continue;
-                }
-                // Max discount
-                if (!((ordinal_value_0 <= 0.07))) {
-                    continue;
-                }
-
                 double ordinal_value_2 = lineitem_vc_1.get(aviv);
                 double projection_computation_result = (ordinal_value_2 * ordinal_value_0);
                 sum += projection_computation_result;

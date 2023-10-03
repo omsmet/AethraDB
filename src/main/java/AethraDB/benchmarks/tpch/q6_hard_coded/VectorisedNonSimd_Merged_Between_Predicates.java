@@ -30,7 +30,7 @@ import java.util.concurrent.TimeUnit;
  * generation without SIMD-ed operators, but while not actually invoking the code generator itself.
  */
 @State(Scope.Benchmark)
-public class VectorisedNonSimdOptimalOrder {
+public class VectorisedNonSimd_Merged_Between_Predicates {
 
     /**
      * Different instances of the TPC-H database can be tested using this benchmark.
@@ -140,9 +140,7 @@ public class VectorisedNonSimdOptimalOrder {
     public void executeQuery(Blackhole bh) throws IOException {
         // DIFF: hard-coded allocation manager
         int[] ordinal_3_sel_vec = this.allocationManager.getIntVector();
-        int[] ordinal_3_sel_vec_0 = this.allocationManager.getIntVector();
         int[] ordinal_2_sel_vec = this.allocationManager.getIntVector();
-        int[] ordinal_2_sel_vec_0 = this.allocationManager.getIntVector();
         int[] ordinal_0_sel_vec = this.allocationManager.getIntVector();
         double[] projection_computation_result = this.allocationManager.getDoubleVector();
         double sum = 0;
@@ -154,20 +152,13 @@ public class VectorisedNonSimdOptimalOrder {
             org.apache.arrow.vector.Float8Vector lineitem_vc_1 = ((org.apache.arrow.vector.Float8Vector) lineitem.getVector(5));
             org.apache.arrow.vector.Float8Vector lineitem_vc_2 = ((org.apache.arrow.vector.Float8Vector) lineitem.getVector(6));
             org.apache.arrow.vector.DateDayVector lineitem_vc_3 = ((org.apache.arrow.vector.DateDayVector) lineitem.getVector(10));
-            // Max date
-            int ordinal_3_sel_vec_length = VectorisedFilterOperators.lt(lineitem_vc_3, 9131, ordinal_3_sel_vec);
-            // Max quantity
-            int ordinal_0_sel_vec_length = VectorisedFilterOperators.lt(lineitem_vc_0, 24, ordinal_0_sel_vec, ordinal_3_sel_vec, ordinal_3_sel_vec_length);
-            // Min discount
-            int ordinal_2_sel_vec_length = VectorisedFilterOperators.ge(lineitem_vc_2, 0.05, ordinal_2_sel_vec, ordinal_0_sel_vec, ordinal_0_sel_vec_length);
-            // Min date
-            int ordinal_3_sel_vec_0_length = VectorisedFilterOperators.ge(lineitem_vc_3, 8766, ordinal_3_sel_vec_0, ordinal_2_sel_vec, ordinal_2_sel_vec_length);
-            // Max discount
-            int ordinal_2_sel_vec_0_length = VectorisedFilterOperators.le(lineitem_vc_2, 0.07, ordinal_2_sel_vec_0, ordinal_3_sel_vec_0, ordinal_3_sel_vec_0_length);
+            int ordinal_3_sel_vec_length = VectorisedFilterOperators.between_ge_lt(lineitem_vc_3, 8766, 9131, ordinal_3_sel_vec);
+            int ordinal_2_sel_vec_length = VectorisedFilterOperators.between_ge_le(lineitem_vc_2, 0.05, 0.07, ordinal_2_sel_vec, ordinal_3_sel_vec, ordinal_3_sel_vec_length);
+            int ordinal_0_sel_vec_length = VectorisedFilterOperators.lt(lineitem_vc_0, 24, ordinal_0_sel_vec, ordinal_2_sel_vec, ordinal_2_sel_vec_length);
             int projection_computation_result_length;
-            projection_computation_result_length = VectorisedArithmeticOperators.multiply(lineitem_vc_1, lineitem_vc_2, ordinal_2_sel_vec_0, ordinal_2_sel_vec_0_length, projection_computation_result);
-            sum += VectorisedAggregationOperators.vectorSum(projection_computation_result, projection_computation_result_length, ordinal_2_sel_vec_0, ordinal_2_sel_vec_0_length);
-            count += ordinal_2_sel_vec_0_length;
+            projection_computation_result_length = VectorisedArithmeticOperators.multiply(lineitem_vc_1, lineitem_vc_2, ordinal_0_sel_vec, ordinal_0_sel_vec_length, projection_computation_result);
+            sum += VectorisedAggregationOperators.vectorSum(projection_computation_result, projection_computation_result_length, ordinal_0_sel_vec, ordinal_0_sel_vec_length);
+            count += ordinal_0_sel_vec_length;
         }
         double projection_literal = Double.NaN;
         int projection_literal_0 = 0;
@@ -178,9 +169,7 @@ public class VectorisedNonSimdOptimalOrder {
         this.sumResult = projection_computation_result_0;
 
         this.allocationManager.release(ordinal_3_sel_vec);
-        this.allocationManager.release(ordinal_3_sel_vec_0);
         this.allocationManager.release(ordinal_2_sel_vec);
-        this.allocationManager.release(ordinal_2_sel_vec_0);
         this.allocationManager.release(ordinal_0_sel_vec);
         this.allocationManager.release(projection_computation_result);
         // DIFF: prevent optimising the result away

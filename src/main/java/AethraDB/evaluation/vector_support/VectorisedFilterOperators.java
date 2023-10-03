@@ -380,6 +380,21 @@ public class VectorisedFilterOperators extends VectorisedOperators {
 
     /* --------------------------------------------------------------------------------------------------- */
 
+    public static int between_ge_lt(org.apache.arrow.vector.DateDayVector vector, int lower, int upper, int[] selectionVector) {
+        int selectionVectorIndex = 0;
+
+        for (int i = 0; i < vector.getValueCount(); i++) {
+            int value = vector.get(i);
+            if (value >= lower && value < upper)
+                selectionVector[selectionVectorIndex++] = i;
+        }
+
+        return selectionVectorIndex;
+    }
+
+
+    /* --------------------------------------------------------------------------------------------------- */
+
     public static int gtSIMD(org.apache.arrow.vector.DateDayVector vector, int condition, boolean[] validityMask) {
         return compareSIMD(VectorOperators.GT, vector, condition, validityMask);
     }
@@ -1011,6 +1026,29 @@ public class VectorisedFilterOperators extends VectorisedOperators {
     }
 
     /* --------------------------------------------------------------------------------------------------- */
+
+    public static int between_ge_le(
+            org.apache.arrow.vector.Float8Vector vector,
+            double lower,
+            double upper,
+            int[] selectionVector,
+            int[] validIndices,
+            int validIndicesCount
+    ) {
+        int selectionVectorIndex = 0;
+
+        for (int i = 0; i < validIndicesCount; i++) {
+            int validIndex = validIndices[i];
+            double value = vector.get(validIndex);
+            if (value >= lower && value <= upper)
+                selectionVector[selectionVectorIndex++] = validIndex;
+        }
+
+        return selectionVectorIndex;
+    }
+
+    /* --------------------------------------------------------------------------------------------------- */
+
 
     public static int gtSIMD(org.apache.arrow.vector.Float8Vector vector, double condition, boolean[] validityMask) {
         return compareSIMD(VectorOperators.GT, vector, condition, validityMask);
