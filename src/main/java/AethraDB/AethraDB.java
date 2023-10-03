@@ -66,6 +66,8 @@ public class AethraDB {
     public static long codeCompilationEnd = -1;
     public static long queryExecutionStart = -1;
     public static long queryExecutionEnd = -1;
+    public static long totalTimeStart = -1;
+    public static long totalTimeEnd = -1;
 
     /**
      * Main entry point of the application.
@@ -95,6 +97,9 @@ public class AethraDB {
 
         // Check if verbose output is enabled
         boolean verboseOutputEnabled = cmdArguments.hasOption(verboseOutput);
+
+        // We define total time to start here (as it is most similar to duckdb)
+        totalTimeStart = System.nanoTime();
 
         // Extract the query processing paradigm to use
         String paradigmArgVal = cmdArguments.getOptionValue(processingParadigm);
@@ -151,17 +156,22 @@ public class AethraDB {
         generatedQuery.getCCtx().close();
         // We do not perform maintenance on the allocation manager in the cCtx of the query as we only execute a single query
 
+        // We define total time to end here (as it is most similar to DuckDB)
+        totalTimeEnd = System.nanoTime();
+
         // Output profiling information if required
         if (cmdArguments.hasOption(outputProfileInformation)) {
-            double planningTimeMs = ((double) (queryPlanningEnd - queryPlanningStart)) / 1000000d;
-            double codegenTimeMs = ((double) (codeGenerationEnd - codeGenerationStart)) / 1000000d;
-            double compilationTimeMs = ((double) (codeCompilationEnd - codeCompilationStart)) / 1000000d;
-            double queryExecutionTimeMs = ((double) (queryExecutionEnd - queryExecutionStart)) / 1000000d;
+            double planningTimeMs = ((double) (queryPlanningEnd - queryPlanningStart)) / 1_000_000d;
+            double codegenTimeMs = ((double) (codeGenerationEnd - codeGenerationStart)) / 1_000_000d;
+            double compilationTimeMs = ((double) (codeCompilationEnd - codeCompilationStart)) / 1_000_000d;
+            double queryExecutionTimeMs = ((double) (queryExecutionEnd - queryExecutionStart)) / 1_000_000d;
+            double totalTimeMs = ((double) (totalTimeEnd - totalTimeStart)) / 1_000_000d;
             System.err.println(
                     "{\"planning\": " + planningTimeMs
                             + ", \"codegen\": " + codegenTimeMs
                             + ", " + "\"compilation\": " + compilationTimeMs
                             + ", \"execution\": " + queryExecutionTimeMs
+                            + ", \"total\": " + totalTimeMs
                             + "}");
         }
     }
