@@ -170,7 +170,7 @@ public class JoinOperator extends CodeGenOperator {
         List<Java.Statement> codeGenResult = new ArrayList<>();
 
         // Reserve a name for the join map and set its access path
-        this.joinMapAP = new MapAccessPath(cCtx.defineVariable("join_map"), MAP_GENERATED);
+        this.joinMapAP = new MapAccessPath(cCtx.claimGlobalVariableName("join_map"), MAP_GENERATED);
 
         // First build the hash-table by calling the produceNonVec method on the left child operator,
         // which will eventually invoke the consumeNonVec method on @this which should perform the
@@ -475,10 +475,10 @@ public class JoinOperator extends CodeGenOperator {
         List<Java.Statement> codeGenResult = new ArrayList<>();
 
         // Reserve a name for the join map and set its access path
-        this.joinMapAP = new MapAccessPath(cCtx.defineVariable("join_map"), MAP_GENERATED);
+        this.joinMapAP = new MapAccessPath(cCtx.claimGlobalVariableName("join_map"), MAP_GENERATED);
 
         // For vectorised implementations, allocate a pre-hash vector
-        this.preHashVectorAP = new ArrayAccessPath(cCtx.defineVariable("pre_hash_vector"), P_A_LONG);
+        this.preHashVectorAP = new ArrayAccessPath(cCtx.claimGlobalVariableName("pre_hash_vector"), P_A_LONG);
         codeGenResult.add(
                 createLocalVariable(
                         getLocation(),
@@ -864,7 +864,7 @@ public class JoinOperator extends CodeGenOperator {
             // Get the values for the remaining columns to prevent key duplication
             Java.Rvalue[] columnValues = new Java.Rvalue[currentOrdinalMapping.size() - 1];
             int currentValueColumnIndex = 0;
-            for (int i = 0; i < columnValues.length; i++) {
+            for (int i = 0; i < currentOrdinalMapping.size(); i++) {
                 if (i == buildKeyOrdinal)
                     continue;
 

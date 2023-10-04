@@ -8,7 +8,6 @@ import AethraDB.evaluation.codegen.operators.CodeGenOperator;
 import AethraDB.evaluation.codegen.operators.QueryResultCountOperator;
 import AethraDB.evaluation.codegen.operators.QueryResultPrinterOperator;
 import AethraDB.util.AethraDatabase;
-import AethraDB.util.AethraQueryDecoder;
 import org.apache.arrow.memory.RootAllocator;
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
