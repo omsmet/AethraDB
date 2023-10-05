@@ -33,7 +33,7 @@ import java.util.concurrent.TimeUnit;
  * generation without SIMD-ed operators, but while not actually invoking the code generator itself.
  */
 @State(Scope.Benchmark)
-public class VectorisedNonSimd {
+public class VectorisedNonSimd_Duck_Join_Order {
 
     /**
      * Different instances of the TPC-H database can be tested using this benchmark.
@@ -83,17 +83,17 @@ public class VectorisedNonSimd {
     /**
      * State: the hash-table which is used for one of the joins.
      */
-    private JoinMapType join_map;
+    private JoinMapType_DJO join_map;
 
     /**
      * State: the hash-table which is used for one of the joins.
      */
-    private JoinMapType0 join_map_0;
+    private JoinMapType0_DJO join_map_0;
 
     /**
      * State: the hash-table which is used for one of the joins.
      */
-    private JoinMapType1 join_map_1;
+    private JoinMapType1_DJO join_map_1;
 
     /**
      * State: the result of the query.
@@ -139,9 +139,9 @@ public class VectorisedNonSimd {
         this.aggregation_state_map = new AggregationMap();
 
         // Initialise the join maps
-        this.join_map = new JoinMapType();
-        this.join_map_0 = new JoinMapType0();
-        this.join_map_1 = new JoinMapType1();
+        this.join_map = new JoinMapType_DJO();
+        this.join_map_0 = new JoinMapType0_DJO();
+        this.join_map_1 = new JoinMapType1_DJO();
 
         // Initialise the result verifier
         this.resultVerifier = new ResultVerifier(this.tpchInstance + "/q10_result.csv");
@@ -236,44 +236,18 @@ public class VectorisedNonSimd {
             "-Xms16g"
     })
     public void executeQuery(Blackhole bh) throws IOException {
-        // DIFF: hard-coded the allocation manager in whole query
         int[] ordinal_2_sel_vec = this.allocationManager.getIntVector();
         int[] ordinal_2_sel_vec_0 = this.allocationManager.getIntVector();
         int[] ordinal_3_sel_vec = this.allocationManager.getIntVector();
         double[] projection_computation_result = this.allocationManager.getDoubleVector();
         double[] projection_computation_result_0 = this.allocationManager.getDoubleVector();
         long[] groupKeyPreHashVector = this.allocationManager.getLongVector();
+        // KeyValueMap_1330754528 aggregation_state_map = new KeyValueMap_1330754528();
         long[] pre_hash_vector = this.allocationManager.getLongVector();
+        // KeyMultiRecordMap_146305349 join_map = new KeyMultiRecordMap_146305349();
         long[] pre_hash_vector_0 = this.allocationManager.getLongVector();
-        long[] pre_hash_vector_1 = this.allocationManager.getLongVector();
-
-        // DIFF: hard-coded
-        // KeyValueMap_104912388 aggregation_state_map = new KeyValueMap_104912388();
-        // KeyMultiRecordMap_748935206 join_map = new KeyMultiRecordMap_748935206();
-        // KeyMultiRecordMap_1839548688 join_map_0 = new KeyMultiRecordMap_1839548688();
-        // KeyMultiRecordMap_1500020749 join_map_1 = new KeyMultiRecordMap_1500020749();
-        // ArrowTableReader nation = cCtx.getArrowReader(0);
-        while (nation.loadNextBatch()) {
-            org.apache.arrow.vector.IntVector nation_vc_0 = ((org.apache.arrow.vector.IntVector) nation.getVector(0));
-            org.apache.arrow.vector.FixedSizeBinaryVector nation_vc_1 = ((org.apache.arrow.vector.FixedSizeBinaryVector) nation.getVector(1));
-            VectorisedHashOperators.constructPreHashKeyVector(pre_hash_vector_1, nation_vc_0, false);
-            int recordCount = nation_vc_0.getValueCount();
-            for (int i = 0; i < recordCount; i++) {
-                int left_join_record_key = nation_vc_0.get(i);
-                join_map_1.associate(left_join_record_key, pre_hash_vector_1[i], nation_vc_1.get(i));
-            }
-        }
-        int[] join_result_vector_ord_0_1 = this.allocationManager.getIntVector();
-        byte[][] join_result_vector_ord_1_1 = this.allocationManager.getNestedByteVector();
-        int[] join_result_vector_ord_2_1 = this.allocationManager.getIntVector();
-        byte[][] join_result_vector_ord_3_1 = this.allocationManager.getNestedByteVector();
-        byte[][] join_result_vector_ord_4_1 = this.allocationManager.getNestedByteVector();
-        int[] join_result_vector_ord_5_1 = this.allocationManager.getIntVector();
-        byte[][] join_result_vector_ord_6_1 = this.allocationManager.getNestedByteVector();
-        double[] join_result_vector_ord_7_1 = this.allocationManager.getDoubleVector();
-        byte[][] join_result_vector_ord_8_1 = this.allocationManager.getNestedByteVector();
-        // DIFF: hard-coded
-        // ArrowTableReader customer = cCtx.getArrowReader(1);
+        // KeyMultiRecordMap_900008524 join_map_0 = new KeyMultiRecordMap_900008524();
+        // ArrowTableReader customer = cCtx.getArrowReader(0);
         while (customer.loadNextBatch()) {
             org.apache.arrow.vector.IntVector customer_vc_0 = ((org.apache.arrow.vector.IntVector) customer.getVector(0));
             org.apache.arrow.vector.VarCharVector customer_vc_1 = ((org.apache.arrow.vector.VarCharVector) customer.getVector(1));
@@ -282,85 +256,34 @@ public class VectorisedNonSimd {
             org.apache.arrow.vector.FixedSizeBinaryVector customer_vc_4 = ((org.apache.arrow.vector.FixedSizeBinaryVector) customer.getVector(4));
             org.apache.arrow.vector.Float8Vector customer_vc_5 = ((org.apache.arrow.vector.Float8Vector) customer.getVector(5));
             org.apache.arrow.vector.VarCharVector customer_vc_6 = ((org.apache.arrow.vector.VarCharVector) customer.getVector(7));
-            VectorisedHashOperators.constructPreHashKeyVector(pre_hash_vector_1, customer_vc_3, false);
+            VectorisedHashOperators.constructPreHashKeyVector(pre_hash_vector_0, customer_vc_3, false);
             int recordCount = customer_vc_3.getValueCount();
-            int currentLoopIndex = 0;
-            while ((currentLoopIndex < recordCount)) {
-                int currentResultIndex = 0;
-                while ((currentLoopIndex < recordCount)) {
-                    int right_join_key = customer_vc_3.get(currentLoopIndex);
-                    long right_join_key_pre_hash = pre_hash_vector_1[currentLoopIndex];
-                    int records_to_join_index = join_map_1.getIndex(right_join_key, right_join_key_pre_hash);
-                    if ((records_to_join_index == -1)) {
-                        currentLoopIndex++;
-                        continue;
-                    }
-                    int left_join_record_count = join_map_1.keysRecordCount[records_to_join_index];
-                    if ((left_join_record_count > (VectorisedOperators.VECTOR_LENGTH - currentResultIndex))) {
-                        break;
-                    }
-                    int right_join_ord_0 = customer_vc_0.get(currentLoopIndex);
-                    byte[] right_join_ord_1 = customer_vc_1.get(currentLoopIndex);
-                    byte[] right_join_ord_2 = customer_vc_2.get(currentLoopIndex);
-                    byte[] right_join_ord_4 = customer_vc_4.get(currentLoopIndex);
-                    double right_join_ord_5 = customer_vc_5.get(currentLoopIndex);
-                    byte[] right_join_ord_6 = customer_vc_6.get(currentLoopIndex);
-                    for (int i = 0; i < left_join_record_count; i++) {
-                        join_result_vector_ord_1_1[currentResultIndex] = join_map_1.values_record_ord_0[records_to_join_index][i];
-                        join_result_vector_ord_2_1[currentResultIndex] = right_join_ord_0;
-                        join_result_vector_ord_3_1[currentResultIndex] = right_join_ord_1;
-                        join_result_vector_ord_4_1[currentResultIndex] = right_join_ord_2;
-                        join_result_vector_ord_5_1[currentResultIndex] = right_join_key;
-                        join_result_vector_ord_6_1[currentResultIndex] = right_join_ord_4;
-                        join_result_vector_ord_7_1[currentResultIndex] = right_join_ord_5;
-                        join_result_vector_ord_8_1[currentResultIndex] = right_join_ord_6;
-                        currentResultIndex++;
-                    }
-                    currentLoopIndex++;
-                }
-                VectorisedHashOperators.constructPreHashKeyVector(pre_hash_vector_0, join_result_vector_ord_2_1, currentResultIndex, false);
-                for (int i_0 = 0; i_0 < currentResultIndex; i_0++) {
-                    int left_join_record_key = join_result_vector_ord_2_1[i_0];
-                    join_map_0.associate(left_join_record_key, pre_hash_vector_0[i_0], join_result_vector_ord_1_1[i_0], join_result_vector_ord_3_1[i_0], join_result_vector_ord_4_1[i_0], join_result_vector_ord_6_1[i_0], join_result_vector_ord_7_1[i_0], join_result_vector_ord_8_1[i_0]);
-                }
+            for (int i = 0; i < recordCount; i++) {
+                int left_join_record_key = customer_vc_3.get(i);
+                join_map_0.associate(left_join_record_key, pre_hash_vector_0[i], customer_vc_0.get(i), customer_vc_1.get(i), customer_vc_2.get(i), customer_vc_4.get(i), customer_vc_5.get(i), customer_vc_6.get(i));
             }
         }
-        this.allocationManager.release(pre_hash_vector_1);
-        this.allocationManager.release(join_result_vector_ord_0_1);
-        this.allocationManager.release(join_result_vector_ord_1_1);
-        this.allocationManager.release(join_result_vector_ord_2_1);
-        this.allocationManager.release(join_result_vector_ord_3_1);
-        this.allocationManager.release(join_result_vector_ord_4_1);
-        this.allocationManager.release(join_result_vector_ord_5_1);
-        this.allocationManager.release(join_result_vector_ord_6_1);
-        this.allocationManager.release(join_result_vector_ord_7_1);
-        this.allocationManager.release(join_result_vector_ord_8_1);
-        byte[][] join_result_vector_ord_0_0 = this.allocationManager.getNestedByteVector();
-        int[] join_result_vector_ord_1_0 = this.allocationManager.getIntVector();
-        byte[][] join_result_vector_ord_2_0 = this.allocationManager.getNestedByteVector();
-        byte[][] join_result_vector_ord_3_0 = this.allocationManager.getNestedByteVector();
-        byte[][] join_result_vector_ord_4_0 = this.allocationManager.getNestedByteVector();
-        double[] join_result_vector_ord_5_0 = this.allocationManager.getDoubleVector();
-        byte[][] join_result_vector_ord_6_0 = this.allocationManager.getNestedByteVector();
-        int[] join_result_vector_ord_7_0 = this.allocationManager.getIntVector();
-        int[] join_result_vector_ord_8_0 = this.allocationManager.getIntVector();
-        // DIFF: hard-coded
-        // ArrowTableReader orders = cCtx.getArrowReader(2);
-        while (orders.loadNextBatch()) {
-            org.apache.arrow.vector.IntVector orders_vc_0 = ((org.apache.arrow.vector.IntVector) orders.getVector(0));
-            org.apache.arrow.vector.IntVector orders_vc_1 = ((org.apache.arrow.vector.IntVector) orders.getVector(1));
-            org.apache.arrow.vector.DateDayVector orders_vc_2 = ((org.apache.arrow.vector.DateDayVector) orders.getVector(4));
-            int ordinal_2_sel_vec_length = VectorisedFilterOperators.ge(orders_vc_2, 8674, ordinal_2_sel_vec);
-            int ordinal_2_sel_vec_0_length = VectorisedFilterOperators.lt(orders_vc_2, 8766, ordinal_2_sel_vec_0, ordinal_2_sel_vec, ordinal_2_sel_vec_length);
-            VectorisedHashOperators.constructPreHashKeyVector(pre_hash_vector_0, orders_vc_1, ordinal_2_sel_vec_0, ordinal_2_sel_vec_0_length, false);
-            int recordCount = ordinal_2_sel_vec_0_length;
+        int[] join_result_vector_ord_0 = this.allocationManager.getIntVector();
+        byte[][] join_result_vector_ord_1 = this.allocationManager.getNestedByteVector();
+        byte[][] join_result_vector_ord_2 = this.allocationManager.getNestedByteVector();
+        int[] join_result_vector_ord_3 = this.allocationManager.getIntVector();
+        byte[][] join_result_vector_ord_4 = this.allocationManager.getNestedByteVector();
+        double[] join_result_vector_ord_5 = this.allocationManager.getDoubleVector();
+        byte[][] join_result_vector_ord_6 = this.allocationManager.getNestedByteVector();
+        int[] join_result_vector_ord_7 = this.allocationManager.getIntVector();
+        byte[][] join_result_vector_ord_8 = this.allocationManager.getNestedByteVector();
+        // ArrowTableReader nation = cCtx.getArrowReader(1);
+        while (nation.loadNextBatch()) {
+            org.apache.arrow.vector.IntVector nation_vc_0 = ((org.apache.arrow.vector.IntVector) nation.getVector(0));
+            org.apache.arrow.vector.FixedSizeBinaryVector nation_vc_1 = ((org.apache.arrow.vector.FixedSizeBinaryVector) nation.getVector(1));
+            VectorisedHashOperators.constructPreHashKeyVector(pre_hash_vector_0, nation_vc_0, false);
+            int recordCount = nation_vc_0.getValueCount();
             int currentLoopIndex = 0;
             while ((currentLoopIndex < recordCount)) {
                 int currentResultIndex = 0;
                 while ((currentLoopIndex < recordCount)) {
-                    int selected_record_index = ordinal_2_sel_vec_0[currentLoopIndex];
-                    int right_join_key = orders_vc_1.get(selected_record_index);
-                    long right_join_key_pre_hash = pre_hash_vector_0[selected_record_index];
+                    int right_join_key = nation_vc_0.get(currentLoopIndex);
+                    long right_join_key_pre_hash = pre_hash_vector_0[currentLoopIndex];
                     int records_to_join_index = join_map_0.getIndex(right_join_key, right_join_key_pre_hash);
                     if ((records_to_join_index == -1)) {
                         currentLoopIndex++;
@@ -370,48 +293,67 @@ public class VectorisedNonSimd {
                     if ((left_join_record_count > (VectorisedOperators.VECTOR_LENGTH - currentResultIndex))) {
                         break;
                     }
-                    int right_join_ord_0 = orders_vc_0.get(selected_record_index);
+                    byte[] right_join_ord_1 = nation_vc_1.get(currentLoopIndex);
                     for (int i = 0; i < left_join_record_count; i++) {
-                        join_result_vector_ord_0_0[currentResultIndex] = join_map_0.values_record_ord_0[records_to_join_index][i];
-                        join_result_vector_ord_2_0[currentResultIndex] = join_map_0.values_record_ord_1[records_to_join_index][i];
-                        join_result_vector_ord_3_0[currentResultIndex] = join_map_0.values_record_ord_2[records_to_join_index][i];
-                        join_result_vector_ord_4_0[currentResultIndex] = join_map_0.values_record_ord_3[records_to_join_index][i];
-                        join_result_vector_ord_5_0[currentResultIndex] = join_map_0.values_record_ord_4[records_to_join_index][i];
-                        join_result_vector_ord_6_0[currentResultIndex] = join_map_0.values_record_ord_5[records_to_join_index][i];
-                        join_result_vector_ord_7_0[currentResultIndex] = right_join_ord_0;
-                        join_result_vector_ord_8_0[currentResultIndex] = right_join_key;
+                        join_result_vector_ord_0[currentResultIndex] = join_map_0.values_record_ord_0[records_to_join_index][i];
+                        join_result_vector_ord_1[currentResultIndex] = join_map_0.values_record_ord_1[records_to_join_index][i];
+                        join_result_vector_ord_2[currentResultIndex] = join_map_0.values_record_ord_2[records_to_join_index][i];
+                        join_result_vector_ord_4[currentResultIndex] = join_map_0.values_record_ord_3[records_to_join_index][i];
+                        join_result_vector_ord_5[currentResultIndex] = join_map_0.values_record_ord_4[records_to_join_index][i];
+                        join_result_vector_ord_6[currentResultIndex] = join_map_0.values_record_ord_5[records_to_join_index][i];
+                        join_result_vector_ord_7[currentResultIndex] = right_join_key;
+                        join_result_vector_ord_8[currentResultIndex] = right_join_ord_1;
                         currentResultIndex++;
                     }
                     currentLoopIndex++;
                 }
-                VectorisedHashOperators.constructPreHashKeyVector(pre_hash_vector, join_result_vector_ord_7_0, currentResultIndex, false);
+                VectorisedHashOperators.constructPreHashKeyVector(pre_hash_vector, join_result_vector_ord_0, currentResultIndex, false);
                 for (int i_0 = 0; i_0 < currentResultIndex; i_0++) {
-                    int left_join_record_key = join_result_vector_ord_7_0[i_0];
-                    join_map.associate(left_join_record_key, pre_hash_vector[i_0], join_result_vector_ord_0_0[i_0], join_result_vector_ord_8_0[i_0], join_result_vector_ord_2_0[i_0], join_result_vector_ord_3_0[i_0], join_result_vector_ord_4_0[i_0], join_result_vector_ord_5_0[i_0], join_result_vector_ord_6_0[i_0]);
+                    int left_join_record_key = join_result_vector_ord_0[i_0];
+                    join_map.associate(left_join_record_key, pre_hash_vector[i_0], join_result_vector_ord_1[i_0], join_result_vector_ord_2[i_0], join_result_vector_ord_4[i_0], join_result_vector_ord_5[i_0], join_result_vector_ord_6[i_0], join_result_vector_ord_8[i_0]);
                 }
             }
         }
         this.allocationManager.release(pre_hash_vector_0);
-        this.allocationManager.release(join_result_vector_ord_0_0);
-        this.allocationManager.release(join_result_vector_ord_1_0);
-        this.allocationManager.release(join_result_vector_ord_2_0);
-        this.allocationManager.release(join_result_vector_ord_3_0);
-        this.allocationManager.release(join_result_vector_ord_4_0);
-        this.allocationManager.release(join_result_vector_ord_5_0);
-        this.allocationManager.release(join_result_vector_ord_6_0);
-        this.allocationManager.release(join_result_vector_ord_7_0);
-        this.allocationManager.release(join_result_vector_ord_8_0);
-        byte[][] join_result_vector_ord_0 = this.allocationManager.getNestedByteVector();
-        int[] join_result_vector_ord_1 = this.allocationManager.getIntVector();
-        byte[][] join_result_vector_ord_2 = this.allocationManager.getNestedByteVector();
-        byte[][] join_result_vector_ord_3 = this.allocationManager.getNestedByteVector();
-        byte[][] join_result_vector_ord_4 = this.allocationManager.getNestedByteVector();
-        double[] join_result_vector_ord_5 = this.allocationManager.getDoubleVector();
-        byte[][] join_result_vector_ord_6 = this.allocationManager.getNestedByteVector();
-        int[] join_result_vector_ord_7 = this.allocationManager.getIntVector();
-        int[] join_result_vector_ord_8 = this.allocationManager.getIntVector();
-        double[] join_result_vector_ord_9 = this.allocationManager.getDoubleVector();
-        // DIFF: hard-coded
+        this.allocationManager.release(join_result_vector_ord_0);
+        this.allocationManager.release(join_result_vector_ord_1);
+        this.allocationManager.release(join_result_vector_ord_2);
+        this.allocationManager.release(join_result_vector_ord_3);
+        this.allocationManager.release(join_result_vector_ord_4);
+        this.allocationManager.release(join_result_vector_ord_5);
+        this.allocationManager.release(join_result_vector_ord_6);
+        this.allocationManager.release(join_result_vector_ord_7);
+        this.allocationManager.release(join_result_vector_ord_8);
+        int[] join_result_vector_ord_0_0 = this.allocationManager.getIntVector();
+        byte[][] join_result_vector_ord_1_0 = this.allocationManager.getNestedByteVector();
+        byte[][] join_result_vector_ord_2_0 = this.allocationManager.getNestedByteVector();
+        byte[][] join_result_vector_ord_3_0 = this.allocationManager.getNestedByteVector();
+        double[] join_result_vector_ord_4_0 = this.allocationManager.getDoubleVector();
+        byte[][] join_result_vector_ord_5_0 = this.allocationManager.getNestedByteVector();
+        byte[][] join_result_vector_ord_6_0 = this.allocationManager.getNestedByteVector();
+        int[] join_result_vector_ord_7_0 = this.allocationManager.getIntVector();
+        double[] join_result_vector_ord_8_0 = this.allocationManager.getDoubleVector();
+        long[] pre_hash_vector_1 = this.allocationManager.getLongVector();
+        // KeyMultiRecordMap_178601425 join_map_1 = new KeyMultiRecordMap_178601425();
+        // ArrowTableReader orders = cCtx.getArrowReader(2);
+        while (orders.loadNextBatch()) {
+            org.apache.arrow.vector.IntVector orders_vc_0 = ((org.apache.arrow.vector.IntVector) orders.getVector(0));
+            org.apache.arrow.vector.IntVector orders_vc_1 = ((org.apache.arrow.vector.IntVector) orders.getVector(1));
+            org.apache.arrow.vector.DateDayVector orders_vc_2 = ((org.apache.arrow.vector.DateDayVector) orders.getVector(4));
+            int ordinal_2_sel_vec_length = VectorisedFilterOperators.ge(orders_vc_2, 8674, ordinal_2_sel_vec);
+            int ordinal_2_sel_vec_0_length = VectorisedFilterOperators.lt(orders_vc_2, 8766, ordinal_2_sel_vec_0, ordinal_2_sel_vec, ordinal_2_sel_vec_length);
+            VectorisedHashOperators.constructPreHashKeyVector(pre_hash_vector_1, orders_vc_0, ordinal_2_sel_vec_0, ordinal_2_sel_vec_0_length, false);
+            int recordCount = ordinal_2_sel_vec_0_length;
+            for (int i = 0; i < recordCount; i++) {
+                int selected_record_index = ordinal_2_sel_vec_0[i];
+                int left_join_record_key = orders_vc_0.get(selected_record_index);
+                join_map_1.associate(left_join_record_key, pre_hash_vector_1[selected_record_index], orders_vc_1.get(selected_record_index));
+            }
+        }
+        int[] join_result_vector_ord_0_1 = this.allocationManager.getIntVector();
+        int[] join_result_vector_ord_1_1 = this.allocationManager.getIntVector();
+        int[] join_result_vector_ord_2_1 = this.allocationManager.getIntVector();
+        double[] join_result_vector_ord_3_1 = this.allocationManager.getDoubleVector();
         // ArrowTableReader lineitem = cCtx.getArrowReader(3);
         while (lineitem.loadNextBatch()) {
             org.apache.arrow.vector.IntVector lineitem_vc_0 = ((org.apache.arrow.vector.IntVector) lineitem.getVector(0));
@@ -424,7 +366,7 @@ public class VectorisedNonSimd {
             projection_computation_result_length = VectorisedArithmeticOperators.subtract(projection_literal, lineitem_vc_2, ordinal_3_sel_vec, ordinal_3_sel_vec_length, projection_computation_result);
             int projection_computation_result_0_length;
             projection_computation_result_0_length = VectorisedArithmeticOperators.multiply(lineitem_vc_1, projection_computation_result, projection_computation_result_length, ordinal_3_sel_vec, ordinal_3_sel_vec_length, projection_computation_result_0);
-            VectorisedHashOperators.constructPreHashKeyVector(pre_hash_vector, lineitem_vc_0, ordinal_3_sel_vec, ordinal_3_sel_vec_length, false);
+            VectorisedHashOperators.constructPreHashKeyVector(pre_hash_vector_1, lineitem_vc_0, ordinal_3_sel_vec, ordinal_3_sel_vec_length, false);
             int recordCount = ordinal_3_sel_vec_length;
             int currentLoopIndex = 0;
             while ((currentLoopIndex < recordCount)) {
@@ -432,55 +374,85 @@ public class VectorisedNonSimd {
                 while ((currentLoopIndex < recordCount)) {
                     int selected_record_index = ordinal_3_sel_vec[currentLoopIndex];
                     int right_join_key = lineitem_vc_0.get(selected_record_index);
-                    long right_join_key_pre_hash = pre_hash_vector[selected_record_index];
-                    int records_to_join_index = join_map.getIndex(right_join_key, right_join_key_pre_hash);
+                    long right_join_key_pre_hash = pre_hash_vector_1[selected_record_index];
+                    int records_to_join_index = join_map_1.getIndex(right_join_key, right_join_key_pre_hash);
                     if ((records_to_join_index == -1)) {
                         currentLoopIndex++;
                         continue;
                     }
-                    int left_join_record_count = join_map.keysRecordCount[records_to_join_index];
+                    int left_join_record_count = join_map_1.keysRecordCount[records_to_join_index];
                     if ((left_join_record_count > (VectorisedOperators.VECTOR_LENGTH - currentResultIndex))) {
                         break;
                     }
                     double right_join_ord_1 = projection_computation_result_0[selected_record_index];
                     for (int i = 0; i < left_join_record_count; i++) {
-                        join_result_vector_ord_0[currentResultIndex] = join_map.values_record_ord_0[records_to_join_index][i];
-                        join_result_vector_ord_1[currentResultIndex] = join_map.values_record_ord_1[records_to_join_index][i];
-                        join_result_vector_ord_2[currentResultIndex] = join_map.values_record_ord_2[records_to_join_index][i];
-                        join_result_vector_ord_3[currentResultIndex] = join_map.values_record_ord_3[records_to_join_index][i];
-                        join_result_vector_ord_4[currentResultIndex] = join_map.values_record_ord_4[records_to_join_index][i];
-                        join_result_vector_ord_5[currentResultIndex] = join_map.values_record_ord_5[records_to_join_index][i];
-                        join_result_vector_ord_6[currentResultIndex] = join_map.values_record_ord_6[records_to_join_index][i];
-                        join_result_vector_ord_8[currentResultIndex] = right_join_key;
-                        join_result_vector_ord_9[currentResultIndex] = right_join_ord_1;
+                        join_result_vector_ord_1_1[currentResultIndex] = join_map_1.values_record_ord_0[records_to_join_index][i];
+                        join_result_vector_ord_2_1[currentResultIndex] = right_join_key;
+                        join_result_vector_ord_3_1[currentResultIndex] = right_join_ord_1;
                         currentResultIndex++;
                     }
                     currentLoopIndex++;
                 }
-                VectorisedHashOperators.constructPreHashKeyVector(groupKeyPreHashVector, join_result_vector_ord_1, currentResultIndex, false);
-                VectorisedHashOperators.constructPreHashKeyVector(groupKeyPreHashVector, join_result_vector_ord_2, currentResultIndex, true);
-                VectorisedHashOperators.constructPreHashKeyVector(groupKeyPreHashVector, join_result_vector_ord_5, currentResultIndex, true);
-                VectorisedHashOperators.constructPreHashKeyVector(groupKeyPreHashVector, join_result_vector_ord_4, currentResultIndex, true);
-                VectorisedHashOperators.constructPreHashKeyVector(groupKeyPreHashVector, join_result_vector_ord_0, currentResultIndex, true);
-                VectorisedHashOperators.constructPreHashKeyVector(groupKeyPreHashVector, join_result_vector_ord_3, currentResultIndex, true);
-                VectorisedHashOperators.constructPreHashKeyVector(groupKeyPreHashVector, join_result_vector_ord_6, currentResultIndex, true);
+                VectorisedHashOperators.constructPreHashKeyVector(pre_hash_vector, join_result_vector_ord_1_1, currentResultIndex, false);
                 int recordCount_0 = currentResultIndex;
-                for (int aviv = 0; aviv < recordCount_0; aviv++) {
-                    aggregation_state_map.incrementForKey(join_result_vector_ord_1[aviv], join_result_vector_ord_2[aviv], join_result_vector_ord_5[aviv], join_result_vector_ord_4[aviv], join_result_vector_ord_0[aviv], join_result_vector_ord_3[aviv], join_result_vector_ord_6[aviv], groupKeyPreHashVector[aviv], join_result_vector_ord_9[aviv]);
+                int currentLoopIndex_0 = 0;
+                while ((currentLoopIndex_0 < recordCount_0)) {
+                    int currentResultIndex_0 = 0;
+                    while ((currentLoopIndex_0 < recordCount_0)) {
+                        int right_join_key_0 = join_result_vector_ord_1_1[currentLoopIndex_0];
+                        long right_join_key_0_pre_hash = pre_hash_vector[currentLoopIndex_0];
+                        int records_to_join_index_0 = join_map.getIndex(right_join_key_0, right_join_key_0_pre_hash);
+                        if ((records_to_join_index_0 == -1)) {
+                            currentLoopIndex_0++;
+                            continue;
+                        }
+                        int left_join_record_count_0 = join_map.keysRecordCount[records_to_join_index_0];
+                        if ((left_join_record_count_0 > (VectorisedOperators.VECTOR_LENGTH - currentResultIndex_0))) {
+                            break;
+                        }
+                        double right_join_ord_1_0 = join_result_vector_ord_3_1[currentLoopIndex_0];
+                        for (int i_0 = 0; i_0 < left_join_record_count_0; i_0++) {
+                            join_result_vector_ord_1_0[currentResultIndex_0] = join_map.values_record_ord_0[records_to_join_index_0][i_0];
+                            join_result_vector_ord_2_0[currentResultIndex_0] = join_map.values_record_ord_1[records_to_join_index_0][i_0];
+                            join_result_vector_ord_3_0[currentResultIndex_0] = join_map.values_record_ord_2[records_to_join_index_0][i_0];
+                            join_result_vector_ord_4_0[currentResultIndex_0] = join_map.values_record_ord_3[records_to_join_index_0][i_0];
+                            join_result_vector_ord_5_0[currentResultIndex_0] = join_map.values_record_ord_4[records_to_join_index_0][i_0];
+                            join_result_vector_ord_6_0[currentResultIndex_0] = join_map.values_record_ord_5[records_to_join_index_0][i_0];
+                            join_result_vector_ord_7_0[currentResultIndex_0] = right_join_key_0;
+                            join_result_vector_ord_8_0[currentResultIndex_0] = right_join_ord_1_0;
+                            currentResultIndex_0++;
+                        }
+                        currentLoopIndex_0++;
+                    }
+                    VectorisedHashOperators.constructPreHashKeyVector(groupKeyPreHashVector, join_result_vector_ord_7_0, currentResultIndex_0, false);
+                    VectorisedHashOperators.constructPreHashKeyVector(groupKeyPreHashVector, join_result_vector_ord_1_0, currentResultIndex_0, true);
+                    VectorisedHashOperators.constructPreHashKeyVector(groupKeyPreHashVector, join_result_vector_ord_4_0, currentResultIndex_0, true);
+                    VectorisedHashOperators.constructPreHashKeyVector(groupKeyPreHashVector, join_result_vector_ord_3_0, currentResultIndex_0, true);
+                    VectorisedHashOperators.constructPreHashKeyVector(groupKeyPreHashVector, join_result_vector_ord_6_0, currentResultIndex_0, true);
+                    VectorisedHashOperators.constructPreHashKeyVector(groupKeyPreHashVector, join_result_vector_ord_2_0, currentResultIndex_0, true);
+                    VectorisedHashOperators.constructPreHashKeyVector(groupKeyPreHashVector, join_result_vector_ord_5_0, currentResultIndex_0, true);
+                    int recordCount_1 = currentResultIndex_0;
+                    for (int aviv = 0; aviv < recordCount_1; aviv++) {
+                        aggregation_state_map.incrementForKey(join_result_vector_ord_7_0[aviv], join_result_vector_ord_1_0[aviv], join_result_vector_ord_4_0[aviv], join_result_vector_ord_3_0[aviv], join_result_vector_ord_6_0[aviv], join_result_vector_ord_2_0[aviv], join_result_vector_ord_5_0[aviv], groupKeyPreHashVector[aviv], join_result_vector_ord_8_0[aviv]);
+                    }
                 }
             }
         }
+        this.allocationManager.release(pre_hash_vector_1);
+        this.allocationManager.release(join_result_vector_ord_0_1);
+        this.allocationManager.release(join_result_vector_ord_1_1);
+        this.allocationManager.release(join_result_vector_ord_2_1);
+        this.allocationManager.release(join_result_vector_ord_3_1);
         this.allocationManager.release(pre_hash_vector);
-        this.allocationManager.release(join_result_vector_ord_0);
-        this.allocationManager.release(join_result_vector_ord_1);
-        this.allocationManager.release(join_result_vector_ord_2);
-        this.allocationManager.release(join_result_vector_ord_3);
-        this.allocationManager.release(join_result_vector_ord_4);
-        this.allocationManager.release(join_result_vector_ord_5);
-        this.allocationManager.release(join_result_vector_ord_6);
-        this.allocationManager.release(join_result_vector_ord_7);
-        this.allocationManager.release(join_result_vector_ord_8);
-        this.allocationManager.release(join_result_vector_ord_9);
+        this.allocationManager.release(join_result_vector_ord_0_0);
+        this.allocationManager.release(join_result_vector_ord_1_0);
+        this.allocationManager.release(join_result_vector_ord_2_0);
+        this.allocationManager.release(join_result_vector_ord_3_0);
+        this.allocationManager.release(join_result_vector_ord_4_0);
+        this.allocationManager.release(join_result_vector_ord_5_0);
+        this.allocationManager.release(join_result_vector_ord_6_0);
+        this.allocationManager.release(join_result_vector_ord_7_0);
+        this.allocationManager.release(join_result_vector_ord_8_0);
         int aggregationResultVectorLength;
         int[] groupKeyVector_0 = this.allocationManager.getIntVector();
         byte[][] groupKeyVector_1 = this.allocationManager.getNestedByteVector();
@@ -501,16 +473,16 @@ public class VectorisedNonSimd {
             VectorisedAggregationOperators.constructVector(groupKeyVector_5, aggregation_state_map.keys_ord_5, number_of_records, current_key_offset);
             VectorisedAggregationOperators.constructVector(groupKeyVector_6, aggregation_state_map.keys_ord_6, number_of_records, current_key_offset);
             VectorisedAggregationOperators.constructVector(agg_G_SUM_0_vector, aggregation_state_map.values_ord_0, number_of_records, current_key_offset);
-            // DIFF: replaced by result verification
-            // VectorisedPrintOperators.print(groupKeyVector_0, aggregationResultVectorLength);
-            // VectorisedPrintOperators.print(groupKeyVector_1, aggregationResultVectorLength);
-            // VectorisedPrintOperators.print(agg_G_SUM_0_vector, aggregationResultVectorLength);
-            // VectorisedPrintOperators.print(groupKeyVector_2, aggregationResultVectorLength);
-            // VectorisedPrintOperators.print(groupKeyVector_4, aggregationResultVectorLength);
-            // VectorisedPrintOperators.print(groupKeyVector_5, aggregationResultVectorLength);
-            // VectorisedPrintOperators.print(groupKeyVector_3, aggregationResultVectorLength);
-            // VectorisedPrintOperators.print(groupKeyVector_6, aggregationResultVectorLength);
-            // System.out.println();
+//            current_key_offset += aggregationResultVectorLength;
+//            VectorisedPrintOperators.print(groupKeyVector_0, aggregationResultVectorLength);
+//            VectorisedPrintOperators.print(groupKeyVector_1, aggregationResultVectorLength);
+//            VectorisedPrintOperators.print(agg_G_SUM_0_vector, aggregationResultVectorLength);
+//            VectorisedPrintOperators.print(groupKeyVector_2, aggregationResultVectorLength);
+//            VectorisedPrintOperators.print(groupKeyVector_4, aggregationResultVectorLength);
+//            VectorisedPrintOperators.print(groupKeyVector_5, aggregationResultVectorLength);
+//            VectorisedPrintOperators.print(groupKeyVector_3, aggregationResultVectorLength);
+//            VectorisedPrintOperators.print(groupKeyVector_6, aggregationResultVectorLength);
+//            System.out.println();
             System.arraycopy(groupKeyVector_0, 0, this.resultCustKey, current_key_offset, aggregationResultVectorLength);
             System.arraycopy(groupKeyVector_1, 0, this.resultCName, current_key_offset, aggregationResultVectorLength);
             System.arraycopy(agg_G_SUM_0_vector, 0, this.resultRevenue, current_key_offset, aggregationResultVectorLength);
