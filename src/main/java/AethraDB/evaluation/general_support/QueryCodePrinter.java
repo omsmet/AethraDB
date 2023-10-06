@@ -85,6 +85,10 @@ public class QueryCodePrinter {
             classDeclarationLine += "class " + lcd.getName() + " {";
             System.out.print(classDeclarationLine.indent(indentationLevel));
 
+            for (Java.MemberTypeDeclaration mtd : lcd.getMemberTypeDeclarations()) {
+                printCode(mtd, indentationLevel + 4);
+            }
+
             printCode(lcd.fieldDeclarationsAndInitializers, indentationLevel + 4);
             System.out.println();
 
@@ -154,6 +158,67 @@ public class QueryCodePrinter {
 
         } else {
             System.out.print(code.toString().indent(indentationLevel));
+        }
+    }
+
+    /**
+     * Method to print generated code to the standard output.
+     * @param code The code to print.
+     * @param indentationLevel The number of spaces to add before each line of the code.
+     */
+    private static void printCode(Java.MemberTypeDeclaration code, int indentationLevel) {
+        if (code instanceof Java.MemberClassDeclaration mcd) {
+            String classDeclarationLine = "";
+            for (Java.Modifier modifier : mcd.getModifiers())
+                classDeclarationLine += modifier.toString() + " ";
+            classDeclarationLine += "class " + mcd.getName() + " {";
+            System.out.print(classDeclarationLine.indent(indentationLevel));
+
+            for (Java.MemberTypeDeclaration mtd : mcd.getMemberTypeDeclarations()) {
+                printCode(mtd, indentationLevel + 4);
+            }
+
+            printCode(mcd.fieldDeclarationsAndInitializers, indentationLevel + 4);
+            System.out.println();
+
+            for (Java.ConstructorDeclarator constructorDeclarator : mcd.constructors) {
+                String constructorDeclarationLine = constructorDeclarator.getModifiers()[0].toString();
+                constructorDeclarationLine += " " + constructorDeclarator.getDeclaringType().toString() + "(";
+
+                Java.FunctionDeclarator.FormalParameter[] parameters = constructorDeclarator.formalParameters.parameters;
+                for (int i = 0; i < parameters.length; i++) {
+                    constructorDeclarationLine += parameters[i].toString();
+
+                    if (i != parameters.length - 1)
+                        constructorDeclarationLine += ", ";
+                }
+
+                constructorDeclarationLine += ") {";
+                System.out.print(constructorDeclarationLine.indent(indentationLevel + 4));
+                if (constructorDeclarator.constructorInvocation != null)
+                    printCode(constructorDeclarator.constructorInvocation, indentationLevel + 8);
+
+                printCode(constructorDeclarator.statements, indentationLevel + 8);
+                System.out.print("}".indent(indentationLevel + 4));
+            }
+            System.out.println();
+
+            for (Java.MethodDeclarator methodDeclarator : mcd.getMethodDeclarations()) {
+                String methodHeader = methodDeclarator.modifiers[0].toString() + " ";
+                methodHeader += methodDeclarator.type.toString() + " ";
+                methodHeader += methodDeclarator + " {";
+                System.out.print(methodHeader.indent(indentationLevel + 4));
+
+                printCode(methodDeclarator.statements, indentationLevel + 8);
+
+                System.out.print("}".indent(indentationLevel + 4));
+
+            }
+
+            System.out.println("}".indent(indentationLevel));
+
+        } else {
+            System.out.println(code.toString().indent(indentationLevel));
         }
     }
 

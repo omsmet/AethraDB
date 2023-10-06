@@ -20,10 +20,10 @@ public class JaninoGeneralGen {
      */
     public static Location getLocation() {
         // Only enable when debugging is required
-        // Exception e = new Exception();
-        // StackTraceElement ste = e.getStackTrace()[1]; // we only care about our caller
-        // return new Location(ste.getFileName(), ste.getLineNumber(), 0);
-        return Location.NOWHERE;
+         Exception e = new Exception();
+         StackTraceElement ste = e.getStackTrace()[1]; // we only care about our caller
+         return new Location(ste.getFileName(), ste.getLineNumber(), 0);
+//        return Location.NOWHERE;
     }
 
     /**

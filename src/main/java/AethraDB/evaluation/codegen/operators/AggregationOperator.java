@@ -25,7 +25,6 @@ import AethraDB.util.language.AethraExpression;
 import AethraDB.util.language.function.AethraFunction;
 import AethraDB.util.language.function.aggregation.AethraCountAggregation;
 import AethraDB.util.language.function.aggregation.AethraSumAggregation;
-import org.codehaus.commons.compiler.CompileException;
 import org.codehaus.janino.Java;
 
 import java.util.ArrayList;
@@ -283,7 +282,6 @@ public class AggregationOperator extends CodeGenOperator {
 
             // Generate the value exposure within the forLoopBody and update the ordinal mapping
             // Currently, this operator only supports exposing the result in a non-SIMD fashion.
-            // TODO: consider SIMD-compatible result exposure when required.
 
             // Property: group-by aggregates first expose the group keys and then the aggregate results
             List<AccessPath> newOrdinalMapping = new ArrayList<>(this.groupByKeyColumnIndices.length + this.aggregationFunctions.length);
@@ -291,7 +289,34 @@ public class AggregationOperator extends CodeGenOperator {
 
             // Simply expose each record as a set of scalar variables
             // First expose the group-by key values
-            // [groupKey_j] = [this.aggregationStateVariable.read()].[this.agregationMapGenerator.keyVariableNames[j]][key_i];
+            // MapType.RecordType currentRecord = [this.aggregationStateVariable.read()].recordsArray[key_i];
+            // [groupKey_j] = currentRecord.[this.aggregationMapGenerator.keyFieldNames[j]];
+            String currentRecord = cCtx.defineVariable("currentRecord");
+            forLoopBody.addStatement(
+                    createLocalVariable(
+                            JaninoGeneralGen.getLocation(),
+                            new Java.ReferenceType(
+                                    JaninoGeneralGen.getLocation(),
+                                    new Java.Annotation[0],
+                                    new String[] {
+                                            this.aggregationMapGenerator.mapDeclaration.name,
+                                            this.aggregationMapGenerator.recordDeclaration.name
+                                    },
+                                    null
+                            ),
+                            currentRecord,
+                            JaninoGeneralGen.createArrayElementAccessExpr(
+                                    JaninoGeneralGen.getLocation(),
+                                    new Java.FieldAccessExpression(
+                                            JaninoGeneralGen.getLocation(),
+                                            ((MapAccessPath) this.aggregationStateVariables[0]).read(),
+                                            KeyValueMapGenerator.recordArrayName
+                                    ),
+                                    keyIterationIndexVariable.read()
+                            )
+                    )
+            );
+
             for (int j = 0; j < this.groupByKeyColumnIndices.length; j++) {
                 ScalarVariableAccessPath groupKeyAP = new ScalarVariableAccessPath(
                         cCtx.defineVariable("groupKey_" + j),
@@ -302,14 +327,10 @@ public class AggregationOperator extends CodeGenOperator {
                                 JaninoGeneralGen.getLocation(),
                                 toJavaType(JaninoGeneralGen.getLocation(), groupKeyAP.getType()),
                                 groupKeyAP.getVariableName(),
-                                JaninoGeneralGen.createArrayElementAccessExpr(
+                                new Java.FieldAccessExpression(
                                         JaninoGeneralGen.getLocation(),
-                                        new Java.FieldAccessExpression(
-                                                JaninoGeneralGen.getLocation(),
-                                                ((MapAccessPath) this.aggregationStateVariables[0]).read(),
-                                                this.aggregationMapGenerator.keyVariableNames[j]
-                                        ),
-                                        keyIterationIndexVariable.read()
+                                        JaninoGeneralGen.createAmbiguousNameRef(JaninoGeneralGen.getLocation(), currentRecord),
+                                        this.aggregationMapGenerator.keyFieldNames[j]
                                 )
                         )
                 );
@@ -334,14 +355,10 @@ public class AggregationOperator extends CodeGenOperator {
                                     JaninoGeneralGen.getLocation(),
                                     toJavaType(JaninoGeneralGen.getLocation(), aggregationValue.getType()),
                                     aggregationValue.getVariableName(),
-                                    JaninoGeneralGen.createArrayElementAccessExpr(
+                                    new Java.FieldAccessExpression(
                                             JaninoGeneralGen.getLocation(),
-                                            new Java.FieldAccessExpression(
-                                                    JaninoGeneralGen.getLocation(),
-                                                    ((MapAccessPath) this.aggregationStateVariables[0]).read(),
-                                                    this.aggregationMapGenerator.valueVariableNames[currentMapValueOrdinalIndex]
-                                            ),
-                                            keyIterationIndexVariable.read()
+                                            JaninoGeneralGen.createAmbiguousNameRef(JaninoGeneralGen.getLocation(), currentRecord),
+                                            this.aggregationMapGenerator.valueFieldNames[currentMapValueOrdinalIndex]
                                     )
                             )
                     );
@@ -877,69 +894,134 @@ public class AggregationOperator extends CodeGenOperator {
                     )
             );
 
-            // Construct the key vectors
+            // Construct the vectors
+            // int currentSourceIndex = current_key_offset;
+            // int currentResultIndex = 0;
+            // while (currentSourceIndex < number_of_records && currentResultIndex < VectorisedOperators.VECTOR_LENGTH) {
+            //     MapType.RecordType currentRecord = this.aggregation_state_map.recordArray[currentSourceIndex++];
+            //     [Write key and value vectors]
+            //     currentResultIndex++;
+            // }
+
+            ScalarVariableAccessPath currentSourceIndex = new ScalarVariableAccessPath(
+                    cCtx.defineVariable("currentSourceIndex"), P_INT);
+            whileLoopBody.addStatement(
+                    createLocalVariable(
+                            JaninoGeneralGen.getLocation(),
+                            toJavaType(JaninoGeneralGen.getLocation(), currentSourceIndex.getType()),
+                            currentSourceIndex.getVariableName(),
+                            currentKeyOffsetVariable.read()
+                    )
+            );
+
+            ScalarVariableAccessPath currentResultIndex = new ScalarVariableAccessPath(
+                    cCtx.defineVariable("currentResultIndex"), P_INT);
+            whileLoopBody.addStatement(
+                    createLocalVariable(
+                            JaninoGeneralGen.getLocation(),
+                            toJavaType(JaninoGeneralGen.getLocation(), currentResultIndex.getType()),
+                            currentResultIndex.getVariableName(),
+                            JaninoGeneralGen.createIntegerLiteral(JaninoGeneralGen.getLocation(), 0)
+                    )
+            );
+
+            Java.Block constructionLoopBody = new Java.Block(JaninoGeneralGen.getLocation());
+            whileLoopBody.addStatement(
+                    JaninoControlGen.createWhileLoop(
+                            JaninoGeneralGen.getLocation(),
+                            JaninoOperatorGen.and(
+                                    JaninoGeneralGen.getLocation(),
+                                    JaninoOperatorGen.lt(
+                                            JaninoGeneralGen.getLocation(),
+                                            currentSourceIndex.read(),
+                                            numberOfRecordsAP.read()
+                                    ),
+                                    JaninoOperatorGen.lt(
+                                            JaninoGeneralGen.getLocation(),
+                                            currentResultIndex.read(),
+                                            new Java.FieldAccessExpression(
+                                                    JaninoGeneralGen.getLocation(),
+                                                    JaninoGeneralGen.createAmbiguousNameRef(JaninoGeneralGen.getLocation(), "VectorisedOperators"),
+                                                    "VECTOR_LENGTH"
+                                            )
+                                    )
+                            ),
+                            constructionLoopBody
+                    )
+            );
+
+            // Get the current record
+            String currentRecord = cCtx.defineVariable("currentRecord");
+            constructionLoopBody.addStatement(
+                    createLocalVariable(
+                            JaninoGeneralGen.getLocation(),
+                            new Java.ReferenceType(
+                                    JaninoGeneralGen.getLocation(),
+                                    new Java.Annotation[0],
+                                    new String[] {
+                                            this.aggregationMapGenerator.mapDeclaration.name,
+                                            this.aggregationMapGenerator.recordDeclaration.name
+                                    },
+                                    null
+                            ),
+                            currentRecord,
+                            JaninoGeneralGen.createArrayElementAccessExpr(
+                                    JaninoGeneralGen.getLocation(),
+                                    new Java.FieldAccessExpression(
+                                            JaninoGeneralGen.getLocation(),
+                                            ((MapAccessPath) this.aggregationStateVariables[0]).read(),
+                                            KeyValueMapGenerator.recordArrayName
+                                    ),
+                                    JaninoOperatorGen.postIncrement(JaninoGeneralGen.getLocation(), currentSourceIndex.write())
+                            )
+                    )
+            );
+
+            // Key vector assignment statements
             for (int i = 0; i < this.groupByKeyColumnIndices.length; i++) {
-                Java.MethodInvocation vectorConstructionMethodInvocation = createMethodInvocation(
-                        JaninoGeneralGen.getLocation(),
-                        JaninoGeneralGen.createAmbiguousNameRef(JaninoGeneralGen.getLocation(), "VectorisedAggregationOperators"),
-                        "constructVector",
-                        new Java.Rvalue[] {
-                                groupKeyVectorsAPs[i].getVectorVariable().read(),
+                constructionLoopBody.addStatement(
+                        createVariableAssignmentStm(
+                                JaninoGeneralGen.getLocation(),
+                                JaninoGeneralGen.createArrayElementAccessExpr(
+                                        JaninoGeneralGen.getLocation(),
+                                        groupKeyVectorsAPs[i].getVectorVariable().read(),
+                                        currentResultIndex.read()
+                                ),
                                 new Java.FieldAccessExpression(
                                         JaninoGeneralGen.getLocation(),
-                                        ((MapAccessPath) this.aggregationStateVariables[0]).read(),
-                                        this.aggregationMapGenerator.keyVariableNames[i]
-                                ),
-                                numberOfRecordsAP.read(),
-                                currentKeyOffsetVariable.read()
-                        }
+                                        JaninoGeneralGen.createAmbiguousNameRef(
+                                                JaninoGeneralGen.getLocation(),
+                                                currentRecord
+                                        ),
+                                        this.aggregationMapGenerator.keyFieldNames[i]
+                                )
+                        )
                 );
-
-                if (i == 0) {
-                    // On the first key vector, we need to initialise the aggregation result vector length
-                    whileLoopBody.addStatement(
-                            createVariableAssignmentStm(
-                                    JaninoGeneralGen.getLocation(),
-                                    aggregationResultVectorLengthAP.write(),
-                                    vectorConstructionMethodInvocation
-                            )
-                    );
-
-                } else {
-                    // On the remaining key vectors, we only care that the method is invoked
-                    try {
-                        whileLoopBody.addStatement(
-                                new Java.ExpressionStatement(vectorConstructionMethodInvocation));
-
-                    } catch (CompileException e) {
-                        throw new RuntimeException(
-                                "AggregationOperator.produceVec: exception occurred while wrapping method invocation in statement", e);
-                    }
-                }
             }
 
-            // Create each value vector based on the aggregation type
+            // Create each result value vector based on the aggregation type
             currentMapValueOrdinalIndex = 0;
             for (int i = 0; i < this.aggregationFunctions.length; i++) {
                 AggregationFunction currentFunction = this.aggregationFunctions[i];
 
                 if (currentFunction == AggregationFunction.G_COUNT || currentFunction == AggregationFunction.G_SUM) {
                     // The value vector can simply be constructed by obtaining values from the aggregation state map
-                    whileLoopBody.addStatement(
-                            createMethodInvocationStm(
+                    constructionLoopBody.addStatement(
+                            createVariableAssignmentStm(
                                     JaninoGeneralGen.getLocation(),
-                                    JaninoGeneralGen.createAmbiguousNameRef(JaninoGeneralGen.getLocation(), "VectorisedAggregationOperators"),
-                                    "constructVector",
-                                    new Java.Rvalue[] {
+                                    JaninoGeneralGen.createArrayElementAccessExpr(
+                                            JaninoGeneralGen.getLocation(),
                                             aggregationResultAPs[i].getVectorVariable().read(),
-                                            new Java.FieldAccessExpression(
+                                            currentResultIndex.read()
+                                    ),
+                                    new Java.FieldAccessExpression(
+                                            JaninoGeneralGen.getLocation(),
+                                            JaninoGeneralGen.createAmbiguousNameRef(
                                                     JaninoGeneralGen.getLocation(),
-                                                    ((MapAccessPath) this.aggregationStateVariables[0]).read(),
-                                                    this.aggregationMapGenerator.valueVariableNames[currentMapValueOrdinalIndex]
+                                                    currentRecord
                                             ),
-                                            numberOfRecordsAP.read(),
-                                            currentKeyOffsetVariable.read()
-                                    }
+                                            this.aggregationMapGenerator.valueFieldNames[i]
+                                    )
                             )
                     );
                     currentMapValueOrdinalIndex++;
@@ -948,6 +1030,23 @@ public class AggregationOperator extends CodeGenOperator {
 
                 // No other possibilities due to constructor
             }
+
+            // Ensure we move onto the next result index at the end of the result construction loop
+            constructionLoopBody.addStatement(
+                    JaninoOperatorGen.postIncrementStm(
+                            JaninoGeneralGen.getLocation(),
+                            currentResultIndex.write()
+                    )
+            );
+
+            // Update the length of the aggregation result
+            whileLoopBody.addStatement(
+                    createVariableAssignmentStm(
+                            JaninoGeneralGen.getLocation(),
+                            aggregationResultVectorLengthAP.write(),
+                            currentResultIndex.read()
+                    )
+            );
 
             // Store the next key offset
             whileLoopBody.addStatement(
@@ -1223,7 +1322,7 @@ public class AggregationOperator extends CodeGenOperator {
             ScalarVariableAccessPath recordIndexAP = aviv; // Variable to allow record accessing via a selection vector
 
             Java.Rvalue[] incrementForKeyArguments =
-                    new Java.Rvalue[this.groupByKeyColumnIndices.length + 1 + this.aggregationMapGenerator.valueVariableNames.length];
+                    new Java.Rvalue[this.groupByKeyColumnIndices.length + 1 + this.aggregationMapGenerator.valueFieldNames.length];
             int currentArgumentIndex = 0;
 
             // Initialise the record count, perform filtering if necessary and update record indexing AP if needed
