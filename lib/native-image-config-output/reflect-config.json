@@ -1,0 +1,492 @@
+[
+{
+  "name":"AethraDB.evaluation.codegen.GeneratedQuery",
+  "allDeclaredFields":true,
+  "allDeclaredClasses":true,
+  "queryAllDeclaredMethods":true,
+  "queryAllDeclaredConstructors":true
+},
+{
+  "name":"AethraDB.evaluation.codegen.infrastructure.context.CodeGenContext",
+  "queryAllDeclaredMethods":true
+},
+{
+  "name":"AethraDB.evaluation.codegen.infrastructure.context.OptimisationContext"
+},
+{
+  "name":"AethraDB.evaluation.codegen.infrastructure.data.AllocationManager",
+  "queryAllDeclaredMethods":true
+},
+{
+  "name":"AethraDB.evaluation.codegen.infrastructure.data.ArrowTableReader",
+  "queryAllDeclaredMethods":true
+},
+{
+  "name":"AethraDB.evaluation.general_support.ArrowOptimisations",
+  "queryAllDeclaredMethods":true
+},
+{
+  "name":"AethraDB.evaluation.general_support.hashmaps.Char_Arr_Hash_Function",
+  "queryAllDeclaredMethods":true
+},
+{
+  "name":"AethraDB.evaluation.general_support.hashmaps.Double_Hash_Function",
+  "queryAllDeclaredMethods":true
+},
+{
+  "name":"AethraDB.evaluation.general_support.hashmaps.Int_Hash_Function",
+  "queryAllDeclaredMethods":true
+},
+{
+  "name":"AethraDB.evaluation.non_vector_support.LikeOperatorPrimitives"
+},
+{
+  "name":"AethraDB.evaluation.vector_support.VectorisedAggregationOperators",
+  "queryAllDeclaredMethods":true
+},
+{
+  "name":"AethraDB.evaluation.vector_support.VectorisedArithmeticOperators",
+  "queryAllDeclaredMethods":true
+},
+{
+  "name":"AethraDB.evaluation.vector_support.VectorisedFilterOperators",
+  "queryAllDeclaredMethods":true
+},
+{
+  "name":"AethraDB.evaluation.vector_support.VectorisedHashOperators",
+  "queryAllDeclaredMethods":true
+},
+{
+  "name":"AethraDB.evaluation.vector_support.VectorisedOperators",
+  "allDeclaredFields":true,
+  "queryAllDeclaredMethods":true
+},
+{
+  "name":"AethraDB.evaluation.vector_support.VectorisedPrintOperators",
+  "queryAllDeclaredMethods":true
+},
+{
+  "name":"Arrays"
+},
+{
+  "name":"ArrowOptimisations"
+},
+{
+  "name":"Char_Arr_Hash_Function"
+},
+{
+  "name":"Double"
+},
+{
+  "name":"Double_Hash_Function"
+},
+{
+  "name":"Int_Hash_Function"
+},
+{
+  "name":"Integer"
+},
+{
+  "name":"String"
+},
+{
+  "name":"System"
+},
+{
+  "name":"VectorisedAggregationOperators"
+},
+{
+  "name":"VectorisedArithmeticOperators"
+},
+{
+  "name":"VectorisedFilterOperators"
+},
+{
+  "name":"VectorisedHashOperators"
+},
+{
+  "name":"VectorisedOperators"
+},
+{
+  "name":"VectorisedPrintOperators"
+},
+{
+  "name":"[B"
+},
+{
+  "name":"[Ljava.lang.String;"
+},
+{
+  "name":"[Lsun.security.pkcs.SignerInfo;"
+},
+{
+  "name":"java.io.Closeable",
+  "queryAllDeclaredMethods":true
+},
+{
+  "name":"java.io.FilterOutputStream",
+  "queryAllDeclaredMethods":true
+},
+{
+  "name":"java.io.Flushable",
+  "queryAllDeclaredMethods":true
+},
+{
+  "name":"java.io.IOException"
+},
+{
+  "name":"java.io.OutputStream",
+  "queryAllDeclaredMethods":true
+},
+{
+  "name":"java.io.PrintStream",
+  "queryAllDeclaredMethods":true
+},
+{
+  "name":"java.io.Serializable",
+  "queryAllDeclaredMethods":true
+},
+{
+  "name":"java.lang.AbstractStringBuilder"
+},
+{
+  "name":"java.lang.Appendable",
+  "queryAllDeclaredMethods":true
+},
+{
+  "name":"java.lang.AssertionError"
+},
+{
+  "name":"java.lang.AutoCloseable",
+  "queryAllDeclaredMethods":true
+},
+{
+  "name":"java.lang.Boolean"
+},
+{
+  "name":"java.lang.Byte"
+},
+{
+  "name":"java.lang.CharSequence",
+  "queryAllDeclaredMethods":true
+},
+{
+  "name":"java.lang.Character"
+},
+{
+  "name":"java.lang.Class"
+},
+{
+  "name":"java.lang.Cloneable"
+},
+{
+  "name":"java.lang.Comparable",
+  "queryAllDeclaredMethods":true
+},
+{
+  "name":"java.lang.Double",
+  "allDeclaredFields":true
+},
+{
+  "name":"java.lang.Enum",
+  "queryAllDeclaredMethods":true
+},
+{
+  "name":"java.lang.Error"
+},
+{
+  "name":"java.lang.Exception"
+},
+{
+  "name":"java.lang.Float"
+},
+{
+  "name":"java.lang.IllegalArgumentException",
+  "queryAllDeclaredConstructors":true
+},
+{
+  "name":"java.lang.IllegalStateException"
+},
+{
+  "name":"java.lang.Integer",
+  "allDeclaredFields":true
+},
+{
+  "name":"java.lang.Iterable",
+  "queryAllDeclaredMethods":true
+},
+{
+  "name":"java.lang.Long"
+},
+{
+  "name":"java.lang.Number"
+},
+{
+  "name":"java.lang.Object",
+  "allDeclaredFields":true,
+  "allDeclaredClasses":true,
+  "queryAllDeclaredMethods":true,
+  "queryAllDeclaredConstructors":true
+},
+{
+  "name":"java.lang.Override"
+},
+{
+  "name":"java.lang.RuntimeException"
+},
+{
+  "name":"java.lang.Short"
+},
+{
+  "name":"java.lang.String",
+  "queryAllDeclaredMethods":true,
+  "queryAllDeclaredConstructors":true
+},
+{
+  "name":"java.lang.StringBuffer"
+},
+{
+  "name":"java.lang.StringBuilder",
+  "queryAllDeclaredMethods":true,
+  "queryAllDeclaredConstructors":true
+},
+{
+  "name":"java.lang.System",
+  "allDeclaredFields":true,
+  "queryAllDeclaredMethods":true
+},
+{
+  "name":"java.lang.Throwable",
+  "queryAllDeclaredMethods":true
+},
+{
+  "name":"java.lang.UnsupportedOperationException",
+  "queryAllDeclaredConstructors":true
+},
+{
+  "name":"java.lang.Void"
+},
+{
+  "name":"java.lang.annotation.Retention"
+},
+{
+  "name":"java.lang.constant.Constable",
+  "queryAllDeclaredMethods":true
+},
+{
+  "name":"java.lang.constant.ConstantDesc",
+  "queryAllDeclaredMethods":true
+},
+{
+  "name":"java.lang.foreign.MemorySegment"
+},
+{
+  "name":"java.nio.Buffer",
+  "fields":[{"name":"address"}]
+},
+{
+  "name":"java.nio.DirectByteBuffer",
+  "methods":[{"name":"<init>","parameterTypes":["long","long"] }]
+},
+{
+  "name":"java.nio.charset.Charset"
+},
+{
+  "name":"java.security.AlgorithmParametersSpi"
+},
+{
+  "name":"java.security.MessageDigestSpi"
+},
+{
+  "name":"java.security.interfaces.DSAPrivateKey"
+},
+{
+  "name":"java.security.interfaces.DSAPublicKey"
+},
+{
+  "name":"java.security.spec.DSAParameterSpec"
+},
+{
+  "name":"java.time"
+},
+{
+  "name":"java.time.LocalDate",
+  "queryAllDeclaredMethods":true
+},
+{
+  "name":"java.time.chrono.ChronoLocalDate",
+  "queryAllDeclaredMethods":true
+},
+{
+  "name":"java.time.format"
+},
+{
+  "name":"java.time.format.DateTimeFormatter",
+  "queryAllDeclaredMethods":true
+},
+{
+  "name":"java.time.temporal.Temporal",
+  "queryAllDeclaredMethods":true
+},
+{
+  "name":"java.time.temporal.TemporalAccessor",
+  "queryAllDeclaredMethods":true
+},
+{
+  "name":"java.time.temporal.TemporalAdjuster",
+  "queryAllDeclaredMethods":true
+},
+{
+  "name":"java.util.ArrayList"
+},
+{
+  "name":"java.util.Arrays",
+  "queryAllDeclaredMethods":true
+},
+{
+  "name":"java.util.Comparator"
+},
+{
+  "name":"java.util.Date"
+},
+{
+  "name":"java.util.Iterator",
+  "queryAllDeclaredMethods":true
+},
+{
+  "name":"java.util.Locale"
+},
+{
+  "name":"javax.security.auth.x500.X500Principal",
+  "fields":[{"name":"thisX500Name"}],
+  "methods":[{"name":"<init>","parameterTypes":["sun.security.x509.X500Name"] }]
+},
+{
+  "name":"org.apache.arrow.memory.ArrowBuf"
+},
+{
+  "name":"org.apache.arrow.memory.DefaultAllocationManagerFactory",
+  "fields":[{"name":"FACTORY"}]
+},
+{
+  "name":"org.apache.arrow.vector.BaseFixedWidthVector",
+  "queryAllDeclaredMethods":true
+},
+{
+  "name":"org.apache.arrow.vector.BaseIntVector",
+  "queryAllDeclaredMethods":true
+},
+{
+  "name":"org.apache.arrow.vector.BaseValueVector",
+  "queryAllDeclaredMethods":true
+},
+{
+  "name":"org.apache.arrow.vector.BaseVariableWidthVector",
+  "queryAllDeclaredMethods":true
+},
+{
+  "name":"org.apache.arrow.vector.DateDayVector",
+  "queryAllDeclaredMethods":true
+},
+{
+  "name":"org.apache.arrow.vector.DensityAwareVector",
+  "queryAllDeclaredMethods":true
+},
+{
+  "name":"org.apache.arrow.vector.ElementAddressableVector",
+  "queryAllDeclaredMethods":true
+},
+{
+  "name":"org.apache.arrow.vector.FieldVector",
+  "queryAllDeclaredMethods":true
+},
+{
+  "name":"org.apache.arrow.vector.FixedSizeBinaryVector",
+  "queryAllDeclaredMethods":true
+},
+{
+  "name":"org.apache.arrow.vector.FixedWidthVector",
+  "queryAllDeclaredMethods":true
+},
+{
+  "name":"org.apache.arrow.vector.Float8Vector",
+  "queryAllDeclaredMethods":true
+},
+{
+  "name":"org.apache.arrow.vector.FloatingPointVector",
+  "queryAllDeclaredMethods":true
+},
+{
+  "name":"org.apache.arrow.vector.IntVector",
+  "queryAllDeclaredMethods":true
+},
+{
+  "name":"org.apache.arrow.vector.ValueVector",
+  "queryAllDeclaredMethods":true
+},
+{
+  "name":"org.apache.arrow.vector.VarCharVector",
+  "queryAllDeclaredMethods":true
+},
+{
+  "name":"org.apache.arrow.vector.VariableWidthVector",
+  "queryAllDeclaredMethods":true
+},
+{
+  "name":"org.apache.arrow.vector.VectorDefinitionSetter",
+  "queryAllDeclaredMethods":true
+},
+{
+  "name":"org.apache.arrow.vector.holders.NullableDateDayHolder"
+},
+{
+  "name":"org.apache.arrow.vector.holders.NullableFixedSizeBinaryHolder"
+},
+{
+  "name":"org.apache.arrow.vector.holders.NullableFloat8Holder"
+},
+{
+  "name":"org.apache.arrow.vector.holders.NullableIntHolder"
+},
+{
+  "name":"org.apache.arrow.vector.holders.NullableVarCharHolder"
+},
+{
+  "name":"org.apache.arrow.vector.ipc.ArrowMagic",
+  "fields":[{"name":"MAGIC_LENGTH"}],
+  "methods":[{"name":"validateMagic","parameterTypes":["byte[]"] }]
+},
+{
+  "name":"sun.misc.Unsafe",
+  "fields":[{"name":"theUnsafe"}]
+},
+{
+  "name":"sun.security.provider.DSA$SHA256withDSA",
+  "methods":[{"name":"<init>","parameterTypes":[] }]
+},
+{
+  "name":"sun.security.provider.DSAKeyFactory",
+  "methods":[{"name":"<init>","parameterTypes":[] }]
+},
+{
+  "name":"sun.security.provider.DSAParameters",
+  "methods":[{"name":"<init>","parameterTypes":[] }]
+},
+{
+  "name":"sun.security.provider.SHA2$SHA256",
+  "methods":[{"name":"<init>","parameterTypes":[] }]
+},
+{
+  "name":"sun.security.provider.X509Factory",
+  "methods":[{"name":"<init>","parameterTypes":[] }]
+},
+{
+  "name":"sun.security.util.ObjectIdentifier"
+},
+{
+  "name":"sun.security.x509.CertificateExtensions"
+},
+{
+  "name":"sun.security.x509.X509CertImpl"
+}
+]

@@ -82,4 +82,28 @@ public abstract class ArrowTableReader implements AutoCloseable {
      */
     protected abstract void specificClose() throws Exception;
 
+    /**
+     * Method to get the Arrow {@link File} which will be read by {@code this}.
+     * @return The Arrow {@link File} which will be read by {@code this}.
+     */
+    public File getArrowFile() {
+        return this.arrowFile;
+    }
+
+    /**
+     * Method to check if the {@link ArrowTableReader} represented by {@code this} projects columns.
+     * @return Whether the {@link ArrowTableReader} represented by {@code this} projects columns.
+     */
+    public boolean projectsColumns() {
+        return this.useProjectingArrowReader;
+    }
+
+    /**
+     * Method to obtain the projected columns of the {@link ArrowTableReader} represented by {@code this}.
+     * @return The projected columns of the {@link ArrowTableReader} represented by {@code this}.
+     */
+    public int[] getColumnsToProject() {
+        return this.columnsToProject;
+    }
+
 }

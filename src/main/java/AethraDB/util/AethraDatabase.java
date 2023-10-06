@@ -23,8 +23,10 @@ public class AethraDatabase {
      */
     public static CodeGenOperator planQuery(String databasePath, String queryPath) {
         // Plan the query via the native library
-        if (!libraryLoaded)
+        if (!libraryLoaded) {
             System.load("/usr/lib/AethraDB/AethraDB-Planner-Lib.so");
+            libraryLoaded = true;
+        }
 
         long isolateThread = createIsolate();
         final String queryPlan = plan(isolateThread, databasePath, queryPath);

@@ -1,13 +1,7 @@
 package AethraDB;
 
 import AethraDB.evaluation.codegen.GeneratedQuery;
-import AethraDB.evaluation.codegen.QueryCodeGenerator;
-import AethraDB.evaluation.codegen.infrastructure.context.CodeGenContext;
-import AethraDB.evaluation.codegen.infrastructure.context.OptimisationContext;
-import AethraDB.evaluation.codegen.operators.CodeGenOperator;
-import AethraDB.evaluation.codegen.operators.QueryResultCountOperator;
-import AethraDB.evaluation.codegen.operators.QueryResultPrinterOperator;
-import AethraDB.util.AethraDatabase;
+import AethraDB.util.AethraGenerator;
 import org.apache.arrow.memory.RootAllocator;
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
@@ -33,11 +27,6 @@ public class AethraDB {
      * Command line option for obtaining the file that contains the SQL query to be executed.
      */
     private static Option queryFilePath;
-
-    /**
-     * Command line option for enabling verbose output.
-     */
-    private static Option verboseOutput;
 
     /**
      * Command line option for selecting the query processing paradigm.
@@ -94,9 +83,6 @@ public class AethraDB {
         if (!queryFile.exists() || !queryFile.isFile())
             throw new IllegalStateException("The query file does not exist");
 
-        // Check if verbose output is enabled
-        boolean verboseOutputEnabled = cmdArguments.hasOption(verboseOutput);
-
         // We define total time to start here (as it is most similar to duckdb)
         totalTimeStart = System.nanoTime();
 
@@ -113,42 +99,21 @@ public class AethraDB {
             return;
         }
 
+        // Check whether the result should be summarised
+        boolean shouldSummarise = cmdArguments.hasOption(summariseAsCount);
+
         // Initialise the arrow root allocator
         RootAllocator arrowRootAllocator = new RootAllocator();
 
-        // Take time when query planning starts
-        queryPlanningStart = System.nanoTime();
-
-        // Plan the query
-        CodeGenOperator queryRootOperator = AethraDatabase.planQuery(databaseDirectoryPath, queryFile.getPath());
-
-        // Take time when query planning ends
-        queryPlanningEnd = System.nanoTime();
-
-        // Take time when the code generation starts (and query planning has finished)
-        codeGenerationStart = System.nanoTime();
-
-        // Create the contexts required for code generation
-        CodeGenContext cCtx = new CodeGenContext(arrowRootAllocator);
-        OptimisationContext oCtx = new OptimisationContext();
-
-        // Generate code for the query which prints the result to the standard output
-        // while summarising the result if necessary
-        boolean shouldSummarise = cmdArguments.hasOption(summariseAsCount);
-        if (shouldSummarise)
-            queryRootOperator = new QueryResultCountOperator(queryRootOperator);
-        CodeGenOperator printOperator = new QueryResultPrinterOperator(queryRootOperator);
-        QueryCodeGenerator queryCodeGenerator = new QueryCodeGenerator(cCtx, oCtx, printOperator, useVectorisedProcessing);
-
-        GeneratedQuery generatedQuery;
-        try {
-            generatedQuery = queryCodeGenerator.generateQuery(verboseOutputEnabled);
-        } catch (Exception e) {
-            throw new RuntimeException("Could not generate code for query", e);
-        }
+        // Plan, generate and instantiate the query
+        GeneratedQuery generatedQuery = AethraGenerator.planGenerateCompileQuery(
+                arrowRootAllocator,
+                databaseDirectoryPath,
+                queryFile.getPath(),
+                useVectorisedProcessing,
+                shouldSummarise);
 
         // Execute the generated query
-        System.out.println("[Query result]");
         queryExecutionStart = System.nanoTime();
         generatedQuery.execute();
         queryExecutionEnd = System.nanoTime();
@@ -201,16 +166,6 @@ public class AethraDB {
                 .desc("The file containing the SQL query to be executed")
                 .build();
         options.addOption(queryFilePath);
-
-        // Define option for enabling verbose output
-        verboseOutput = Option
-                .builder("v")
-                .longOpt("verbose")
-                .hasArg(false)
-                .required(false)
-                .desc("Output verbose query processing information to the standard output")
-                .build();
-        options.addOption(verboseOutput);
 
         // Define option for selecting the query processing paradigm
         processingParadigm = Option

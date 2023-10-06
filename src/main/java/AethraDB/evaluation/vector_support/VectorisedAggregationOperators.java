@@ -2,8 +2,6 @@ package AethraDB.evaluation.vector_support;
 
 import AethraDB.evaluation.general_support.hashmaps.KeyValueMapGenerator;
 
-import java.util.function.Function;
-
 /**
  * Class containing vectorised primitives for aggregation operators.
  */
