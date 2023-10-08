@@ -1684,9 +1684,7 @@ public class KeyValueMapGenerator {
     }
 
     /**
-     * Method to generate the reset method, which "clears" the generated map. This is achieved
-     * by simply resetting the keys, keysRecordCount and next arrays, as well as the hash-table and
-     * the numberOfRecords value. The value arrays are also zeroed.
+     * Method to generate the reset method, which "clears" the generated map.
      */
     private void generateResetMethod() {
         List<Java.Statement> resetMethodBody = new ArrayList<>();
