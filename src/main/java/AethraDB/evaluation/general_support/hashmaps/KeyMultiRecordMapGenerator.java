@@ -39,6 +39,7 @@ import static AethraDB.evaluation.codegen.infrastructure.janino.JaninoMethodGen.
 import static AethraDB.evaluation.codegen.infrastructure.janino.JaninoMethodGen.createMethodInvocationStm;
 import static AethraDB.evaluation.codegen.infrastructure.janino.JaninoMethodGen.createReturnStm;
 import static AethraDB.evaluation.codegen.infrastructure.janino.JaninoOperatorGen.lt;
+import static AethraDB.evaluation.codegen.infrastructure.janino.JaninoOperatorGen.mul;
 import static AethraDB.evaluation.codegen.infrastructure.janino.JaninoOperatorGen.postIncrement;
 import static AethraDB.evaluation.codegen.infrastructure.janino.JaninoVariableGen.createLocalVariable;
 import static AethraDB.evaluation.codegen.infrastructure.janino.JaninoVariableGen.createSimpleVariableDeclaration;
@@ -142,7 +143,17 @@ public class KeyMultiRecordMapGenerator {
     /**
      * The default value for how many keys should be expected in the map.
      */
-    private static final int initialKeysPerMap = 128;
+    private static final int initialKeysPerMap = 262_144;
+
+    /**
+     * The grow-factor used for upgrading the hash-table size when it "overflows".
+     */
+    private static final int hashTableGrowFactor = 8;
+
+    /**
+     * The grow-factor used for upgrading the record arrays when they "overflow".
+     */
+    private static final int dataGrowFactor = 8;
 
     /**
      * The default value for how many records should be created per key.
@@ -888,7 +899,7 @@ public class KeyMultiRecordMapGenerator {
                     )
             );
 
-            // int newValueArraysSize = 2 * currentValueArraysSize;
+            // int newValueArraysSize = [dataGrowFactor] * currentValueArraysSize;
             ScalarVariableAccessPath newValueArraysSize =
                     new ScalarVariableAccessPath("newValueArraySize", P_INT);
             recordStoreExtendArrays.addStatement(
@@ -898,7 +909,7 @@ public class KeyMultiRecordMapGenerator {
                             newValueArraysSize.getVariableName(),
                             JaninoOperatorGen.mul(
                                     JaninoGeneralGen.getLocation(),
-                                    JaninoGeneralGen.createIntegerLiteral(JaninoGeneralGen.getLocation(), 2),
+                                    JaninoGeneralGen.createIntegerLiteral(JaninoGeneralGen.getLocation(), dataGrowFactor),
                                     currentValueArraysSize.read()
                             )
                     )
@@ -1266,14 +1277,14 @@ public class KeyMultiRecordMapGenerator {
                 )
         );
 
-        // int newSize = currentSize << 1;
+        // int newSize = currentSize * [dataGrowFactor];
         ScalarVariableAccessPath newSize = new ScalarVariableAccessPath("newSize", P_INT);
         growArraysMethodBody.add(
                 createLocalVariable(
                         JaninoGeneralGen.getLocation(),
                         toJavaType(JaninoGeneralGen.getLocation(), newSize.getType()),
                         newSize.getVariableName(),
-                        JaninoOperatorGen.lShift(JaninoGeneralGen.getLocation(), currentSize.read(), JaninoGeneralGen.createIntegerLiteral(JaninoGeneralGen.getLocation(), 1))
+                        JaninoOperatorGen.mul(JaninoGeneralGen.getLocation(), currentSize.read(), JaninoGeneralGen.createIntegerLiteral(JaninoGeneralGen.getLocation(), dataGrowFactor))
                 )
         );
 
@@ -1630,46 +1641,23 @@ public class KeyMultiRecordMapGenerator {
     private void generateRehashMethod() {
         List<Java.Statement> rehashMethodBody = new ArrayList<>();
 
-        // Compute the new hash-table size as the smallest power of 2 greater than this.numberOfRecords
-        // int size = this.hashTable.length;
+        // Compute the new hash-table size as
+        // int size = this.hashTable.length * [hashTableGrowFactor];
         ScalarVariableAccessPath size = new ScalarVariableAccessPath("size", P_INT);
         rehashMethodBody.add(
                 createLocalVariable(
                         JaninoGeneralGen.getLocation(),
                         toJavaType(JaninoGeneralGen.getLocation(), size.getType()),
                         size.getVariableName(),
-                        new Java.FieldAccessExpression(
-                                JaninoGeneralGen.getLocation(),
-                                JaninoGeneralGen.createThisFieldAccess(JaninoGeneralGen.getLocation(), hashTableAP.getVariableName()),
-                                "length"
+                        mul(
+                                getLocation(),
+                                new Java.FieldAccessExpression(
+                                        JaninoGeneralGen.getLocation(),
+                                        JaninoGeneralGen.createThisFieldAccess(JaninoGeneralGen.getLocation(), hashTableAP.getVariableName()),
+                                        "length"
+                                ),
+                                createIntegerLiteral(getLocation(), hashTableGrowFactor)
                         )
-                )
-        );
-
-        // while (size <= this.numberOfRecords) size = (size << 1);
-        rehashMethodBody.add(
-                JaninoControlGen.createWhileLoop(
-                        JaninoGeneralGen.getLocation(),
-                        JaninoOperatorGen.le(
-                                JaninoGeneralGen.getLocation(),
-                                size.read(),
-                                JaninoGeneralGen.createThisFieldAccess(JaninoGeneralGen.getLocation(), numberOfRecordsAP.getVariableName())
-                        ),
-                        createVariableAssignmentStm(
-                                JaninoGeneralGen.getLocation(),
-                                size.write(),
-                                JaninoOperatorGen.lShift(JaninoGeneralGen.getLocation(), size.read(), JaninoGeneralGen.createIntegerLiteral(JaninoGeneralGen.getLocation(), 1))
-                        )
-                )
-        );
-
-        // Add some additional size to prevent collisions
-        // size = size << 1;
-        rehashMethodBody.add(
-                createVariableAssignmentStm(
-                        JaninoGeneralGen.getLocation(),
-                        size.write(),
-                        JaninoOperatorGen.lShift(JaninoGeneralGen.getLocation(), size.read(), JaninoGeneralGen.createIntegerLiteral(JaninoGeneralGen.getLocation(), 1))
                 )
         );
 
