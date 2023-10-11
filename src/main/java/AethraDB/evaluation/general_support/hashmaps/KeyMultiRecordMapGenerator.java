@@ -1374,21 +1374,6 @@ public class KeyMultiRecordMapGenerator {
         // Generate the method body
         List<Java.Statement> putHEMethodBody = new ArrayList<>();
 
-        // [keyType] key = keyRecord.key;
-        ScalarVariableAccessPath keyAP = new ScalarVariableAccessPath("key", keyType);
-        putHEMethodBody.add(
-                createLocalVariable(
-                        getLocation(),
-                        toJavaType(getLocation(), keyAP.getType()),
-                        keyAP.getVariableName(),
-                        new Java.FieldAccessExpression(
-                                getLocation(),
-                                createAmbiguousNameRef(getLocation(), keyRecord),
-                                keyFieldName
-                        )
-                )
-        );
-
         // int htIndex = "hash"(preHash);
         ScalarVariableAccessPath htIndex = new ScalarVariableAccessPath("htIndex", P_INT);
         putHEMethodBody.add(
@@ -1481,32 +1466,20 @@ public class KeyMultiRecordMapGenerator {
                 )
         );
 
-        // while (currentKeyRecord.key != key && currentKeyRecord.next != null) {
+        // while (currentKeyRecord.next != null) {
         //     currentKeyRecord = currentKeyRecord.next;
         // }
         putHEMethodBody.add(
                 JaninoControlGen.createWhileLoop(
                         JaninoGeneralGen.getLocation(),
-                        JaninoOperatorGen.and(
+                        JaninoOperatorGen.neq(
                                 JaninoGeneralGen.getLocation(),
-                                JaninoOperatorGen.neq(
-                                        JaninoGeneralGen.getLocation(),
-                                        new Java.FieldAccessExpression(
-                                                getLocation(),
-                                                createAmbiguousNameRef(getLocation(), currentKeyRecord),
-                                                keyFieldName
-                                        ),
-                                        keyAP.read()
+                                new Java.FieldAccessExpression(
+                                        getLocation(),
+                                        createAmbiguousNameRef(getLocation(), currentKeyRecord),
+                                        nextFieldName
                                 ),
-                                JaninoOperatorGen.neq(
-                                        JaninoGeneralGen.getLocation(),
-                                        new Java.FieldAccessExpression(
-                                                getLocation(),
-                                                createAmbiguousNameRef(getLocation(), currentKeyRecord),
-                                                nextFieldName
-                                        ),
-                                        new Java.NullLiteral(getLocation())
-                                )
+                                new Java.NullLiteral(getLocation())
                         ),
                         createVariableAssignmentStm(
                                 getLocation(),
