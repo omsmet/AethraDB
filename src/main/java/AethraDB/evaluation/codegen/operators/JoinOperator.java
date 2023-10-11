@@ -333,14 +333,21 @@ public class JoinOperator extends CodeGenOperator {
         }
 
         // Obtain the index for the values for the left side of the join for the current key value
-        ScalarVariableAccessPath joinRecordIndex = new ScalarVariableAccessPath(
-                cCtx.defineVariable("records_to_join_index"),
-                P_INT);
+        // JoinMapType.KeyRecordType records_to_join_desc = [joinMapAP].getIndex(probeKey, preHash);
+        String recordsToJoin = cCtx.defineVariable("records_to_join_descr");
         codeGenResult.add(
                 createLocalVariable(
                         getLocation(),
-                        toJavaType(getLocation(), joinRecordIndex.getType()),
-                        joinRecordIndex.getVariableName(),
+                        new Java.ReferenceType(
+                                getLocation(),
+                                new Java.Annotation[0],
+                                new String[] {
+                                        this.joinMapGenerator.mapDeclaration.name,
+                                        this.joinMapGenerator.keyRecordDeclaration.name
+                                },
+                                null
+                        ),
+                        recordsToJoin,
                         createMethodInvocation(
                                 getLocation(),
                                 this.joinMapAP.read(),
@@ -355,14 +362,14 @@ public class JoinOperator extends CodeGenOperator {
 
         // Use the index to check if the left side of the join contains records for the given key
         // otherwise continue
-        // if ([records_to_join_index] == -1) continue;
+        // if ([records_to_join_descr] == null) continue;
         codeGenResult.add(
                 JaninoControlGen.createIf(
                         getLocation(),
                         JaninoOperatorGen.eq(
                                 getLocation(),
-                                joinRecordIndex.read(),
-                                createIntegerLiteral(getLocation(), -1)
+                                createAmbiguousNameRef(getLocation(), recordsToJoin),
+                                new Java.NullLiteral(getLocation())
                         ),
                         new Java.ContinueStatement(getLocation(), null)
                 )
@@ -371,7 +378,7 @@ public class JoinOperator extends CodeGenOperator {
         // Get the column values for the right-hand side of the join in local variables
         codeGenResult.addAll(localRightHandAPsInitialisationStatements);
 
-        // int left_join_record_count = [joinMapAP].keys[records_to_join_index].count;
+        // int left_join_record_count = [records_to_join_descr].count;
         ScalarVariableAccessPath leftJoinRecordCount =
                 new ScalarVariableAccessPath(cCtx.defineVariable("left_join_record_count"), P_INT);
         codeGenResult.add(
@@ -381,15 +388,7 @@ public class JoinOperator extends CodeGenOperator {
                         leftJoinRecordCount.getVariableName(),
                         new Java.FieldAccessExpression(
                                 getLocation(),
-                                createArrayElementAccessExpr(
-                                        getLocation(),
-                                        new Java.FieldAccessExpression(
-                                                getLocation(),
-                                                joinMapAP.read(),
-                                                KeyMultiRecordMapGenerator.keyRecordArrayName
-                                        ),
-                                        joinRecordIndex.read()
-                                ),
+                                createAmbiguousNameRef(getLocation(), recordsToJoin),
                                 KeyMultiRecordMapGenerator.recordCountFieldName
                         )
                 )
@@ -415,7 +414,7 @@ public class JoinOperator extends CodeGenOperator {
         // Also start updating the ordinal mapping
         List<AccessPath> updatedOrdinalMapping = new ArrayList<>(this.resultColumnCount);
 
-        // JoinMapType.ValueRecordType left_join_rec = joinMap.records[joinRecordIndex][joinLoopIndexVar];
+        // JoinMapType.ValueRecordType left_join_rec = records_to_join_descr.records[joinLoopIndexVar];
         String leftJoinRec = cCtx.defineVariable("left_join_rec");
         if (this.joinMapGenerator.valueFieldNames.length > 0) {
             joinLoopBody.addStatement(
@@ -433,14 +432,10 @@ public class JoinOperator extends CodeGenOperator {
                             leftJoinRec,
                             createArrayElementAccessExpr(
                                     getLocation(),
-                                    createArrayElementAccessExpr(
+                                    new Java.FieldAccessExpression(
                                             getLocation(),
-                                            new Java.FieldAccessExpression(
-                                                    getLocation(),
-                                                    joinMapAP.read(),
-                                                    KeyMultiRecordMapGenerator.valueRecordArrayName
-                                            ),
-                                            joinRecordIndex.read()
+                                            createAmbiguousNameRef(getLocation(), recordsToJoin),
+                                            KeyMultiRecordMapGenerator.valueRecordArrayName
                                     ),
                                     joinLoopIndexVar.read()
                             )
@@ -1482,14 +1477,21 @@ public class JoinOperator extends CodeGenOperator {
         );
 
         // Obtain the index for the values for the left side of the join for the current key value
-        ScalarVariableAccessPath joinRecordIndex = new ScalarVariableAccessPath(
-                cCtx.defineVariable("records_to_join_index"),
-                P_INT);
+        // JoinMapType.KeyRecordType records_to_join_desc = [joinMapAP].getIndex(probeKey, preHash);
+        String recordsToJoin = cCtx.defineVariable("records_to_join_descr");
         resultVectorConstructionLoop.addStatement(
                 createLocalVariable(
                         getLocation(),
-                        toJavaType(getLocation(), joinRecordIndex.getType()),
-                        joinRecordIndex.getVariableName(),
+                        new Java.ReferenceType(
+                                getLocation(),
+                                new Java.Annotation[0],
+                                new String[] {
+                                        this.joinMapGenerator.mapDeclaration.name,
+                                        this.joinMapGenerator.keyRecordDeclaration.name
+                                },
+                                null
+                        ),
+                        recordsToJoin,
                         createMethodInvocation(
                                 getLocation(),
                                 this.joinMapAP.read(),
@@ -1504,7 +1506,7 @@ public class JoinOperator extends CodeGenOperator {
 
         // Use the index to check if the left side of the join contains records for the given key
         // otherwise continue
-        // if ([records_to_join_index] == -1) {
+        // if ([records_to_join_descr] == null) {
         //     currentLoopIndex++;
         //     continue;
         // }
@@ -1518,14 +1520,14 @@ public class JoinOperator extends CodeGenOperator {
                         getLocation(),
                         JaninoOperatorGen.eq(
                                 getLocation(),
-                                joinRecordIndex.read(),
-                                createIntegerLiteral(getLocation(), -1)
+                                createAmbiguousNameRef(getLocation(), recordsToJoin),
+                                new Java.NullLiteral(getLocation())
                         ),
                         incrementAndContinueBlock
                 )
         );
 
-        // int left_join_record_count = [joinMapAP].keys[records_to_join_index].count;
+        // int left_join_record_count = [records_to_join_descr].count;
         ScalarVariableAccessPath leftJoinRecordCount =
                 new ScalarVariableAccessPath(cCtx.defineVariable("left_join_record_count"), P_INT);
         resultVectorConstructionLoop.addStatement(
@@ -1535,15 +1537,7 @@ public class JoinOperator extends CodeGenOperator {
                         leftJoinRecordCount.getVariableName(),
                         new Java.FieldAccessExpression(
                                 getLocation(),
-                                createArrayElementAccessExpr(
-                                        getLocation(),
-                                        new Java.FieldAccessExpression(
-                                                getLocation(),
-                                                joinMapAP.read(),
-                                                KeyMultiRecordMapGenerator.keyRecordArrayName
-                                        ),
-                                        joinRecordIndex.read()
-                                ),
+                                createAmbiguousNameRef(getLocation(), recordsToJoin),
                                 KeyMultiRecordMapGenerator.recordCountFieldName
                         )
                 )
@@ -1677,7 +1671,7 @@ public class JoinOperator extends CodeGenOperator {
         // values in the result vectors for the left side join columns
         int numberOfLhsColumns = this.joinMapGenerator.valueFieldNames.length + 1; // Add 1 for key column
 
-        // JoinMapType.ValueRecordType left_join_rec = joinMap.records[joinRecordIndex][joinLoopIndexVar];
+        // JoinMapType.ValueRecordType left_join_rec = records_to_join_descr.records[joinLoopIndexVar];
         String leftJoinRec = cCtx.defineVariable("left_join_rec");
         if (this.joinMapGenerator.valueFieldNames.length > 0) {
             joinLoopBody.addStatement(
@@ -1695,14 +1689,10 @@ public class JoinOperator extends CodeGenOperator {
                             leftJoinRec,
                             createArrayElementAccessExpr(
                                     getLocation(),
-                                    createArrayElementAccessExpr(
+                                    new Java.FieldAccessExpression(
                                             getLocation(),
-                                            new Java.FieldAccessExpression(
-                                                    getLocation(),
-                                                    joinMapAP.read(),
-                                                    KeyMultiRecordMapGenerator.valueRecordArrayName
-                                            ),
-                                            joinRecordIndex.read()
+                                            createAmbiguousNameRef(getLocation(), recordsToJoin),
+                                            KeyMultiRecordMapGenerator.valueRecordArrayName
                                     ),
                                     joinLoopIndexVar.read()
                             )

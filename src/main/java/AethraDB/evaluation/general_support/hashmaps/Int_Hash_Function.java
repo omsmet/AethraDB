@@ -55,7 +55,7 @@ public final class Int_Hash_Function {
     /**
      * Method to compute the pre-hash of an integer key. That is, compute the value
      * {@code (a * key + b) mod p} (which is thus not truncated to the appropriate hash length.
-     * @param key The key to compute teh pre-hash value for.
+     * @param key The key to compute the pre-hash value for.
      * @return The pre-hash value {@code (a * key + b) mod p}.
      */
     public static long preHash(int key) {

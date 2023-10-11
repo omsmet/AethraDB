@@ -237,15 +237,15 @@ public class KeyMultiRecordMapGenerator {
                 )
         );
 
-        // Generate the class definition which defines the key-record type in this map.
-        generateKeyRecordClassDefinition();
-        this.mapDeclaration.addMemberTypeDeclaration(this.keyRecordDeclaration);
-
         // Generate the class definition which defines the value-record types in this map.
         if (this.valueFieldNames.length > 0) {
             generateValueRecordClassDefinition();
             this.mapDeclaration.addMemberTypeDeclaration(this.valueRecordDeclaration);
         }
+
+        // Generate the class definition which defines the key-record type in this map.
+        generateKeyRecordClassDefinition();
+        this.mapDeclaration.addMemberTypeDeclaration(this.keyRecordDeclaration);
 
         // Instantiate the array storing the key records
         this.mapDeclaration.addFieldDeclaration(
@@ -258,20 +258,6 @@ public class KeyMultiRecordMapGenerator {
                         )
                 )
         );
-
-        if (this.valueFieldNames.length > 0) {
-            // Instantiate the nested array storing the value records
-            this.mapDeclaration.addFieldDeclaration(
-                    JaninoClassGen.createPublicFieldDeclaration(
-                            JaninoGeneralGen.getLocation(),
-                            new Java.ArrayType(new Java.ArrayType(createReferenceType(getLocation(), this.valueRecordDeclaration.name))),
-                            createSimpleVariableDeclaration(
-                                    JaninoGeneralGen.getLocation(),
-                                    valueRecordArrayName
-                            )
-                    )
-            );
-        }
 
         // Add the field storing the hash table
         this.mapDeclaration.addFieldDeclaration(
@@ -340,7 +326,7 @@ public class KeyMultiRecordMapGenerator {
         this.keyRecordDeclaration.addFieldDeclaration(
                 JaninoClassGen.createPublicFieldDeclaration(
                         JaninoGeneralGen.getLocation(),
-                        toJavaType(JaninoGeneralGen.getLocation(), P_INT),
+                        createReferenceType(getLocation(), this.keyRecordDeclaration.name),
                         createSimpleVariableDeclaration(
                                 JaninoGeneralGen.getLocation(),
                                 nextFieldName
@@ -348,8 +334,23 @@ public class KeyMultiRecordMapGenerator {
                 )
         );
 
+        if (this.valueFieldNames.length > 0) {
+            // Instantiate the array storing the value records
+            this.keyRecordDeclaration.addFieldDeclaration(
+                    JaninoClassGen.createPublicFieldDeclaration(
+                            JaninoGeneralGen.getLocation(),
+                            new Java.ArrayType(createReferenceType(getLocation(), this.valueRecordDeclaration.name)),
+                            createSimpleVariableDeclaration(
+                                    JaninoGeneralGen.getLocation(),
+                                    valueRecordArrayName
+                            )
+                    )
+            );
+        }
+
         // Create the constructor of the record which initialises the key field according to a parameter
-        // and initialises the count at 0 and the next pointer at -1.
+        // and initialises the count at 0, the next pointer at null and the records array as a length
+        // [initialRecordsPerKeyCount] array.
         Java.FunctionDeclarator.FormalParameters keyConstructorParameter =
                 createFormalParameters(
                         getLocation(),
@@ -392,9 +393,29 @@ public class KeyMultiRecordMapGenerator {
                                 getLocation(),
                                 nextFieldName
                         ),
-                        createIntegerLiteral(getLocation(), -1)
+                        new Java.NullLiteral(getLocation())
                 )
         );
+
+        if (this.valueFieldNames.length > 0) {
+            constructorBody.add(
+                    createVariableAssignmentStm(
+                            getLocation(),
+                            createThisFieldAccess(
+                                    getLocation(),
+                                    valueRecordArrayName
+                            ),
+                            new Java.NewArray(
+                                    getLocation(),
+                                    createReferenceType(getLocation(), this.valueRecordDeclaration.name),
+                                    new Java.Rvalue[]{
+                                            createIntegerLiteral(getLocation(), initialRecordsPerKeyCount)
+                                    },
+                                    0
+                            )
+                    )
+            );
+        }
 
         createConstructor(
                 JaninoGeneralGen.getLocation(),
@@ -575,29 +596,6 @@ public class KeyMultiRecordMapGenerator {
                 )
         );
 
-        // Initialise the value records array
-        if (this.valueFieldNames.length > 0) {
-            constructorBody.add(
-                    createVariableAssignmentStm(
-                            JaninoGeneralGen.getLocation(),
-                            new Java.FieldAccessExpression(
-                                    JaninoGeneralGen.getLocation(),
-                                    new Java.ThisReference(JaninoGeneralGen.getLocation()),
-                                    valueRecordArrayName
-                            ),
-                            new Java.NewArray(
-                                    JaninoGeneralGen.getLocation(),
-                                    createReferenceType(getLocation(), this.valueRecordDeclaration.name),
-                                    new Java.Rvalue[]{
-                                            capacityParameterAP.read(),
-                                            createIntegerLiteral(getLocation(), initialRecordsPerKeyCount)
-                                    },
-                                    0
-                            )
-                    )
-            );
-        }
-
         // Initialise the hash table
         constructorBody.add(
                 createVariableAssignmentStm(
@@ -694,13 +692,13 @@ public class KeyMultiRecordMapGenerator {
         );
 
         // Declare the index variable and check whether the key is already contained in the map
-        // int index = find(key, preHash);
-        ScalarVariableAccessPath indexAP = new ScalarVariableAccessPath("index", P_INT);
+        // KeyRecordType keyRecord = find(key, preHash);
+        String keyRecord = "keyRecord";
         associateMethodBody.add(
                 createLocalVariable(
                         JaninoGeneralGen.getLocation(),
-                        toJavaType(JaninoGeneralGen.getLocation(), indexAP.getType()),
-                        indexAP.getVariableName(),
+                        createReferenceType(getLocation(), this.keyRecordDeclaration.name),
+                        keyRecord,
                         createMethodInvocation(
                                 JaninoGeneralGen.getLocation(),
                                 new Java.ThisReference(JaninoGeneralGen.getLocation()),
@@ -721,14 +719,15 @@ public class KeyMultiRecordMapGenerator {
 
         // If so, set the index variable to the existing entry, otherwise, allocate a new index
         // boolean newEntry = false;
-        // if (index == -1) {
+        // int newEntryIndex = -1;
+        // if (keyRecord == null) {
         //     newEntry = true;
-        //     index = this.numberOfRecords++;
+        //     newEntryIndex = this.numberOfRecords++;
         //     if (this.keys.length == index)
         //         growArrays();
-        //     this.keys[index] = new KeyRecordType( ... );
+        //     keyRecord = new KeyRecordType( ... );
+        //     this.keys[index] = keyRecord;
         // }
-        // KeyRecordType keyRecord = this.keys[index];
         ScalarVariableAccessPath newEntryAP = new ScalarVariableAccessPath("newEntry", P_BOOLEAN);
         associateMethodBody.add(
                 createLocalVariable(
@@ -736,6 +735,16 @@ public class KeyMultiRecordMapGenerator {
                         toJavaType(JaninoGeneralGen.getLocation(), newEntryAP.getType()),
                         newEntryAP.getVariableName(),
                         new Java.BooleanLiteral(JaninoGeneralGen.getLocation(), "false")
+                )
+        );
+
+        ScalarVariableAccessPath newEntryIndexAP = new ScalarVariableAccessPath("newEntryIndex", P_INT);
+        associateMethodBody.add(
+                createLocalVariable(
+                        getLocation(),
+                        toJavaType(getLocation(), newEntryIndexAP.getType()),
+                        newEntryIndexAP.getVariableName(),
+                        createIntegerLiteral(getLocation(), -1)
                 )
         );
 
@@ -751,7 +760,7 @@ public class KeyMultiRecordMapGenerator {
         allocateIndexBody.addStatement(
                 createVariableAssignmentStm(
                         JaninoGeneralGen.getLocation(),
-                        indexAP.write(),
+                        newEntryIndexAP.write(),
                         JaninoOperatorGen.postIncrement(
                                 JaninoGeneralGen.getLocation(),
                                 new Java.FieldAccessExpression(
@@ -776,12 +785,24 @@ public class KeyMultiRecordMapGenerator {
                                         ),
                                         "length"
                                 ),
-                                indexAP.read()
+                                newEntryIndexAP.read()
                         ),
                         createMethodInvocationStm(
                                 JaninoGeneralGen.getLocation(),
                                 new Java.ThisReference(JaninoGeneralGen.getLocation()),
                                 GROW_ARRAYS_METHOD_NAME
+                        )
+                )
+        );
+        allocateIndexBody.addStatement(
+                createVariableAssignmentStm(
+                        getLocation(),
+                        createAmbiguousNameRef(getLocation(), keyRecord),
+                        new Java.NewClassInstance(
+                                getLocation(),
+                                null,
+                                createReferenceType(getLocation(), this.keyRecordDeclaration.name),
+                                new Java.Rvalue[] { createMapAssignmentRValue(this.keyType, formalParameters[0].name, allocateIndexBody) }
                         )
                 )
         );
@@ -794,14 +815,9 @@ public class KeyMultiRecordMapGenerator {
                                         JaninoGeneralGen.getLocation(),
                                         keyRecordArrayName
                                 ),
-                                indexAP.read()
+                                newEntryIndexAP.read()
                         ),
-                        new Java.NewClassInstance(
-                                getLocation(),
-                                null,
-                                createReferenceType(getLocation(), this.keyRecordDeclaration.name),
-                                new Java.Rvalue[] { createMapAssignmentRValue(this.keyType, formalParameters[0].name, allocateIndexBody) }
-                        )
+                        createAmbiguousNameRef(getLocation(), keyRecord)
                 )
         );
 
@@ -810,27 +826,10 @@ public class KeyMultiRecordMapGenerator {
                         JaninoGeneralGen.getLocation(),
                         JaninoOperatorGen.eq(
                                 JaninoGeneralGen.getLocation(),
-                                indexAP.read(),
-                                JaninoGeneralGen.createIntegerLiteral(JaninoGeneralGen.getLocation(), -1)
+                                createAmbiguousNameRef(getLocation(), keyRecord),
+                                new Java.NullLiteral(getLocation())
                         ),
                         allocateIndexBody
-                )
-        );
-
-        String keyRecord = "keyRecord";
-        associateMethodBody.add(
-                createLocalVariable(
-                        getLocation(),
-                        createReferenceType(getLocation(), this.keyRecordDeclaration.name),
-                        keyRecord,
-                        createArrayElementAccessExpr(
-                                getLocation(),
-                                createThisFieldAccess(
-                                        getLocation(),
-                                        keyRecordArrayName
-                                ),
-                                indexAP.read()
-                        )
                 )
         );
 
@@ -838,7 +837,7 @@ public class KeyMultiRecordMapGenerator {
         if (valueFieldNames.length > 0) {
             // Check if there is enough room left in this key's value arrays to store the new record
             // int insertionIndex = keyRecord.count;
-            // if (!(insertionIndex < this.valueRecords[index].length)) [recordStoreExtendArrays]
+            // if (!(insertionIndex < keyRecord.records.length)) [recordStoreExtendArrays]
             ScalarVariableAccessPath insertionIndexAP =
                     new ScalarVariableAccessPath("insertionIndex", P_INT);
             associateMethodBody.add(
@@ -865,10 +864,10 @@ public class KeyMultiRecordMapGenerator {
                                             insertionIndexAP.read(),
                                             new Java.FieldAccessExpression(
                                                     JaninoGeneralGen.getLocation(),
-                                                    JaninoGeneralGen.createArrayElementAccessExpr(
-                                                            JaninoGeneralGen.getLocation(),
-                                                            JaninoGeneralGen.createThisFieldAccess(JaninoGeneralGen.getLocation(), valueRecordArrayName),
-                                                            indexAP.read()
+                                                    new Java.FieldAccessExpression(
+                                                            getLocation(),
+                                                            createAmbiguousNameRef(getLocation(), keyRecord),
+                                                            valueRecordArrayName
                                                     ),
                                                     "length"
                                             )
@@ -879,7 +878,7 @@ public class KeyMultiRecordMapGenerator {
             );
 
             // Extend the value array for the current index by doubling its size
-            // int currentValueArraysSize = this.valueRecords[index].length;
+            // int currentValueArraysSize = keyRecord.records.length;
             ScalarVariableAccessPath currentValueArraysSize =
                     new ScalarVariableAccessPath("currentValueArraySize", P_INT);
             recordStoreExtendArrays.addStatement(
@@ -889,10 +888,10 @@ public class KeyMultiRecordMapGenerator {
                             currentValueArraysSize.getVariableName(),
                             new Java.FieldAccessExpression(
                                     JaninoGeneralGen.getLocation(),
-                                    JaninoGeneralGen.createArrayElementAccessExpr(
-                                            JaninoGeneralGen.getLocation(),
-                                            JaninoGeneralGen.createThisFieldAccess(JaninoGeneralGen.getLocation(), valueRecordArrayName),
-                                            indexAP.read()
+                                    new Java.FieldAccessExpression(
+                                            getLocation(),
+                                            createAmbiguousNameRef(getLocation(), keyRecord),
+                                            valueRecordArrayName
                                     ),
                                     "length"
                             )
@@ -936,10 +935,10 @@ public class KeyMultiRecordMapGenerator {
                             JaninoGeneralGen.createAmbiguousNameRef(JaninoGeneralGen.getLocation(), "System"),
                             "arraycopy",
                             new Java.Rvalue[]{
-                                    JaninoGeneralGen.createArrayElementAccessExpr(
-                                            JaninoGeneralGen.getLocation(),
-                                            JaninoGeneralGen.createThisFieldAccess(JaninoGeneralGen.getLocation(), valueRecordArrayName),
-                                            indexAP.read()
+                                    new Java.FieldAccessExpression(
+                                            getLocation(),
+                                            createAmbiguousNameRef(getLocation(), keyRecord),
+                                            valueRecordArrayName
                                     ),
                                     JaninoGeneralGen.createIntegerLiteral(JaninoGeneralGen.getLocation(), 0),
                                     JaninoGeneralGen.createAmbiguousNameRef(JaninoGeneralGen.getLocation(), tempVarName),
@@ -952,17 +951,17 @@ public class KeyMultiRecordMapGenerator {
             recordStoreExtendArrays.addStatement(
                     createVariableAssignmentStm(
                             JaninoGeneralGen.getLocation(),
-                            JaninoGeneralGen.createArrayElementAccessExpr(
-                                    JaninoGeneralGen.getLocation(),
-                                    JaninoGeneralGen.createThisFieldAccess(JaninoGeneralGen.getLocation(), valueRecordArrayName),
-                                    indexAP.read()
+                            new Java.FieldAccessExpression(
+                                    getLocation(),
+                                    createAmbiguousNameRef(getLocation(), keyRecord),
+                                    valueRecordArrayName
                             ),
                             JaninoGeneralGen.createAmbiguousNameRef(JaninoGeneralGen.getLocation(), tempVarName)
                     )
             );
 
             // Insert the value record and increment the correct record count
-            // this.valueRecords[index] = new ValueRecord( ... );
+            // keyRecord.records[index] = new ValueRecord( ... );
             Java.Rvalue[] valueOrdinals = new Java.Rvalue[this.valueFieldNames.length];
             for (int i = 0; i < this.valueFieldNames.length; i++) {
                 valueOrdinals[i] = createMapAssignmentRValue(this.valueTypes[i], formalParameters[i + 2].name, associateMethodBody);
@@ -973,13 +972,10 @@ public class KeyMultiRecordMapGenerator {
                             getLocation(),
                             createArrayElementAccessExpr(
                                     getLocation(),
-                                    createArrayElementAccessExpr(
+                                    new Java.FieldAccessExpression(
                                             getLocation(),
-                                            createThisFieldAccess(
-                                                    getLocation(),
-                                                    valueRecordArrayName
-                                            ),
-                                            indexAP.read()
+                                            createAmbiguousNameRef(getLocation(), keyRecord),
+                                            valueRecordArrayName
                                     ),
                                     insertionIndexAP.read()
                             ),
@@ -1009,7 +1005,7 @@ public class KeyMultiRecordMapGenerator {
         // Invoke the putHashEntry method if the records was a new record
         // if (newEntry) {
         //     boolean rehashOnCollision = this.numberOfRecords > (3 * this.hashTable.length) / 4;
-        //     putHashEntry(key, preHash, newIndex, rehashOnCollision);
+        //     putHashEntry(keyRecord, preHash, newIndex, rehashOnCollision);
         // }
         Java.Block hashMaintentanceBlock = new Java.Block(JaninoGeneralGen.getLocation());
 
@@ -1047,9 +1043,9 @@ public class KeyMultiRecordMapGenerator {
                         new Java.ThisReference(JaninoGeneralGen.getLocation()),
                         PUT_HASH_ENTRY_METHOD_NAME,
                         new Java.Rvalue[] {
-                                JaninoGeneralGen.createAmbiguousNameRef(JaninoGeneralGen.getLocation(), formalParameters[0].name),
+                                JaninoGeneralGen.createAmbiguousNameRef(JaninoGeneralGen.getLocation(), keyRecord),
                                 JaninoGeneralGen.createAmbiguousNameRef(JaninoGeneralGen.getLocation(), formalParameters[1].name),
-                                indexAP.read(),
+                                newEntryIndexAP.read(),
                                 JaninoGeneralGen.createAmbiguousNameRef(JaninoGeneralGen.getLocation(), "rehashOnCollision")
                         }
                 )
@@ -1132,7 +1128,7 @@ public class KeyMultiRecordMapGenerator {
 
         // Check if the hash-table contains an entry for the initial index, otherwise we know the key
         // can never be in the map
-        // if (initialIndex == -1) return -1;
+        // if (initialIndex == -1) return null;
         findMethodBody.add(
                 JaninoControlGen.createIf(
                         JaninoGeneralGen.getLocation(),
@@ -1143,31 +1139,18 @@ public class KeyMultiRecordMapGenerator {
                         ),
                         createReturnStm(
                                 JaninoGeneralGen.getLocation(),
-                                JaninoGeneralGen.createIntegerLiteral(JaninoGeneralGen.getLocation(), -1)
+                                new Java.NullLiteral(getLocation())
                         )
                 )
         );
 
         // Otherwise follow next-pointers while necessary
-        // int currentIndex = initialIndex;
-        // int currentKeyRecord = this.keys[currentIndex];
+        // KeyRecordType currentKeyRecord = this.keys[initialIndex];
         // while (currentKeyRecord.key != key) {
-        //     int potentialNextIndex = currentKeyRecord.next;
-        //     if (potentialNextIndex == -1)
-        //         return -1;
-        //     currentIndex = potentialNextIndex;
-        //     currentKeyRecord = this.keys[currentIndex];
+        //     currentKeyRecord = currentKeyRecord.next;
+        //     if (potentialNextIndex == null)
+        //         return null;
         // }
-        ScalarVariableAccessPath currentIndex = new ScalarVariableAccessPath("currentIndex", P_INT);
-        findMethodBody.add(
-                createLocalVariable(
-                        JaninoGeneralGen.getLocation(),
-                        toJavaType(JaninoGeneralGen.getLocation(), currentIndex.getType()),
-                        currentIndex.getVariableName(),
-                        initialIndex.read()
-                )
-        );
-
         String currentKeyRecord = "currentKeyRecord";
         findMethodBody.add(
                 createLocalVariable(
@@ -1180,7 +1163,7 @@ public class KeyMultiRecordMapGenerator {
                                         getLocation(),
                                         keyRecordArrayName
                                 ),
-                                currentIndex.read()
+                                initialIndex.read()
                         )
                 )
         );
@@ -1202,12 +1185,10 @@ public class KeyMultiRecordMapGenerator {
                 )
         );
 
-        ScalarVariableAccessPath pni = new ScalarVariableAccessPath("potentialNextIndex", P_INT);
         nextPointerLoopBody.addStatement(
-                createLocalVariable(
+                createVariableAssignmentStm(
                         JaninoGeneralGen.getLocation(),
-                        toJavaType(JaninoGeneralGen.getLocation(), pni.getType()),
-                        pni.getVariableName(),
+                        createAmbiguousNameRef(getLocation(), currentKeyRecord),
                         new Java.FieldAccessExpression(
                                 getLocation(),
                                 createAmbiguousNameRef(getLocation(), currentKeyRecord),
@@ -1219,36 +1200,24 @@ public class KeyMultiRecordMapGenerator {
         nextPointerLoopBody.addStatement(
                 JaninoControlGen.createIf(
                         JaninoGeneralGen.getLocation(),
-                        JaninoOperatorGen.eq(JaninoGeneralGen.getLocation(), pni.read(), JaninoGeneralGen.createIntegerLiteral(JaninoGeneralGen.getLocation(), -1)),
-                        createReturnStm(JaninoGeneralGen.getLocation(), JaninoGeneralGen.createIntegerLiteral(JaninoGeneralGen.getLocation(), -1))
+                        JaninoOperatorGen.eq(
+                                JaninoGeneralGen.getLocation(),
+                                createAmbiguousNameRef(getLocation(), currentKeyRecord),
+                                new Java.NullLiteral(getLocation())
+                            ),
+                        createReturnStm(JaninoGeneralGen.getLocation(), new Java.NullLiteral(getLocation()))
                 )
         );
 
-        nextPointerLoopBody.addStatement(
-                createVariableAssignmentStm(JaninoGeneralGen.getLocation(), currentIndex.write(), pni.read())
-        );
+        // We found the key record: return currentKeyRecord;
+        findMethodBody.add(createReturnStm(JaninoGeneralGen.getLocation(), createAmbiguousNameRef(getLocation(), currentKeyRecord)));
 
-        nextPointerLoopBody.addStatement(
-                createVariableAssignmentStm(
-                        JaninoGeneralGen.getLocation(),
-                        createAmbiguousNameRef(getLocation(), currentKeyRecord),
-                        createArrayElementAccessExpr(
-                                getLocation(),
-                                createThisFieldAccess(getLocation(), keyRecordArrayName),
-                                currentIndex.read()
-                        )
-                )
-        );
-
-        // We found the index: return currentIndex;
-        findMethodBody.add(createReturnStm(JaninoGeneralGen.getLocation(), currentIndex.read()));
-
-        // private int find([keyType key], long preHash)
+        // private KeyRecordType find([keyType key], long preHash)
         createMethod(
                 JaninoGeneralGen.getLocation(),
                 this.mapDeclaration,
                 Access.PRIVATE,
-                JaninoGeneralGen.createPrimitiveType(JaninoGeneralGen.getLocation(), Java.Primitive.INT),
+                createReferenceType(getLocation(), this.keyRecordDeclaration.name),
                 FIND_METHOD_NAME,
                 createFormalParameters(JaninoGeneralGen.getLocation(), formalParameters),
                 findMethodBody
@@ -1356,49 +1325,6 @@ public class KeyMultiRecordMapGenerator {
                 )
         );
 
-        // Grow and copy all the value records array
-        if (this.valueFieldNames.length > 0) {
-            growArraysMethodBody.add(
-                    createLocalVariable(
-                            JaninoGeneralGen.getLocation(),
-                            new Java.ArrayType(new Java.ArrayType(createReferenceType(getLocation(), this.valueRecordDeclaration.name))),
-                            "newValues",
-                            new Java.NewArray(
-                                    JaninoGeneralGen.getLocation(),
-                                    createReferenceType(getLocation(), this.valueRecordDeclaration.name),
-                                    new Java.Rvalue[]{
-                                            newSize.read(),
-                                            createIntegerLiteral(getLocation(), initialRecordsPerKeyCount)
-                                    },
-                                    0
-                            )
-                    )
-            );
-
-            growArraysMethodBody.add(
-                    createMethodInvocationStm(
-                            JaninoGeneralGen.getLocation(),
-                            JaninoGeneralGen.createAmbiguousNameRef(JaninoGeneralGen.getLocation(), "System"),
-                            "arraycopy",
-                            new Java.Rvalue[]{
-                                    JaninoGeneralGen.createThisFieldAccess(JaninoGeneralGen.getLocation(), valueRecordArrayName),
-                                    JaninoGeneralGen.createIntegerLiteral(JaninoGeneralGen.getLocation(), 0),
-                                    JaninoGeneralGen.createAmbiguousNameRef(JaninoGeneralGen.getLocation(), "newValues"),
-                                    JaninoGeneralGen.createIntegerLiteral(JaninoGeneralGen.getLocation(), 0),
-                                    currentSize.read()
-                            }
-                    )
-            );
-
-            growArraysMethodBody.add(
-                    createVariableAssignmentStm(
-                            JaninoGeneralGen.getLocation(),
-                            JaninoGeneralGen.createThisFieldAccess(JaninoGeneralGen.getLocation(), valueRecordArrayName),
-                            JaninoGeneralGen.createAmbiguousNameRef(JaninoGeneralGen.getLocation(), "newValues")
-                    )
-            );
-        }
-
         // private void growArrays()
         createMethod(
                 JaninoGeneralGen.getLocation(),
@@ -1420,10 +1346,11 @@ public class KeyMultiRecordMapGenerator {
         Java.FunctionDeclarator.FormalParameter[] formalParameters =
                 new Java.FunctionDeclarator.FormalParameter[4];
 
+        String keyRecord = "keyRecord";
         formalParameters[0] = createFormalParameter(
                 JaninoGeneralGen.getLocation(),
-                toJavaType(JaninoGeneralGen.getLocation(), keyType),
-                "key"
+                createReferenceType(getLocation(), this.keyRecordDeclaration.name),
+                "keyRecord"
         );
 
         formalParameters[1] = createFormalParameter(
@@ -1446,6 +1373,21 @@ public class KeyMultiRecordMapGenerator {
 
         // Generate the method body
         List<Java.Statement> putHEMethodBody = new ArrayList<>();
+
+        // [keyType] key = keyRecord.key;
+        ScalarVariableAccessPath keyAP = new ScalarVariableAccessPath("key", keyType);
+        putHEMethodBody.add(
+                createLocalVariable(
+                        getLocation(),
+                        toJavaType(getLocation(), keyAP.getType()),
+                        keyAP.getVariableName(),
+                        new Java.FieldAccessExpression(
+                                getLocation(),
+                                createAmbiguousNameRef(getLocation(), keyRecord),
+                                keyFieldName
+                        )
+                )
+        );
 
         // int htIndex = "hash"(preHash);
         ScalarVariableAccessPath htIndex = new ScalarVariableAccessPath("htIndex", P_INT);
@@ -1524,18 +1466,7 @@ public class KeyMultiRecordMapGenerator {
         );
 
         // Otherwise store the index in the first free "next" entry in the probe sequence
-        // int currentIndex = initialIndex;
-        // KeyRecord currentKeyRecord = this.keys[currentIndex];
-        ScalarVariableAccessPath currentIndex = new ScalarVariableAccessPath("currentIndex", P_INT);
-        putHEMethodBody.add(
-                createLocalVariable(
-                        JaninoGeneralGen.getLocation(),
-                        toJavaType(JaninoGeneralGen.getLocation(), currentIndex.getType()),
-                        currentIndex.getVariableName(),
-                        initialIndex.read()
-                )
-        );
-
+        // KeyRecord currentKeyRecord = this.keys[initialIndex];
         String currentKeyRecord = "currentKeyRecord";
         putHEMethodBody.add(
                 createLocalVariable(
@@ -1545,16 +1476,14 @@ public class KeyMultiRecordMapGenerator {
                         createArrayElementAccessExpr(
                                 getLocation(),
                                 createThisFieldAccess(getLocation(), keyRecordArrayName),
-                                currentIndex.read()
+                                initialIndex.read()
                         )
                 )
         );
 
-        // while (currentKeyRecord.key != key && currentKeyRecord.next != -1) {
-        //     currentIndex = this.next[currentIndex];
-        //     currentKeyRecord = this.keys[currentIndex];
+        // while (currentKeyRecord.key != key && currentKeyRecord.next != null) {
+        //     currentKeyRecord = currentKeyRecord.next;
         // }
-        Java.Block findAvailableNextLoopBody = new Java.Block(getLocation());
         putHEMethodBody.add(
                 JaninoControlGen.createWhileLoop(
                         JaninoGeneralGen.getLocation(),
@@ -1567,7 +1496,7 @@ public class KeyMultiRecordMapGenerator {
                                                 createAmbiguousNameRef(getLocation(), currentKeyRecord),
                                                 keyFieldName
                                         ),
-                                        JaninoGeneralGen.createAmbiguousNameRef(JaninoGeneralGen.getLocation(), formalParameters[0].name)
+                                        keyAP.read()
                                 ),
                                 JaninoOperatorGen.neq(
                                         JaninoGeneralGen.getLocation(),
@@ -1576,40 +1505,24 @@ public class KeyMultiRecordMapGenerator {
                                                 createAmbiguousNameRef(getLocation(), currentKeyRecord),
                                                 nextFieldName
                                         ),
-                                        JaninoGeneralGen.createIntegerLiteral(JaninoGeneralGen.getLocation(), -1)
+                                        new Java.NullLiteral(getLocation())
                                 )
                         ),
-                        findAvailableNextLoopBody
-                )
-        );
-
-        findAvailableNextLoopBody.addStatement(
-                createVariableAssignmentStm(
-                        JaninoGeneralGen.getLocation(),
-                        currentIndex.write(),
-                        new Java.FieldAccessExpression(
+                        createVariableAssignmentStm(
                                 getLocation(),
                                 createAmbiguousNameRef(getLocation(), currentKeyRecord),
-                                nextFieldName
+                                new Java.FieldAccessExpression(
+                                        getLocation(),
+                                        createAmbiguousNameRef(getLocation(), currentKeyRecord),
+                                        nextFieldName
+                                )
                         )
                 )
         );
 
-        findAvailableNextLoopBody.addStatement(
-                createVariableAssignmentStm(
-                        getLocation(),
-                        createAmbiguousNameRef(getLocation(), currentKeyRecord),
-                        createArrayElementAccessExpr(
-                                getLocation(),
-                                createThisFieldAccess(getLocation(), keyRecordArrayName),
-                                currentIndex.read()
-                        )
-                )
-        );
-
-        // At this point currentKeyRecord has property that currentKeyRecord.next == -1, so we update it to
+        // At this point currentKeyRecord has property that currentKeyRecord.next == null, so we update it to
         // point to index to ensure the collision list is correct
-        // currentKeyRecord.next = index;
+        // currentKeyRecord.next = keyRecord;
         putHEMethodBody.add(
                 createVariableAssignmentStm(
                         JaninoGeneralGen.getLocation(),
@@ -1618,11 +1531,11 @@ public class KeyMultiRecordMapGenerator {
                                 createAmbiguousNameRef(getLocation(), currentKeyRecord),
                                 nextFieldName
                         ),
-                        JaninoGeneralGen.createAmbiguousNameRef(JaninoGeneralGen.getLocation(), formalParameters[2].name)
+                        JaninoGeneralGen.createAmbiguousNameRef(JaninoGeneralGen.getLocation(), keyRecord)
                 )
         );
 
-        // private void putHashEntry([keyType key], long preHash, int index, boolean rehashOnCollision)
+        // private void putHashEntry(KeyRecordType keyRecord, long preHash, int index, boolean rehashOnCollision)
         createMethod(
                 JaninoGeneralGen.getLocation(),
                 this.mapDeclaration,
@@ -1686,7 +1599,7 @@ public class KeyMultiRecordMapGenerator {
 
         // Reset the next pointers
         // for (int i = 0; i < numberOfRecords; i++) {
-        //     this.keys[i].next = -1;
+        //     this.keys[i].next = null;
         // }
         ScalarVariableAccessPath nextPointerIndex = new ScalarVariableAccessPath("recordIndex", P_INT);
         rehashMethodBody.add(
@@ -1711,16 +1624,16 @@ public class KeyMultiRecordMapGenerator {
                                         ),
                                         nextFieldName
                                 ),
-                                createIntegerLiteral(getLocation(), -1)
+                                new Java.NullLiteral(getLocation())
                         )
                 )
         );
 
         // Finally insert all key-value associations in the new hash-table
         // for (int i = 0; i < this.numberOfRecords; i++) {
-        //     [keyType] key = this.keys[i].key;
-        //     long preHash = [hash_function_container].hash(key);
-        //     this.putHashEntry(key, preHash, i, false);
+        //     KeyRecordType keyRecord = this.keys[i];
+        //     long preHash = [hash_function_container].hash(keyRecord.key);
+        //     this.putHashEntry(keyRecord, preHash, i, false);
         // }
         Java.Block hashAssociationLoopBody = new Java.Block(JaninoGeneralGen.getLocation());
 
@@ -1744,19 +1657,16 @@ public class KeyMultiRecordMapGenerator {
                 )
         );
 
+        String keyRecord = "keyRecord";
         hashAssociationLoopBody.addStatement(
                 createLocalVariable(
                         JaninoGeneralGen.getLocation(),
-                        toJavaType(JaninoGeneralGen.getLocation(), keyType),
-                        "key",
-                        new Java.FieldAccessExpression(
-                                getLocation(),
-                                JaninoGeneralGen.createArrayElementAccessExpr(
-                                        JaninoGeneralGen.getLocation(),
-                                        JaninoGeneralGen.createThisFieldAccess(JaninoGeneralGen.getLocation(), keyRecordArrayName),
-                                        indexVar.read()
-                                ),
-                                keyFieldName
+                        createReferenceType(getLocation(), this.keyRecordDeclaration.name),
+                        keyRecord,
+                        JaninoGeneralGen.createArrayElementAccessExpr(
+                                JaninoGeneralGen.getLocation(),
+                                JaninoGeneralGen.createThisFieldAccess(JaninoGeneralGen.getLocation(), keyRecordArrayName),
+                                indexVar.read()
                         )
                 )
         );
@@ -1775,7 +1685,11 @@ public class KeyMultiRecordMapGenerator {
                                 },
                                 "preHash",
                                 new Java.Rvalue[] {
-                                        JaninoGeneralGen.createAmbiguousNameRef(JaninoGeneralGen.getLocation(), "key")
+                                        new Java.FieldAccessExpression(
+                                                getLocation(),
+                                                JaninoGeneralGen.createAmbiguousNameRef(JaninoGeneralGen.getLocation(), keyRecord),
+                                                keyFieldName
+                                        )
                                 }
                         )
                 )
@@ -1787,7 +1701,7 @@ public class KeyMultiRecordMapGenerator {
                         new Java.ThisReference(JaninoGeneralGen.getLocation()),
                         PUT_HASH_ENTRY_METHOD_NAME,
                         new Java.Rvalue[] {
-                                JaninoGeneralGen.createAmbiguousNameRef(JaninoGeneralGen.getLocation(), "key"),
+                                JaninoGeneralGen.createAmbiguousNameRef(JaninoGeneralGen.getLocation(), keyRecord),
                                 JaninoGeneralGen.createAmbiguousNameRef(JaninoGeneralGen.getLocation(), "preHash"),
                                 indexVar.read(),
                                 new Java.BooleanLiteral(JaninoGeneralGen.getLocation(), "false")
@@ -1809,7 +1723,7 @@ public class KeyMultiRecordMapGenerator {
 
     /**
      * Method to generate the public "getIndex" method, which returns the index in the map that
-     * contains the values for a given key, or -1 if the map does not contain the key.
+     * contains the values for a given key, or null if the map does not contain the key.
      */
     private void generateGetIndexMethod() {
         // Generate the method signature
@@ -1859,7 +1773,7 @@ public class KeyMultiRecordMapGenerator {
                 JaninoGeneralGen.getLocation(),
                 this.mapDeclaration,
                 Access.PUBLIC,
-                JaninoGeneralGen.createPrimitiveType(JaninoGeneralGen.getLocation(), Java.Primitive.INT),
+                createReferenceType(getLocation(), this.keyRecordDeclaration.name),
                 GET_INDEX_METHOD_NAME,
                 createFormalParameters(JaninoGeneralGen.getLocation(), formalParameters),
                 getIndexMethodBody
@@ -1909,29 +1823,6 @@ public class KeyMultiRecordMapGenerator {
                         }
                 )
         );
-
-        // this.records = new RecordType[this.keys.length][initialRecordsPerKeyCount];
-        if (this.valueFieldNames.length > 0) {
-            resetMethodBody.add(
-                    createVariableAssignmentStm(
-                            getLocation(),
-                            createThisFieldAccess(getLocation(), valueRecordArrayName),
-                            new Java.NewArray(
-                                    getLocation(),
-                                    createReferenceType(getLocation(), this.valueRecordDeclaration.name),
-                                    new Java.Rvalue[]{
-                                            new Java.FieldAccessExpression(
-                                                    getLocation(),
-                                                    createThisFieldAccess(getLocation(), keyRecordArrayName),
-                                                    "length"
-                                            ),
-                                            createIntegerLiteral(getLocation(), initialRecordsPerKeyCount)
-                                    },
-                                    0
-                            )
-                    )
-            );
-        }
 
         // public void reset()
         createMethod(
