@@ -311,7 +311,7 @@ public class KeyValueMapGenerator {
         this.recordDeclaration.addFieldDeclaration(
                 JaninoClassGen.createPublicFieldDeclaration(
                         JaninoGeneralGen.getLocation(),
-                        createReferenceType(getLocation(), this.recordDeclaration.name),
+                        toJavaType(JaninoGeneralGen.getLocation(), P_INT),
                         createSimpleVariableDeclaration(
                                 JaninoGeneralGen.getLocation(),
                                 nextFieldName
@@ -320,7 +320,7 @@ public class KeyValueMapGenerator {
         );
 
         // Create the constructor of the record which initialises all fields according to the parameter
-        // value and initialises the next pointer at null.
+        // value and initialises the next pointer at -1.
         var formalParameters = new Java.FunctionDeclarator.FormalParameter[this.keyFieldNames.length + this.valueFieldNames.length];
         for (int i = 0; i < this.keyFieldNames.length; i++) {
             formalParameters[i] =
@@ -352,7 +352,7 @@ public class KeyValueMapGenerator {
                                 getLocation(),
                                 nextFieldName
                         ),
-                        new Java.NullLiteral(getLocation())
+                        createIntegerLiteral(getLocation(), -1)
                 )
         );
 
@@ -611,8 +611,8 @@ public class KeyValueMapGenerator {
         }
 
         // Declare the index variable and check whether the key is already contained in the map
-        // RecordType record = find(keys ..., preHash);
-        String record = "record";
+        // int index record = find(keys ..., preHash);
+        ScalarVariableAccessPath indexAP = new ScalarVariableAccessPath("index", P_INT);
         Java.Rvalue[] findMethodArguments = new Java.Rvalue[this.keyFieldNames.length + 1];
         for (int i = 0; i < findMethodArguments.length; i++)
             findMethodArguments[i] = JaninoGeneralGen.createAmbiguousNameRef(
@@ -623,8 +623,8 @@ public class KeyValueMapGenerator {
         incrementForKeyMethodBody.add(
                 createLocalVariable(
                         JaninoGeneralGen.getLocation(),
-                        createReferenceType(getLocation(), this.recordDeclaration.name),
-                        record,
+                        toJavaType(JaninoGeneralGen.getLocation(), indexAP.getType()),
+                        indexAP.getVariableName(),
                         createMethodInvocation(
                                 JaninoGeneralGen.getLocation(),
                                 new Java.ThisReference(JaninoGeneralGen.getLocation()),
@@ -635,23 +635,20 @@ public class KeyValueMapGenerator {
         );
 
         // If so, set the index variable to the existing entry, otherwise, allocate a new index
-        // if (record == null) {
-        //     int newIndex = this.numberOfRecords++;
-        //     if (this.recordsArray.length == newIndex)
+        // if (index == -1) {
+        //     index = this.numberOfRecords++;
+        //     if (this.recordsArray.length == index)
         //         growArrays();
-        //     record = new RecordType( ... );
-        //     this.recordsArray[index] = record;
+        //     this.recordsArray[index] = new RecordType( ... );
         //     boolean rehashOnCollision = this.numberOfRecords > (3 * this.hashTable.length) / 4;
-        //     putHashEntry(record, preHash, newIndex, rehashOnCollision);
+        //     putHashEntry(preHash, index, rehashOnCollision);
         //     return;
         // }
         Java.Block allocateIndexBody = new Java.Block(JaninoGeneralGen.getLocation());
-        ScalarVariableAccessPath newIndexAP = new ScalarVariableAccessPath("newIndex", P_INT);
         allocateIndexBody.addStatement(
-                createLocalVariable(
+                createVariableAssignmentStm(
                         JaninoGeneralGen.getLocation(),
-                        toJavaType(getLocation(), newIndexAP.getType()),
-                        newIndexAP.getVariableName(),
+                        indexAP.write(),
                         JaninoOperatorGen.postIncrement(
                                 JaninoGeneralGen.getLocation(),
                                 new Java.FieldAccessExpression(
@@ -676,7 +673,7 @@ public class KeyValueMapGenerator {
                                         ),
                                         "length"
                                 ),
-                                newIndexAP.read()
+                                indexAP.read()
                         ),
                         createMethodInvocationStm(
                                 JaninoGeneralGen.getLocation(),
@@ -696,28 +693,20 @@ public class KeyValueMapGenerator {
         allocateIndexBody.addStatement(
                 createVariableAssignmentStm(
                         getLocation(),
-                        createAmbiguousNameRef(getLocation(), record),
-                        new Java.NewClassInstance(
-                                getLocation(),
-                                null,
-                                createReferenceType(getLocation(), this.recordDeclaration.name),
-                                recordOrdinalValues
-                        )
-                )
-        );
-
-        allocateIndexBody.addStatement(
-                createVariableAssignmentStm(
-                        getLocation(),
                         createArrayElementAccessExpr(
                                 getLocation(),
                                 createThisFieldAccess(
                                         getLocation(),
                                         recordArrayName
                                 ),
-                                newIndexAP.read()
+                                indexAP.read()
                         ),
-                        createAmbiguousNameRef(getLocation(), record)
+                        new Java.NewClassInstance(
+                                getLocation(),
+                                null,
+                                createReferenceType(getLocation(), this.recordDeclaration.name),
+                                recordOrdinalValues
+                        )
                 )
         );
 
@@ -749,11 +738,10 @@ public class KeyValueMapGenerator {
                 )
         );
 
-        Java.Rvalue[] putHashEntryArguments = new Java.Rvalue[4];
-        putHashEntryArguments[0] = createAmbiguousNameRef(JaninoGeneralGen.getLocation(), record);
-        putHashEntryArguments[1] = createAmbiguousNameRef(JaninoGeneralGen.getLocation(), formalParameters[keyFieldNames.length].name); // prehash
-        putHashEntryArguments[2] = newIndexAP.read();
-        putHashEntryArguments[3] = JaninoGeneralGen.createAmbiguousNameRef(JaninoGeneralGen.getLocation(), "rehashOnCollision");
+        Java.Rvalue[] putHashEntryArguments = new Java.Rvalue[3];
+        putHashEntryArguments[0] = createAmbiguousNameRef(JaninoGeneralGen.getLocation(), formalParameters[keyFieldNames.length].name); // prehash
+        putHashEntryArguments[1] = indexAP.read();
+        putHashEntryArguments[2] = JaninoGeneralGen.createAmbiguousNameRef(JaninoGeneralGen.getLocation(), "rehashOnCollision");
 
         allocateIndexBody.addStatement(
                 createMethodInvocationStm(
@@ -771,8 +759,8 @@ public class KeyValueMapGenerator {
                         JaninoGeneralGen.getLocation(),
                         JaninoOperatorGen.eq(
                                 JaninoGeneralGen.getLocation(),
-                                createAmbiguousNameRef(getLocation(), record),
-                                new Java.NullLiteral(getLocation())
+                                indexAP.read(),
+                                createIntegerLiteral(getLocation(), -1)
                         ),
                         allocateIndexBody
                 )
@@ -787,7 +775,11 @@ public class KeyValueMapGenerator {
         incrementForKeyMethodBody.add(
                 createMethodInvocationStm(
                         JaninoGeneralGen.getLocation(),
-                        createAmbiguousNameRef(getLocation(), record),
+                        JaninoGeneralGen.createArrayElementAccessExpr(
+                                JaninoGeneralGen.getLocation(),
+                                JaninoGeneralGen.createThisFieldAccess(JaninoGeneralGen.getLocation(), recordArrayName),
+                                indexAP.read()
+                        ),
                         "increment",
                         increments
                 )
@@ -865,7 +857,7 @@ public class KeyValueMapGenerator {
 
         // Check if the hash-table contains an entry for the initial index, otherwise we know the key
         // can never be in the map
-        // if (initialIndex == -1) return null;
+        // if (initialIndex == -1) return -1;
         findMethodBody.add(
                 JaninoControlGen.createIf(
                         JaninoGeneralGen.getLocation(),
@@ -876,18 +868,29 @@ public class KeyValueMapGenerator {
                         ),
                         createReturnStm(
                                 JaninoGeneralGen.getLocation(),
-                                new Java.NullLiteral(getLocation())
+                                createIntegerLiteral(getLocation(), -1)
                         )
                 )
         );
 
         // Otherwise follow next-pointers while necessary
-        // RecordType currentRecord = this.recordsArray[initialIndex];
+        // int currentIndex = initialIndex;
+        // RecordType currentRecord = this.recordsArray[currentIndex];
         // while ($ disjunction of key ords $ currentRecord.key_ord_i != key_ord_i) {
-        //     currentRecord = currentRecord.next;
-        //     if (currentRecord == null)
-        //         return null;
+        //     currentIndex = currentRecord.next;
+        //     if (currentIndex == -1)
+        //         return -1;
+        //     currentRecord = this.recordsArray[currentIndex];
         // }
+        ScalarVariableAccessPath currentIndex = new ScalarVariableAccessPath("currentIndex", P_INT);
+        findMethodBody.add(
+                createLocalVariable(
+                        JaninoGeneralGen.getLocation(),
+                        toJavaType(JaninoGeneralGen.getLocation(), currentIndex.getType()),
+                        currentIndex.getVariableName(),
+                        initialIndex.read()
+                )
+        );
         String currentRecord = "currentRecord";
         findMethodBody.add(
                 createLocalVariable(
@@ -900,7 +903,7 @@ public class KeyValueMapGenerator {
                                         getLocation(),
                                         recordArrayName
                                 ),
-                                initialIndex.read()
+                                currentIndex.read()
                         )
                 )
         );
@@ -990,7 +993,7 @@ public class KeyValueMapGenerator {
         nextPointerLoopBody.addStatement(
                 createVariableAssignmentStm(
                         JaninoGeneralGen.getLocation(),
-                        createAmbiguousNameRef(getLocation(), currentRecord),
+                        currentIndex.write(),
                         new Java.FieldAccessExpression(
                                 getLocation(),
                                 createAmbiguousNameRef(getLocation(), currentRecord),
@@ -1004,22 +1007,37 @@ public class KeyValueMapGenerator {
                         JaninoGeneralGen.getLocation(),
                         JaninoOperatorGen.eq(
                                 JaninoGeneralGen.getLocation(),
-                                createAmbiguousNameRef(getLocation(), currentRecord),
-                                new Java.NullLiteral(getLocation())
+                                currentIndex.read(),
+                                createIntegerLiteral(getLocation(), -1)
                         ),
-                        createReturnStm(JaninoGeneralGen.getLocation(), new Java.NullLiteral(getLocation()))
+                        createReturnStm(JaninoGeneralGen.getLocation(), createIntegerLiteral(getLocation(), -1))
                 )
         );
 
-        // We found the record: return currentRecord;
-        findMethodBody.add(createReturnStm(JaninoGeneralGen.getLocation(), createAmbiguousNameRef(getLocation(), currentRecord)));
+        nextPointerLoopBody.addStatement(
+                createVariableAssignmentStm(
+                        getLocation(),
+                        createAmbiguousNameRef(getLocation(), currentRecord),
+                        createArrayElementAccessExpr(
+                                getLocation(),
+                                createThisFieldAccess(
+                                        getLocation(),
+                                        recordArrayName
+                                ),
+                                currentIndex.read()
+                        )
+                )
+        );
 
-        // private RecordType find([keys ...], long preHash)
+        // We found the record: return currentIndex;
+        findMethodBody.add(createReturnStm(JaninoGeneralGen.getLocation(), currentIndex.read()));
+
+        // private int find([keys ...], long preHash)
         createMethod(
                 JaninoGeneralGen.getLocation(),
                 this.mapDeclaration,
                 Access.PRIVATE,
-                createReferenceType(getLocation(), this.recordDeclaration.name),
+                JaninoGeneralGen.createPrimitiveType(JaninoGeneralGen.getLocation(), Java.Primitive.INT),
                 FIND_METHOD_NAME,
                 createFormalParameters(JaninoGeneralGen.getLocation(), formalParameters),
                 findMethodBody
@@ -1141,19 +1159,12 @@ public class KeyValueMapGenerator {
 
     /**
      * Method to generate the "putHashEntry" method, which associates indices of the keys/values
-     * arras to specific keys.
+     * arrays to specific keys.
      */
     private void generatePutHashEntryMethod() {
         // Generate the method signature
-        Java.FunctionDeclarator.FormalParameter[] formalParameters = new Java.FunctionDeclarator.FormalParameter[4];
+        Java.FunctionDeclarator.FormalParameter[] formalParameters = new Java.FunctionDeclarator.FormalParameter[3];
         int currentFormalParamIndex = 0;
-
-        int recordFormalParamIndex = currentFormalParamIndex++;
-        formalParameters[recordFormalParamIndex] = createFormalParameter(
-                JaninoGeneralGen.getLocation(),
-                createReferenceType(getLocation(), this.recordDeclaration.name),
-                "record"
-        );
 
         int prehashFormalParamIndex = currentFormalParamIndex++;
         formalParameters[prehashFormalParamIndex] = createFormalParameter(
@@ -1256,9 +1267,21 @@ public class KeyValueMapGenerator {
         );
 
         // Otherwise store the record in the first free "next" entry in the probe sequence
-        // RecordType currentRecord = this.recordArray[initialIndex];
-        // while (currentRecord.next != null) {
-        //     currentRecord = currentRecord.next;
+        // int currentIndex = initialIndex;
+        ScalarVariableAccessPath currentIndex = new ScalarVariableAccessPath("currentIndex", P_INT);
+        putHEMethodBody.add(
+                createLocalVariable(
+                        JaninoGeneralGen.getLocation(),
+                        toJavaType(JaninoGeneralGen.getLocation(), currentIndex.getType()),
+                        currentIndex.getVariableName(),
+                        initialIndex.read()
+                )
+        );
+
+        // RecordType currentRecord = this.recordArray[currentIndex];
+        // while (currentRecord.next != -1) {
+        //     currentIndex = currentRecord.next;
+        //     currentRecord = this.recordArray[currentIndex];
         // }
         String currentRecord = "currentRecord";
         putHEMethodBody.add(
@@ -1269,7 +1292,7 @@ public class KeyValueMapGenerator {
                         createArrayElementAccessExpr(
                                 getLocation(),
                                 createThisFieldAccess(getLocation(), recordArrayName),
-                                initialIndex.read()
+                                currentIndex.read()
                         )
                 )
         );
@@ -1285,23 +1308,39 @@ public class KeyValueMapGenerator {
                                         createAmbiguousNameRef(getLocation(), currentRecord),
                                         nextFieldName
                                 ),
-                                new Java.NullLiteral(getLocation())
+                                createIntegerLiteral(getLocation(), -1)
                         ),
-                        createVariableAssignmentStm(
-                                getLocation(),
+                        findAvailableNextLoopBody
+                )
+        );
+
+        findAvailableNextLoopBody.addStatement(
+                createVariableAssignmentStm(
+                        getLocation(),
+                        currentIndex.write(),
+                        new Java.FieldAccessExpression(
+                                JaninoGeneralGen.getLocation(),
                                 createAmbiguousNameRef(getLocation(), currentRecord),
-                                new Java.FieldAccessExpression(
-                                        JaninoGeneralGen.getLocation(),
-                                        createAmbiguousNameRef(getLocation(), currentRecord),
-                                        nextFieldName
-                                )
+                                nextFieldName
                         )
                 )
         );
 
-        // At this point currentRecord has property that currentRecord.next == null, so we update it to
+        findAvailableNextLoopBody.addStatement(
+                createVariableAssignmentStm(
+                        JaninoGeneralGen.getLocation(),
+                        createAmbiguousNameRef(getLocation(), currentRecord),
+                        createArrayElementAccessExpr(
+                                getLocation(),
+                                createThisFieldAccess(getLocation(), recordArrayName),
+                                currentIndex.read()
+                        )
+                )
+        );
+
+        // At this point currentRecord has property that currentRecord.next == -1, so we update it to
         // point to index to ensure the collision list is correct
-        // currentIndex.next = record;
+        // currentIndex.next = index;
         putHEMethodBody.add(
                 createVariableAssignmentStm(
                         JaninoGeneralGen.getLocation(),
@@ -1310,11 +1349,11 @@ public class KeyValueMapGenerator {
                                 createAmbiguousNameRef(getLocation(), currentRecord),
                                 nextFieldName
                         ),
-                        JaninoGeneralGen.createAmbiguousNameRef(JaninoGeneralGen.getLocation(), formalParameters[recordFormalParamIndex].name)
+                        JaninoGeneralGen.createAmbiguousNameRef(JaninoGeneralGen.getLocation(), formalParameters[indexFormalParamIndex].name)
                 )
         );
 
-        // private void putHashEntry(RecordType record, long preHash, int index, boolean rehashOnCollision)
+        // private void putHashEntry(long preHash, int index, boolean rehashOnCollision)
         createMethod(
                 JaninoGeneralGen.getLocation(),
                 this.mapDeclaration,
@@ -1378,7 +1417,7 @@ public class KeyValueMapGenerator {
 
         // Reset the next pointers
         // for (int i = 0; i < numberOfRecords; i++) {
-        //     this.records[i].next = null;
+        //     this.records[i].next = -1;
         // }
         ScalarVariableAccessPath nextPointerIndex = new ScalarVariableAccessPath("recordIndex", P_INT);
         rehashMethodBody.add(
@@ -1403,7 +1442,7 @@ public class KeyValueMapGenerator {
                                         ),
                                         nextFieldName
                                 ),
-                                new Java.NullLiteral(getLocation())
+                                createIntegerLiteral(getLocation(), -1)
                         )
                 )
         );
@@ -1416,7 +1455,7 @@ public class KeyValueMapGenerator {
         //     long preHash = [hash_function_container].hash(key_ord_0);
         //     $ for each remaining key ord j $
         //       preHash ^= [hash_function_container].hash(key_ord_j);
-        //     this.putHashEntry(currentRecord, preHash, i, false);
+        //     this.putHashEntry(preHash, i, false);
         // }
         Java.Block hashAssociationLoopBody = new Java.Block(JaninoGeneralGen.getLocation());
 
@@ -1513,9 +1552,8 @@ public class KeyValueMapGenerator {
             }
         }
 
-        Java.Rvalue[] putHashEntryArguments = new Java.Rvalue[4];
+        Java.Rvalue[] putHashEntryArguments = new Java.Rvalue[3];
         int currentPutHashEntryArgumentIndex = 0;
-        putHashEntryArguments[currentPutHashEntryArgumentIndex++] = createAmbiguousNameRef(getLocation(), currentRecord);
         putHashEntryArguments[currentPutHashEntryArgumentIndex++] =
                 JaninoGeneralGen.createAmbiguousNameRef(JaninoGeneralGen.getLocation(), "preHash");
         putHashEntryArguments[currentPutHashEntryArgumentIndex++] = indexVar.read();
