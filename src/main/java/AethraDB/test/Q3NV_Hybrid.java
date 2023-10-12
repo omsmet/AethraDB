@@ -4,29 +4,37 @@ import AethraDB.evaluation.codegen.infrastructure.data.ABQArrowTableReader;
 import AethraDB.evaluation.codegen.infrastructure.data.ArrowTableReader;
 import AethraDB.evaluation.general_support.ArrowOptimisations;
 import AethraDB.evaluation.general_support.hashmaps.Int_Hash_Function;
-import AethraDB.test.Q3NV_Original_Support.KeyMultiRecordMap_1561408618;
-import AethraDB.test.Q3NV_Original_Support.KeyMultiRecordMap_811760110;
-import AethraDB.test.Q3NV_Original_Support.KeyValueMap_282432134;
+import AethraDB.test.Q3_Hybrid_Support.KeyMultiRecordMap_1561408618;
+import AethraDB.test.Q3_Hybrid_Support.KeyMultiRecordMap_811760110;
+import AethraDB.test.Q3_Hybrid_Support.KeyValueMap_1873859565;
 import org.apache.arrow.memory.RootAllocator;
 
 import java.io.File;
 import java.util.Arrays;
 
-public class Q3NV_Original {
+public class Q3NV_Hybrid {
 
     public static void main(String[] args) throws Exception {
         String tableFilePath = args[0];
         RootAllocator rootAllocator = new RootAllocator();
-        ArrowTableReader customer = new ABQArrowTableReader(new File(tableFilePath + "/customer.arrow"), rootAllocator, true, new int[] { 0, 6 });
-        ArrowTableReader orders = new ABQArrowTableReader(new File(tableFilePath + "/orders.arrow"), rootAllocator, true, new int[] { 0, 1, 4, 7 });
-        ArrowTableReader lineitem = new ABQArrowTableReader(new File(tableFilePath + "/lineitem.arrow"), rootAllocator, true, new int[] { 0, 5, 6, 10 });
+        ABQArrowTableReader customer = new ABQArrowTableReader(new File(tableFilePath + "/customer.arrow"), rootAllocator, true, new int[] { 0, 6 });
+        ABQArrowTableReader orders = new ABQArrowTableReader(new File(tableFilePath + "/orders.arrow"), rootAllocator, true, new int[] { 0, 1, 4, 7 });
+        ABQArrowTableReader lineitem = new ABQArrowTableReader(new File(tableFilePath + "/lineitem.arrow"), rootAllocator, true, new int[] { 0, 5, 6, 10 });
 
         long start = System.nanoTime();
 
+        query(customer, orders, lineitem);
+
+        long end = System.nanoTime();
+        long msDuration = (end - start) / 1_000_000;
+        System.out.println(msDuration);
+    }
+
+    public static void query(ABQArrowTableReader customer, ABQArrowTableReader orders, ABQArrowTableReader lineitem) {
         /// GENERATED
         byte[] byte_array_cache = null;
         long result_count = 0;
-        KeyValueMap_282432134 aggregation_state_map = new KeyValueMap_282432134();
+        KeyValueMap_1873859565 aggregation_state_map = new KeyValueMap_1873859565();
         KeyMultiRecordMap_1561408618 join_map = new KeyMultiRecordMap_1561408618();
         KeyMultiRecordMap_811760110 join_map_0 = new KeyMultiRecordMap_811760110();
 //        ArrowTableReader customer = cCtx.getArrowReader(0);
@@ -96,8 +104,9 @@ public class Q3NV_Original {
                 }
                 int left_join_record_count = join_map.keysRecordCount[records_to_join_index];
                 for (int i = 0; i < left_join_record_count; i++) {
-                    int left_join_ord_0 = join_map.values_record_ord_0[records_to_join_index][i];
-                    int left_join_ord_1 = join_map.values_record_ord_1[records_to_join_index][i];
+                    KeyMultiRecordMap_1561408618.ValueRecordType left_join_rec = join_map.records[records_to_join_index][i];
+                    int left_join_ord_0 = left_join_rec.value_ord_0;
+                    int left_join_ord_1 = left_join_rec.value_ord_1;
                     long group_key_pre_hash = Int_Hash_Function.preHash(ordinal_value_2);
                     group_key_pre_hash ^= Int_Hash_Function.preHash(left_join_ord_0);
                     group_key_pre_hash ^= Int_Hash_Function.preHash(left_join_ord_1);
@@ -106,20 +115,15 @@ public class Q3NV_Original {
             }
         }
         for (int key_i = 0; key_i < aggregation_state_map.numberOfRecords; key_i++) {
-            int groupKey_0 = aggregation_state_map.keys_ord_0[key_i];
-            int groupKey_1 = aggregation_state_map.keys_ord_1[key_i];
-            int groupKey_2 = aggregation_state_map.keys_ord_2[key_i];
-            double aggregation_0_value = aggregation_state_map.values_ord_0[key_i];
+            KeyValueMap_1873859565.RecordType currentRecord = aggregation_state_map.records[key_i];
+            int groupKey_0 = currentRecord.key_ord_0;
+            int groupKey_1 = currentRecord.key_ord_1;
+            int groupKey_2 = currentRecord.key_ord_2;
+            double aggregation_0_value = currentRecord.value_ord_0;
             result_count++;
         }
         System.out.println(result_count);
         /// END GENERATED
-
-
-        long end = System.nanoTime();
-        long msDuration = (end - start) / 1_000_000;
-        System.out.println(msDuration);
     }
-
 
 }

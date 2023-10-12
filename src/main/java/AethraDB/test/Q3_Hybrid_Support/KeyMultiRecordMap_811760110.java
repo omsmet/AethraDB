@@ -1,4 +1,4 @@
-package AethraDB.test.Q3NV_Original_Support;
+package AethraDB.test.Q3_Hybrid_Support;
 
 import AethraDB.evaluation.general_support.hashmaps.Int_Hash_Function;
 
@@ -12,7 +12,7 @@ public final class KeyMultiRecordMap_811760110 {
     private int[] next;
 
     public KeyMultiRecordMap_811760110() {
-        this(4);
+        this(262144);
     }
     public KeyMultiRecordMap_811760110(int capacity) {
         if (!(((capacity > 1) && ((capacity & (capacity - 1)) == 0)))) {
@@ -45,7 +45,7 @@ public final class KeyMultiRecordMap_811760110 {
         this.keysRecordCount[index]++;
         if (newEntry) {
             boolean rehashOnCollision = (this.numberOfRecords > ((3 * this.hashTable.length) / 4));
-            this.putHashEntry(key, preHash, index, rehashOnCollision);
+            this.putHashEntry(preHash, index, rehashOnCollision);
         }
     }
     private int find(int key, long preHash) {
@@ -56,18 +56,16 @@ public final class KeyMultiRecordMap_811760110 {
         }
         int currentIndex = initialIndex;
         while ((this.keys[currentIndex] != key)) {
-            int potentialNextIndex = this.next[currentIndex];
-            if ((potentialNextIndex == -1)) {
+            currentIndex = this.next[currentIndex];
+            if ((currentIndex == -1)) {
                 return -1;
-            } else {
-                currentIndex = potentialNextIndex;
             }
         }
         return currentIndex;
     }
     private void growArrays() {
         int currentSize = this.keys.length;
-        int newSize = (currentSize << 1);
+        int newSize = (currentSize * 8);
         if ((newSize > (Integer.MAX_VALUE - 1))) {
             throw new java.lang.UnsupportedOperationException("Map has grown too large");
         }
@@ -83,7 +81,7 @@ public final class KeyMultiRecordMap_811760110 {
         Arrays.fill(newNext, currentSize, newSize, -1);
         this.next = newNext;
     }
-    private void putHashEntry(int key, long preHash, int index, boolean rehashOnCollision) {
+    private void putHashEntry(long preHash, int index, boolean rehashOnCollision) {
         int htIndex = ((int) (preHash & (this.hashTable.length - 1)));
         int initialIndex = this.hashTable[htIndex];
         if ((initialIndex == -1)) {
@@ -95,24 +93,22 @@ public final class KeyMultiRecordMap_811760110 {
             return;
         }
         int currentIndex = initialIndex;
-        while (((this.keys[currentIndex] != key) && (this.next[currentIndex] != -1))) {
+        while ((this.next[currentIndex] != -1)) {
             currentIndex = this.next[currentIndex];
         }
         this.next[currentIndex] = index;
     }
     private void rehash() {
-        int size = this.hashTable.length;
-        while ((size <= this.numberOfRecords)) {
-            size = (size << 1);
-        }
-        size = (size << 1);
+        int size = (this.hashTable.length * 8);
         this.hashTable = new int[size];
         Arrays.fill(this.hashTable, -1);
-        Arrays.fill(this.next, -1);
+        for (int recordIndex = 0; recordIndex < numberOfRecords; recordIndex++) {
+            this.next[recordIndex] = -1;
+        }
         for (int i = 0; i < this.numberOfRecords; i++) {
             int key = this.keys[i];
             long preHash = Int_Hash_Function.preHash(key);
-            this.putHashEntry(key, preHash, i, false);
+            this.putHashEntry(preHash, i, false);
         }
     }
     public int getIndex(int key, long preHash) {
@@ -125,7 +121,7 @@ public final class KeyMultiRecordMap_811760110 {
         this.numberOfRecords = 0;
         Arrays.fill(this.keys, -1);
         Arrays.fill(this.keysRecordCount, 0);
-        Arrays.fill(this.hashTable, -1);
         Arrays.fill(this.next, -1);
+        Arrays.fill(this.hashTable, -1);
     }
 }

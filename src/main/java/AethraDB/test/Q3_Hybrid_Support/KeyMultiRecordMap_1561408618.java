@@ -1,20 +1,30 @@
-package AethraDB.test.Q3NV_Original_Support;
+package AethraDB.test.Q3_Hybrid_Support;
 
 import AethraDB.evaluation.general_support.hashmaps.Int_Hash_Function;
 
 import java.util.Arrays;
 
 public final class KeyMultiRecordMap_1561408618 {
+    public static final class ValueRecordType {
+        public final int value_ord_0;
+        public final int value_ord_1;
+
+        public ValueRecordType(int value_ord_0, int value_ord_1) {
+            this.value_ord_0 = value_ord_0;
+            this.value_ord_1 = value_ord_1;
+        }
+
+    }
+
     private int numberOfRecords;
     private int[] keys;
     public int[] keysRecordCount;
-    public int[][] values_record_ord_0;
-    public int[][] values_record_ord_1;
+    public ValueRecordType[][] records;
     private int[] hashTable;
     private int[] next;
 
     public KeyMultiRecordMap_1561408618() {
-        this(4);
+        this(262144);
     }
     public KeyMultiRecordMap_1561408618(int capacity) {
         if (!(((capacity > 1) && ((capacity & (capacity - 1)) == 0)))) {
@@ -24,8 +34,7 @@ public final class KeyMultiRecordMap_1561408618 {
         this.keys = new int[capacity];
         Arrays.fill(this.keys, -1);
         this.keysRecordCount = new int[capacity];
-        this.values_record_ord_0 = new int[capacity][8];
-        this.values_record_ord_1 = new int[capacity][8];
+        this.records = new ValueRecordType[capacity][1];
         this.hashTable = new int[capacity];
         Arrays.fill(this.hashTable, -1);
         this.next = new int[capacity];
@@ -47,22 +56,18 @@ public final class KeyMultiRecordMap_1561408618 {
             this.keys[index] = key;
         }
         int insertionIndex = this.keysRecordCount[index];
-        if (!((insertionIndex < this.values_record_ord_0[index].length))) {
-            int currentValueArraysSize = this.values_record_ord_0[index].length;
-            int newValueArraysSize = (2 * currentValueArraysSize);
-            int[] temp_values_record_ord_0 = new int[newValueArraysSize];
-            System.arraycopy(this.values_record_ord_0[index], 0, temp_values_record_ord_0, 0, currentValueArraysSize);
-            this.values_record_ord_0[index] = temp_values_record_ord_0;
-            int[] temp_values_record_ord_1 = new int[newValueArraysSize];
-            System.arraycopy(this.values_record_ord_1[index], 0, temp_values_record_ord_1, 0, currentValueArraysSize);
-            this.values_record_ord_1[index] = temp_values_record_ord_1;
+        if (!((insertionIndex < this.records[index].length))) {
+            int currentValueArraySize = this.records[index].length;
+            int newValueArraySize = (8 * currentValueArraySize);
+            ValueRecordType[] temp_records = new ValueRecordType[newValueArraySize];
+            System.arraycopy(this.records[index], 0, temp_records, 0, currentValueArraySize);
+            this.records[index] = temp_records;
         }
-        this.values_record_ord_0[index][insertionIndex] = record_ord_0;
-        this.values_record_ord_1[index][insertionIndex] = record_ord_1;
+        this.records[index][insertionIndex] = new ValueRecordType(record_ord_0, record_ord_1);
         this.keysRecordCount[index]++;
         if (newEntry) {
             boolean rehashOnCollision = (this.numberOfRecords > ((3 * this.hashTable.length) / 4));
-            this.putHashEntry(key, preHash, index, rehashOnCollision);
+            this.putHashEntry(preHash, index, rehashOnCollision);
         }
     }
     private int find(int key, long preHash) {
@@ -73,18 +78,16 @@ public final class KeyMultiRecordMap_1561408618 {
         }
         int currentIndex = initialIndex;
         while ((this.keys[currentIndex] != key)) {
-            int potentialNextIndex = this.next[currentIndex];
-            if ((potentialNextIndex == -1)) {
+            currentIndex = this.next[currentIndex];
+            if ((currentIndex == -1)) {
                 return -1;
-            } else {
-                currentIndex = potentialNextIndex;
             }
         }
         return currentIndex;
     }
     private void growArrays() {
         int currentSize = this.keys.length;
-        int newSize = (currentSize << 1);
+        int newSize = (currentSize * 8);
         if ((newSize > (Integer.MAX_VALUE - 1))) {
             throw new java.lang.UnsupportedOperationException("Map has grown too large");
         }
@@ -99,14 +102,11 @@ public final class KeyMultiRecordMap_1561408618 {
         System.arraycopy(this.next, 0, newNext, 0, currentSize);
         Arrays.fill(newNext, currentSize, newSize, -1);
         this.next = newNext;
-        int[][] new_values_record_ord_0 = new int[newSize][8];
-        System.arraycopy(this.values_record_ord_0, 0, new_values_record_ord_0, 0, currentSize);
-        this.values_record_ord_0 = new_values_record_ord_0;
-        int[][] new_values_record_ord_1 = new int[newSize][8];
-        System.arraycopy(this.values_record_ord_1, 0, new_values_record_ord_1, 0, currentSize);
-        this.values_record_ord_1 = new_values_record_ord_1;
+        ValueRecordType[][] newValues = new ValueRecordType[newSize][1];
+        System.arraycopy(this.records, 0, newValues, 0, currentSize);
+        this.records = newValues;
     }
-    private void putHashEntry(int key, long preHash, int index, boolean rehashOnCollision) {
+    private void putHashEntry(long preHash, int index, boolean rehashOnCollision) {
         int htIndex = ((int) (preHash & (this.hashTable.length - 1)));
         int initialIndex = this.hashTable[htIndex];
         if ((initialIndex == -1)) {
@@ -118,24 +118,22 @@ public final class KeyMultiRecordMap_1561408618 {
             return;
         }
         int currentIndex = initialIndex;
-        while (((this.keys[currentIndex] != key) && (this.next[currentIndex] != -1))) {
+        while ((this.next[currentIndex] != -1)) {
             currentIndex = this.next[currentIndex];
         }
         this.next[currentIndex] = index;
     }
     private void rehash() {
-        int size = this.hashTable.length;
-        while ((size <= this.numberOfRecords)) {
-            size = (size << 1);
-        }
-        size = (size << 1);
+        int size = (this.hashTable.length * 8);
         this.hashTable = new int[size];
         Arrays.fill(this.hashTable, -1);
-        Arrays.fill(this.next, -1);
+        for (int recordIndex = 0; recordIndex < numberOfRecords; recordIndex++) {
+            this.next[recordIndex] = -1;
+        }
         for (int i = 0; i < this.numberOfRecords; i++) {
             int key = this.keys[i];
             long preHash = Int_Hash_Function.preHash(key);
-            this.putHashEntry(key, preHash, i, false);
+            this.putHashEntry(preHash, i, false);
         }
     }
     public int getIndex(int key, long preHash) {
@@ -148,7 +146,8 @@ public final class KeyMultiRecordMap_1561408618 {
         this.numberOfRecords = 0;
         Arrays.fill(this.keys, -1);
         Arrays.fill(this.keysRecordCount, 0);
-        Arrays.fill(this.hashTable, -1);
         Arrays.fill(this.next, -1);
+        Arrays.fill(this.hashTable, -1);
+        this.records = new ValueRecordType[this.keys.length][1];
     }
 }

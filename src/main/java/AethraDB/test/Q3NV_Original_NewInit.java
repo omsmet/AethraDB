@@ -17,12 +17,20 @@ public class Q3NV_Original_NewInit {
     public static void main(String[] args) throws Exception {
         String tableFilePath = args[0];
         RootAllocator rootAllocator = new RootAllocator();
-        ArrowTableReader customer = new ABQArrowTableReader(new File(tableFilePath + "/customer.arrow"), rootAllocator, true, new int[] { 0, 6 });
-        ArrowTableReader orders = new ABQArrowTableReader(new File(tableFilePath + "/orders.arrow"), rootAllocator, true, new int[] { 0, 1, 4, 7 });
-        ArrowTableReader lineitem = new ABQArrowTableReader(new File(tableFilePath + "/lineitem.arrow"), rootAllocator, true, new int[] { 0, 5, 6, 10 });
+        ABQArrowTableReader customer = new ABQArrowTableReader(new File(tableFilePath + "/customer.arrow"), rootAllocator, true, new int[] { 0, 6 });
+        ABQArrowTableReader orders = new ABQArrowTableReader(new File(tableFilePath + "/orders.arrow"), rootAllocator, true, new int[] { 0, 1, 4, 7 });
+        ABQArrowTableReader lineitem = new ABQArrowTableReader(new File(tableFilePath + "/lineitem.arrow"), rootAllocator, true, new int[] { 0, 5, 6, 10 });
 
         long start = System.nanoTime();
 
+        query(customer, orders, lineitem);
+
+        long end = System.nanoTime();
+        long msDuration = (end - start) / 1_000_000;
+        System.out.println(msDuration);
+    }
+
+    public static void query(ABQArrowTableReader customer, ABQArrowTableReader orders, ABQArrowTableReader lineitem) {
         /// GENERATED
         byte[] byte_array_cache = null;
         long result_count = 0;
@@ -114,11 +122,6 @@ public class Q3NV_Original_NewInit {
         }
         System.out.println(result_count);
         /// END GENERATED
-
-
-        long end = System.nanoTime();
-        long msDuration = (end - start) / 1_000_000;
-        System.out.println(msDuration);
     }
 
 
