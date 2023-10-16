@@ -226,31 +226,23 @@ public class ABQArrowTableReader extends ArrowTableReader {
                         FieldVector fv_cvi_i = schemaRoot.getVector(i);
                         if (fv_cvi_i instanceof IntVector int_fv_cvi_i) {
                             vectorBatch[i] = new IntVector(int_fv_cvi_i.getField(), this.tableAllocator);
-                            int_fv_cvi_i.transferTo((IntVector) vectorBatch[i]);
+                            int_fv_cvi_i.transferToUnsafe((IntVector) vectorBatch[i]);
 
                         } else if (fv_cvi_i instanceof FixedSizeBinaryVector fsbv_fv_cvi_i) {
                             vectorBatch[i] = new FixedSizeBinaryVector(fsbv_fv_cvi_i.getField(), this.tableAllocator);
-                            fsbv_fv_cvi_i.transferTo((FixedSizeBinaryVector) vectorBatch[i]);
+                            fsbv_fv_cvi_i.transferToUnsafe((FixedSizeBinaryVector) vectorBatch[i]);
 
                         } else if (fv_cvi_i instanceof Float8Vector f8_fv_cvi_i) {
                             vectorBatch[i] = new Float8Vector(f8_fv_cvi_i.getField(), this.tableAllocator);
-                            f8_fv_cvi_i.transferTo((Float8Vector) vectorBatch[i]);
-
-                        } else if (fv_cvi_i instanceof LargeVarCharVector lvc_fv_cvi_i) {
-                            vectorBatch[i] = new LargeVarCharVector(lvc_fv_cvi_i.getField(), this.tableAllocator);
-                            lvc_fv_cvi_i.transferTo((LargeVarCharVector) vectorBatch[i]);
+                            f8_fv_cvi_i.transferToUnsafe((Float8Vector) vectorBatch[i]);
 
                         } else if (fv_cvi_i instanceof DateDayVector dd_fv_cvi_i) {
                             vectorBatch[i] = new DateDayVector(dd_fv_cvi_i.getField(), this.tableAllocator);
-                            dd_fv_cvi_i.transferTo((DateDayVector) vectorBatch[i]);
-
-                        } else if (fv_cvi_i instanceof DecimalVector dd_fv_cvi_i) {
-                            vectorBatch[i] = new DecimalVector(dd_fv_cvi_i.getField(), this.tableAllocator);
-                            dd_fv_cvi_i.transferTo((DecimalVector) vectorBatch[i]);
+                            dd_fv_cvi_i.transferToUnsafe((DateDayVector) vectorBatch[i]);
 
                         } else if (fv_cvi_i instanceof VarCharVector vc_fv_cvi_i) {
                             vectorBatch[i] = new VarCharVector(vc_fv_cvi_i.getField(), this.tableAllocator);
-                            vc_fv_cvi_i.transferTo((VarCharVector) vectorBatch[i]);
+                            vc_fv_cvi_i.transferToUnsafe((VarCharVector) vectorBatch[i]);
 
                         } else {
                             throw new UnsupportedOperationException(

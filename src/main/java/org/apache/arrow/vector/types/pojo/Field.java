@@ -17,11 +17,6 @@
 
 package org.apache.arrow.vector.types.pojo;
 
-import com.fasterxml.jackson.annotation.JsonCreator;
-import com.fasterxml.jackson.annotation.JsonIgnore;
-import com.fasterxml.jackson.annotation.JsonInclude;
-import com.fasterxml.jackson.annotation.JsonInclude.Include;
-import com.fasterxml.jackson.annotation.JsonProperty;
 import com.google.flatbuffers.FlatBufferBuilder;
 import org.apache.arrow.flatbuf.KeyValue;
 import org.apache.arrow.flatbuf.Type;
@@ -86,14 +81,13 @@ public class Field {
     this(name, new FieldType(nullable, type, dictionary, metadata), children);
   }
 
-  @JsonCreator
   private Field(
-      @JsonProperty("name") String name,
-      @JsonProperty("nullable") boolean nullable,
-      @JsonProperty("type") ArrowType type,
-      @JsonProperty("dictionary") DictionaryEncoding dictionary,
-      @JsonProperty("children") List<Field> children,
-      @JsonProperty("metadata") List<Map<String, String>> metadata) {
+      String name,
+      boolean nullable,
+      ArrowType type,
+      DictionaryEncoding dictionary,
+      List<Field> children,
+      List<Map<String, String>> metadata) {
     this(name, new FieldType(nullable, type, dictionary, convertMetadata(metadata)), children);
   }
 
@@ -309,12 +303,10 @@ public class Field {
     return fieldType.getType();
   }
 
-  @JsonIgnore
   public FieldType getFieldType() {
     return fieldType;
   }
 
-  @JsonInclude(Include.NON_NULL)
   public DictionaryEncoding getDictionary() {
     return fieldType.getDictionary();
   }
@@ -323,15 +315,8 @@ public class Field {
     return children;
   }
 
-  @JsonIgnore
   public Map<String, String> getMetadata() {
     return fieldType.getMetadata();
-  }
-
-  @JsonProperty("metadata")
-  @JsonInclude(Include.NON_EMPTY)
-  List<Map<String, String>> getMetadataForJson() {
-    return convertMetadata(getMetadata());
   }
 
   @Override

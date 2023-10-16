@@ -33,25 +33,10 @@ import org.apache.arrow.memory.BufferAllocator;
 import org.apache.arrow.vector.types.*;
 import org.apache.arrow.vector.FieldVector;
 
-import com.fasterxml.jackson.annotation.JsonCreator;
-import com.fasterxml.jackson.annotation.JsonIgnore;
-import com.fasterxml.jackson.annotation.JsonProperty;
-import com.fasterxml.jackson.annotation.JsonSubTypes;
-import com.fasterxml.jackson.annotation.JsonTypeInfo;
-
 /**
  * Arrow types
  * Source code generated using FreeMarker template ${.template_name}
  **/
-@JsonTypeInfo(
-  use = JsonTypeInfo.Id.NAME,
-  include = JsonTypeInfo.As.PROPERTY,
-  property = "name")
-@JsonSubTypes({
-<#list arrowTypes.types as type>
-  @JsonSubTypes.Type(value = ArrowType.${type.name?remove_ending("_")}.class, name = "${type.name?remove_ending("_")?lower_case}"),
-</#list>
-})
 public abstract class ArrowType {
 
   public static abstract class PrimitiveType extends ArrowType {
@@ -94,9 +79,7 @@ public abstract class ArrowType {
     }
   }
 
-  @JsonIgnore
   public abstract ArrowTypeID getTypeID();
-  @JsonIgnore
   public abstract boolean isComplex();
   public abstract int getType(FlatBufferBuilder builder);
   public abstract <T> T accept(ArrowTypeVisitor<T> visitor);
@@ -171,11 +154,10 @@ public abstract class ArrowType {
 
     <#if type.name == "Decimal">
     // Needed to support golden file integration tests.
-    @JsonCreator
     public static Decimal createDecimal(
-      @JsonProperty("precision") int precision,
-      @JsonProperty("scale") int scale,
-      @JsonProperty("bitWidth") Integer bitWidth) {
+      int precision,
+      int scale,
+      Integer bitWidth) {
 
       return new Decimal(precision, scale, bitWidth == null ? 128 : bitWidth);
     }
@@ -194,12 +176,11 @@ public abstract class ArrowType {
     }
 
     <#else>
-    @JsonCreator
     </#if>
     public ${type.name}(
     <#list type.fields as field>
     <#assign fieldType = field.valueType!field.type>
-      @JsonProperty("${field.name}") ${fieldType} ${field.name}<#if field_has_next>, </#if>
+      ${fieldType} ${field.name}<#if field_has_next>, </#if>
     </#list>
     ) {
       <#list type.fields as field>

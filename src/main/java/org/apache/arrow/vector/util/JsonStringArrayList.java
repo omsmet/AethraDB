@@ -17,9 +17,6 @@
 
 package org.apache.arrow.vector.util;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
-
 import java.util.ArrayList;
 
 /**
@@ -30,8 +27,6 @@ import java.util.ArrayList;
  */
 public class JsonStringArrayList<E> extends ArrayList<E> {
 
-  private static final ObjectMapper MAPPER = ObjectMapperFactory.newObjectMapper();
-
   public JsonStringArrayList() {
     super();
   }
@@ -40,12 +35,4 @@ public class JsonStringArrayList<E> extends ArrayList<E> {
     super(size);
   }
 
-  @Override
-  public final String toString() {
-    try {
-      return MAPPER.writeValueAsString(this);
-    } catch (JsonProcessingException e) {
-      throw new IllegalStateException("Cannot serialize array list to JSON string", e);
-    }
-  }
 }

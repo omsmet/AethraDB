@@ -306,8 +306,9 @@ public class AethraArrowFileReader extends ArrowReader {
 
         }
 
-        // Update the row count of the root
-        root.setRowCount(checkedCastToInt(recordBatchFB.length()));
+        // Update the row count of the root (as all *initialised* field vectors have already been set
+        // this specific call to set the root count only saves initialisation of unused vectors)
+        root.setRowCountRootOnly(checkedCastToInt(recordBatchFB.length()));
 
         // Release the metadata buffer
         metadataPrefixBuffer.getReferenceManager().release();

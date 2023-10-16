@@ -58,7 +58,8 @@ abstract class BaseAllocator extends Accountant implements BufferAllocator {
 //        : "disabled. Enable with the VM option -Darrow.memory.debug.allocator=true."));
   }
 
-  public static final Config DEFAULT_CONFIG = ImmutableConfig.builder().build();
+// Removed since AethraDB does not use the default config
+//  public static final Config DEFAULT_CONFIG = ImmutableConfig.builder().build();
 
   // Package exposed for sharing between AllocatorManger and BaseAllocator objects
   private final String name;
@@ -737,15 +738,16 @@ abstract class BaseAllocator extends Accountant implements BufferAllocator {
     }
   }
 
-  /**
-   * Returns a default {@link Config} instance.
-   *
-   * @see ImmutableConfig.Builder
-   */
-  public static Config defaultConfig() {
-    return DEFAULT_CONFIG;
-
-  }
+// Removed since AethraDB does not use the default config
+//  /**
+//   * Returns a default {@link Config} instance.
+//   *
+//   * @see ImmutableConfig.Builder
+//   */
+//  public static Config defaultConfig() {
+//    return DEFAULT_CONFIG;
+//
+//  }
 
   /**
    * Returns a builder class for configuring BaseAllocator's options.

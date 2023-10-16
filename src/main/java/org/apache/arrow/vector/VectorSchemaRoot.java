@@ -241,6 +241,14 @@ public class VectorSchemaRoot implements AutoCloseable {
     }
   }
 
+  /**
+   * Set the row count of exactly the root, under the presumption that the row count is already
+   * set on all root level contained field vectors.
+   */
+  public void setRowCountRootOnly(int rowCount) {
+    this.rowCount = rowCount;
+  }
+
   @Override
   public void close() {
     try {

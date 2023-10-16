@@ -3,6 +3,7 @@ package AethraDB;
 import AethraDB.evaluation.codegen.GeneratedQuery;
 import AethraDB.util.AethraGenerator;
 import org.apache.arrow.memory.RootAllocator;
+import org.apache.arrow.memory.UnsafeAllocationManager;
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
 import org.apache.commons.cli.DefaultParser;
@@ -103,7 +104,10 @@ public class AethraDB {
         boolean shouldSummarise = cmdArguments.hasOption(summariseAsCount);
 
         // Initialise the arrow root allocator
-        RootAllocator arrowRootAllocator = new RootAllocator();
+        var arrowConfig = RootAllocator.configBuilder()
+                .allocationManagerFactory(UnsafeAllocationManager.FACTORY)
+                .build();
+        RootAllocator arrowRootAllocator = new RootAllocator(arrowConfig);
 
         // Plan, generate and instantiate the query
         GeneratedQuery generatedQuery = AethraGenerator.planGenerateCompileQuery(

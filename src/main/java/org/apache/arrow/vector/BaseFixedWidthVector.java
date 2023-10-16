@@ -596,6 +596,16 @@ public abstract class BaseFixedWidthVector extends BaseValueVector
    */
   public void transferTo(BaseFixedWidthVector target) {
     compareTypes(target, "transferTo");
+    transferToUnsafe(target);
+  }
+
+  /**
+   * Transfer this vector's data to another vector without checking type information.
+   * The memory associated with this vector is transferred to the allocator of target vector
+   * for accounting and management purposes.
+   * @param target destination vector for transfer
+   */
+  public void transferToUnsafe(BaseFixedWidthVector target) {
     target.clear();
     target.validityBuffer = transferBuffer(validityBuffer, target.allocator);
     target.valueBuffer = transferBuffer(valueBuffer, target.allocator);
