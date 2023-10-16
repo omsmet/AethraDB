@@ -18,8 +18,6 @@
 package org.apache.arrow.vector;
 
 import org.apache.arrow.memory.BufferAllocator;
-import org.apache.arrow.vector.complex.impl.LargeVarCharReaderImpl;
-import org.apache.arrow.vector.complex.reader.FieldReader;
 import org.apache.arrow.vector.holders.LargeVarCharHolder;
 import org.apache.arrow.vector.holders.NullableLargeVarCharHolder;
 import org.apache.arrow.vector.types.Types;
@@ -70,10 +68,11 @@ public final class LargeVarCharVector extends BaseLargeVariableWidthVector {
     super(field, allocator);
   }
 
-  @Override
-  protected FieldReader getReaderImpl() {
-    return new LargeVarCharReaderImpl(LargeVarCharVector.this);
-  }
+// Removed for AethraDB as readers are not used.
+//  @Override
+//  protected FieldReader getReaderImpl() {
+//    return new LargeVarCharReaderImpl(LargeVarCharVector.this);
+//  }
 
   /**
    * Get minor type for this vector. The vector holds values belonging

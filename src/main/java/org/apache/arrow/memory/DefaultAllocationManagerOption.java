@@ -34,7 +34,7 @@ public class DefaultAllocationManagerOption {
    */
   public static final String ALLOCATION_MANAGER_TYPE_PROPERTY_NAME = "arrow.allocation.manager.type";
 
-  static final org.slf4j.Logger LOGGER = org.slf4j.LoggerFactory.getLogger(DefaultAllocationManagerOption.class);
+//  static final org.slf4j.Logger LOGGER = org.slf4j.LoggerFactory.getLogger(DefaultAllocationManagerOption.class);
 
   /**
    * The default allocation manager factory.
@@ -94,7 +94,7 @@ public class DefaultAllocationManagerOption {
         DEFAULT_ALLOCATION_MANAGER_FACTORY = getUnsafeFactory();
         break;
       case Unknown:
-        LOGGER.info("allocation manager type not specified, using netty as the default type");
+//        LOGGER.info("allocation manager type not specified, using netty as the default type");
         DEFAULT_ALLOCATION_MANAGER_FACTORY = getFactory(CheckAllocator.check());
         break;
       default:

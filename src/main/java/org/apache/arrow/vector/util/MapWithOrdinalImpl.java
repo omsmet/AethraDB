@@ -20,8 +20,6 @@ package org.apache.arrow.vector.util;
 import io.netty.util.collection.IntObjectHashMap;
 import io.netty.util.collection.IntObjectMap;
 import org.apache.arrow.util.Preconditions;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.util.AbstractMap;
 import java.util.ArrayList;
@@ -51,7 +49,7 @@ import java.util.stream.StreamSupport;
  * @param <V> value type
  */
 public class MapWithOrdinalImpl<K, V> implements MapWithOrdinal<K, V> {
-  private static final Logger logger = LoggerFactory.getLogger(MapWithOrdinalImpl.class);
+//  private static final Logger logger = LoggerFactory.getLogger(MapWithOrdinalImpl.class);
 
   private final Map<K, Map.Entry<Integer, V>> primary = new LinkedHashMap<>();
   private final IntObjectHashMap<V> secondary = new IntObjectHashMap<>();

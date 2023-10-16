@@ -19,8 +19,6 @@ package org.apache.arrow.vector;
 
 import org.apache.arrow.memory.ArrowBuf;
 import org.apache.arrow.memory.BufferAllocator;
-import org.apache.arrow.vector.complex.impl.UInt1ReaderImpl;
-import org.apache.arrow.vector.complex.reader.FieldReader;
 import org.apache.arrow.vector.holders.NullableUInt1Holder;
 import org.apache.arrow.vector.holders.UInt1Holder;
 import org.apache.arrow.vector.types.Types.MinorType;
@@ -66,10 +64,11 @@ public final class UInt1Vector extends BaseFixedWidthVector implements BaseIntVe
     super(field, allocator, TYPE_WIDTH);
   }
 
-  @Override
-  protected FieldReader getReaderImpl() {
-    return new UInt1ReaderImpl(UInt1Vector.this);
-  }
+// Removed for AethraDB as readers are not used.
+//  @Override
+//  protected FieldReader getReaderImpl() {
+//    return new UInt1ReaderImpl(UInt1Vector.this);
+//  }
 
   @Override
   public MinorType getMinorType() {

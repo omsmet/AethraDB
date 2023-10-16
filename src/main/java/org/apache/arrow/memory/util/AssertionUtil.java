@@ -23,7 +23,7 @@ package org.apache.arrow.memory.util;
 public class AssertionUtil {
 
   public static final boolean ASSERT_ENABLED;
-  static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(AssertionUtil.class);
+//  static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(AssertionUtil.class);
 
   static {
     boolean isAssertEnabled = false;

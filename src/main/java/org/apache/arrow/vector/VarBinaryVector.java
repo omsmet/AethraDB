@@ -18,8 +18,6 @@
 package org.apache.arrow.vector;
 
 import org.apache.arrow.memory.BufferAllocator;
-import org.apache.arrow.vector.complex.impl.VarBinaryReaderImpl;
-import org.apache.arrow.vector.complex.reader.FieldReader;
 import org.apache.arrow.vector.holders.NullableVarBinaryHolder;
 import org.apache.arrow.vector.holders.VarBinaryHolder;
 import org.apache.arrow.vector.types.Types.MinorType;
@@ -70,10 +68,11 @@ public final class VarBinaryVector extends BaseVariableWidthVector {
     super(field, allocator);
   }
 
-  @Override
-  protected FieldReader getReaderImpl() {
-    return new VarBinaryReaderImpl(VarBinaryVector.this);
-  }
+// Removed for AethraDB as readers are not used.
+//  @Override
+//  protected FieldReader getReaderImpl() {
+//    return new VarBinaryReaderImpl(VarBinaryVector.this);
+//  }
 
   /**
    * Get minor type for this vector. The vector holds values belonging

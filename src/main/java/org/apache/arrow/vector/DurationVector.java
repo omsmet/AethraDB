@@ -19,8 +19,6 @@ package org.apache.arrow.vector;
 
 import org.apache.arrow.memory.ArrowBuf;
 import org.apache.arrow.memory.BufferAllocator;
-import org.apache.arrow.vector.complex.impl.DurationReaderImpl;
-import org.apache.arrow.vector.complex.reader.FieldReader;
 import org.apache.arrow.vector.holders.DurationHolder;
 import org.apache.arrow.vector.holders.NullableDurationHolder;
 import org.apache.arrow.vector.types.TimeUnit;
@@ -70,10 +68,11 @@ public final class DurationVector extends BaseFixedWidthVector {
     this.unit = ((ArrowType.Duration) field.getFieldType().getType()).getUnit();
   }
 
-  @Override
-  protected FieldReader getReaderImpl() {
-    return new DurationReaderImpl(DurationVector.this);
-  }
+// Removed for AethraDB as readers are not used.
+//  @Override
+//  protected FieldReader getReaderImpl() {
+//    return new DurationReaderImpl(DurationVector.this);
+//  }
 
   /**
    * Get minor type for this vector. The vector holds values belonging

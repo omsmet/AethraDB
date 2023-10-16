@@ -28,8 +28,8 @@ import java.util.Optional;
  */
 public class OutOfMemoryException extends RuntimeException {
 
-  static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(OutOfMemoryException
-      .class);
+//  static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(OutOfMemoryException
+//      .class);
   private static final long serialVersionUID = -6858052345185793382L;
   private Optional<AllocationOutcomeDetails> outcomeDetails = Optional.empty();
 

@@ -18,8 +18,6 @@
 package org.apache.arrow.vector;
 
 import org.apache.arrow.memory.BufferAllocator;
-import org.apache.arrow.vector.complex.impl.TimeStampSecReaderImpl;
-import org.apache.arrow.vector.complex.reader.FieldReader;
 import org.apache.arrow.vector.holders.NullableTimeStampSecHolder;
 import org.apache.arrow.vector.holders.TimeStampSecHolder;
 import org.apache.arrow.vector.types.Types.MinorType;
@@ -73,10 +71,11 @@ public final class TimeStampSecVector extends TimeStampVector {
     super(field, allocator);
   }
 
-  @Override
-  protected FieldReader getReaderImpl() {
-    return new TimeStampSecReaderImpl(TimeStampSecVector.this);
-  }
+// Removed for AethraDB as readers are not used.
+//  @Override
+//  protected FieldReader getReaderImpl() {
+//    return new TimeStampSecReaderImpl(TimeStampSecVector.this);
+//  }
 
   /**
    * Get minor type for this vector. The vector holds values belonging

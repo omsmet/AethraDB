@@ -74,7 +74,6 @@ THE POSSIBILITY OF SUCH DAMAGE.
         <commons-lang.version>3.13.0</commons-lang.version>
         <immutables.version>2.9.2</immutables.version>
         <janino.version>3.1.9</janino.version>
-        <slf4j.version>2.0.9</slf4j.version>
         <spark-sql.version>3.4.1</spark-sql.version>
 
         <!--
@@ -146,20 +145,6 @@ THE POSSIBILITY OF SUCH DAMAGE.
             <artifactId>junit-jupiter-api</artifactId>
             <version>5.8.2</version>
             <scope>test</scope>
-        </dependency>
-
-        <!--
-            Logging Dependencies
-          -->
-        <dependency>
-            <groupId>org.slf4j</groupId>
-            <artifactId>slf4j-api</artifactId>
-            <version>${slf4j.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>org.slf4j</groupId>
-            <artifactId>slf4j-nop</artifactId>
-            <version>${slf4j.version}</version>
         </dependency>
 
         <!--

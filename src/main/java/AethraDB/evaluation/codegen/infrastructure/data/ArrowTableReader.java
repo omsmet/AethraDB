@@ -51,6 +51,12 @@ public abstract class ArrowTableReader implements AutoCloseable {
     }
 
     /**
+     * Required no-args constructor for the simplified constructor in {@link VirtualArrowTableReader}.
+     */
+    protected ArrowTableReader() {
+    }
+
+    /**
      * Method to reset the {@link ArrowTableReader} so it can once more be read from.
      */
     public abstract void reset() throws Exception;

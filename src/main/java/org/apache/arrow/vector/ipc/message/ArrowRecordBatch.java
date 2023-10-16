@@ -24,8 +24,6 @@ import org.apache.arrow.memory.BufferAllocator;
 import org.apache.arrow.util.Preconditions;
 import org.apache.arrow.vector.compression.NoCompressionCodec;
 import org.apache.arrow.vector.util.DataSizeRoundingUtil;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -37,7 +35,7 @@ import java.util.stream.Collectors;
  */
 public class ArrowRecordBatch implements ArrowMessage {
 
-  private static final Logger LOGGER = LoggerFactory.getLogger(ArrowRecordBatch.class);
+//  private static final Logger LOGGER = LoggerFactory.getLogger(ArrowRecordBatch.class);
 
   /**
    * Number of records.
@@ -111,9 +109,9 @@ public class ArrowRecordBatch implements ArrowMessage {
       }
       long size = arrowBuf.readableBytes();
       arrowBuffers.add(new ArrowBuffer(offset, size));
-      if (LOGGER.isDebugEnabled()) {
-        LOGGER.debug("Buffer in RecordBatch at {}, length: {}", offset, size);
-      }
+//      if (LOGGER.isDebugEnabled()) {
+//        LOGGER.debug("Buffer in RecordBatch at {}, length: {}", offset, size);
+//      }
       offset += size;
       if (alignBuffers) { // align on 8 byte boundaries
         offset = DataSizeRoundingUtil.roundUpTo8Multiple(offset);

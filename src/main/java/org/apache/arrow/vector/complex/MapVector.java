@@ -24,7 +24,6 @@ import org.apache.arrow.vector.BitVectorHelper;
 import org.apache.arrow.vector.FieldVector;
 import org.apache.arrow.vector.ValueVector;
 import org.apache.arrow.vector.ZeroVector;
-import org.apache.arrow.vector.complex.impl.UnionMapReader;
 import org.apache.arrow.vector.complex.impl.UnionMapWriter;
 import org.apache.arrow.vector.types.Types;
 import org.apache.arrow.vector.types.Types.MinorType;
@@ -109,16 +108,17 @@ public class MapVector extends ListVector {
     return new UnionMapWriter(this);
   }
 
-  /**
-   * Get the reader for this MapVector instance.
-   */
-  @Override
-  public UnionMapReader getReader() {
-    if (reader == null) {
-      reader = new UnionMapReader(this);
-    }
-    return (UnionMapReader) reader;
-  }
+// Removed for AethraDB as readers are not used.
+//  /**
+//   * Get the reader for this MapVector instance.
+//   */
+//  @Override
+//  public UnionMapReader getReader() {
+//    if (reader == null) {
+//      reader = new UnionMapReader(this);
+//    }
+//    return (UnionMapReader) reader;
+//  }
 
   @Override
   public MinorType getMinorType() {

@@ -22,7 +22,6 @@ import org.apache.arrow.util.Preconditions;
 import org.apache.arrow.vector.FieldVector;
 import org.apache.arrow.vector.ValueVector;
 import org.apache.arrow.vector.VectorSchemaRoot;
-import org.apache.arrow.vector.complex.reader.FieldReader;
 import org.apache.arrow.vector.dictionary.Dictionary;
 import org.apache.arrow.vector.dictionary.DictionaryEncoder;
 import org.apache.arrow.vector.dictionary.DictionaryProvider;
@@ -94,41 +93,44 @@ public abstract class BaseTable implements AutoCloseable {
     this.fieldVectors = new ArrayList<>();
   }
 
-  /**
-   * Returns a FieldReader for the vector with the given name.
-   *
-   * @param name The name of a vector in this Table (case-sensitive)
-   * @return A FieldReader for the named FieldVector
-   */
-  public FieldReader getReader(String name) {
-    for (Map.Entry<Field, FieldVector> entry : fieldVectorsMap.entrySet()) {
-      if (entry.getKey().getName().equals(name)) {
-        return entry.getValue().getReader();
-      }
-    }
-    return null;
-  }
+// Removed for AethraDB as readers are not used.
+//  /**
+//   * Returns a FieldReader for the vector with the given name.
+//   *
+//   * @param name The name of a vector in this Table (case-sensitive)
+//   * @return A FieldReader for the named FieldVector
+//   */
+//  public FieldReader getReader(String name) {
+//    for (Map.Entry<Field, FieldVector> entry : fieldVectorsMap.entrySet()) {
+//      if (entry.getKey().getName().equals(name)) {
+//        return entry.getValue().getReader();
+//      }
+//    }
+//    return null;
+//  }
 
-  /**
-   * Returns a FieldReader for the given field.
-   *
-   * @param field The field to be read
-   * @return A FieldReader for the given field
-   */
-  public FieldReader getReader(Field field) {
-    return fieldVectorsMap.get(field).getReader();
-  }
+// Removed for AethraDB as readers are not used.
+//  /**
+//   * Returns a FieldReader for the given field.
+//   *
+//   * @param field The field to be read
+//   * @return A FieldReader for the given field
+//   */
+//  public FieldReader getReader(Field field) {
+//    return fieldVectorsMap.get(field).getReader();
+//  }
 
-  /**
-   * Returns a FieldReader for the field at the given vector index.
-   *
-   * @param index The 0-based index of the field desired.
-   * @return  A FieldReader for the requested field
-   */
-  public FieldReader getReader(int index) {
-    Preconditions.checkArgument(index >= 0 && index < fieldVectors.size());
-    return fieldVectors.get(index).getReader();
-  }
+// Removed for AethraDB as readers are not used.
+//  /**
+//   * Returns a FieldReader for the field at the given vector index.
+//   *
+//   * @param index The 0-based index of the field desired.
+//   * @return  A FieldReader for the requested field
+//   */
+//  public FieldReader getReader(int index) {
+//    Preconditions.checkArgument(index >= 0 && index < fieldVectors.size());
+//    return fieldVectors.get(index).getReader();
+//  }
 
   /**
    * Returns the schema for this Table.

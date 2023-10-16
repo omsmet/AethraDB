@@ -108,13 +108,15 @@ public class DenseUnionReader extends AbstractFieldReader {
   private SingleStructReaderImpl structReader;
 
   private StructReader getStruct(byte typeId) {
-    StructReader structReader = (StructReader) readers[typeId];
-    if (structReader == null) {
-      structReader = (SingleStructReaderImpl) data.getVectorByType(typeId).getReader();
-      structReader.setPosition(idx());
-      readers[typeId] = structReader;
-    }
-    return structReader;
+    throw new UnsupportedOperationException("DenseUnionReader.getStruct cannot be used due to AethraDB optimisations");
+// Removed for AethraDB as readers are not used.
+//    StructReader structReader = (StructReader) readers[typeId];
+//    if (structReader == null) {
+//      structReader = (SingleStructReaderImpl) data.getVectorByType(typeId).getReader();
+//      structReader.setPosition(idx());
+//      readers[typeId] = structReader;
+//    }
+//    return structReader;
   }
 
   private UnionListReader listReader;

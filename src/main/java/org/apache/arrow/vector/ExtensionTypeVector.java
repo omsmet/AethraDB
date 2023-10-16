@@ -22,7 +22,6 @@ import org.apache.arrow.memory.BufferAllocator;
 import org.apache.arrow.memory.OutOfMemoryException;
 import org.apache.arrow.util.Preconditions;
 import org.apache.arrow.vector.compare.VectorVisitor;
-import org.apache.arrow.vector.complex.reader.FieldReader;
 import org.apache.arrow.vector.ipc.message.ArrowFieldNode;
 import org.apache.arrow.vector.types.Types.MinorType;
 import org.apache.arrow.vector.types.pojo.Field;
@@ -130,10 +129,11 @@ public abstract class ExtensionTypeVector<T extends ValueVector & FieldVector> e
     return underlyingVector.makeTransferPair(target);
   }
 
-  @Override
-  protected FieldReader getReaderImpl() {
-    return underlyingVector.getReader();
-  }
+// Removed for AethraDB as readers are not used.
+//  @Override
+//  protected FieldReader getReaderImpl() {
+//    return underlyingVector.getReader();
+//  }
 
   @Override
   public int getBufferSize() {

@@ -19,8 +19,6 @@ package org.apache.arrow.vector;
 
 import org.apache.arrow.memory.ArrowBuf;
 import org.apache.arrow.memory.BufferAllocator;
-import org.apache.arrow.vector.complex.impl.IntervalMonthDayNanoReaderImpl;
-import org.apache.arrow.vector.complex.reader.FieldReader;
 import org.apache.arrow.vector.holders.IntervalMonthDayNanoHolder;
 import org.apache.arrow.vector.holders.NullableIntervalMonthDayNanoHolder;
 import org.apache.arrow.vector.types.Types.MinorType;
@@ -82,10 +80,11 @@ public final class IntervalMonthDayNanoVector extends BaseFixedWidthVector {
     super(field, allocator, TYPE_WIDTH);
   }
 
-  @Override
-  protected FieldReader getReaderImpl() {
-    return new IntervalMonthDayNanoReaderImpl(IntervalMonthDayNanoVector.this);
-  }
+// Removed for AethraDB as readers are not used.
+//  @Override
+//  protected FieldReader getReaderImpl() {
+//    return new IntervalMonthDayNanoReaderImpl(IntervalMonthDayNanoVector.this);
+//  }
 
   /**
    * Get minor type for this vector. The vector holds values belonging

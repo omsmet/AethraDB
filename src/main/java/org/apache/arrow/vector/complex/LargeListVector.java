@@ -38,10 +38,8 @@ import org.apache.arrow.vector.UInt4Vector;
 import org.apache.arrow.vector.ValueVector;
 import org.apache.arrow.vector.ZeroVector;
 import org.apache.arrow.vector.compare.VectorVisitor;
-import org.apache.arrow.vector.complex.impl.ComplexCopier;
 import org.apache.arrow.vector.complex.impl.UnionLargeListReader;
 import org.apache.arrow.vector.complex.impl.UnionLargeListWriter;
-import org.apache.arrow.vector.complex.reader.FieldReader;
 import org.apache.arrow.vector.ipc.message.ArrowFieldNode;
 import org.apache.arrow.vector.types.Types.MinorType;
 import org.apache.arrow.vector.types.pojo.ArrowType;
@@ -431,22 +429,23 @@ public class LargeListVector extends BaseValueVector implements RepeatedValueVec
     copyFrom(inIndex, outIndex, from);
   }
 
-  /**
-   * Copy a cell value from a particular index in source vector to a particular
-   * position in this vector.
-   * @param inIndex position to copy from in source vector
-   * @param outIndex position to copy to in this vector
-   * @param from source vector
-   */
-  @Override
-  public void copyFrom(int inIndex, int outIndex, ValueVector from) {
-    Preconditions.checkArgument(this.getMinorType() == from.getMinorType());
-    FieldReader in = from.getReader();
-    in.setPosition(inIndex);
-    UnionLargeListWriter out = getWriter();
-    out.setPosition(outIndex);
-    ComplexCopier.copy(in, out);
-  }
+// Removed for AethraDB as readers are not used.
+//  /**
+//   * Copy a cell value from a particular index in source vector to a particular
+//   * position in this vector.
+//   * @param inIndex position to copy from in source vector
+//   * @param outIndex position to copy to in this vector
+//   * @param from source vector
+//   */
+//  @Override
+//  public void copyFrom(int inIndex, int outIndex, ValueVector from) {
+//    Preconditions.checkArgument(this.getMinorType() == from.getMinorType());
+//    FieldReader in = from.getReader();
+//    in.setPosition(inIndex);
+//    UnionLargeListWriter out = getWriter();
+//    out.setPosition(outIndex);
+//    ComplexCopier.copy(in, out);
+//  }
 
   /**
    * Get the offset vector.
@@ -695,16 +694,17 @@ public class LargeListVector extends BaseValueVector implements RepeatedValueVec
     }
   }
 
-  @Override
-  protected FieldReader getReaderImpl() {
-    return new UnionLargeListReader(this);
-  }
-
-  @Override
-  public UnionLargeListReader getReader() {
-    reader = (UnionLargeListReader) super.getReader();
-    return reader;
-  }
+// Removed for AethraDB as readers are not used.
+//  @Override
+//  protected FieldReader getReaderImpl() {
+//    return new UnionLargeListReader(this);
+//  }
+//
+//  @Override
+//  public UnionLargeListReader getReader() {
+//    reader = (UnionLargeListReader) super.getReader();
+//    return reader;
+//  }
 
   /**
    * Initialize the data vector (and execute callback) if it hasn't already been done,

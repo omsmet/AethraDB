@@ -19,8 +19,6 @@ package org.apache.arrow.vector;
 
 import org.apache.arrow.memory.ArrowBuf;
 import org.apache.arrow.memory.BufferAllocator;
-import org.apache.arrow.vector.complex.impl.TinyIntReaderImpl;
-import org.apache.arrow.vector.complex.reader.FieldReader;
 import org.apache.arrow.vector.holders.NullableTinyIntHolder;
 import org.apache.arrow.vector.holders.TinyIntHolder;
 import org.apache.arrow.vector.types.Types.MinorType;
@@ -72,10 +70,11 @@ public final class TinyIntVector extends BaseFixedWidthVector implements BaseInt
     super(field, allocator, TYPE_WIDTH);
   }
 
-  @Override
-  protected FieldReader getReaderImpl() {
-    return new TinyIntReaderImpl(TinyIntVector.this);
-  }
+// Removed for AethraDB as readers are not used.
+//  @Override
+//  protected FieldReader getReaderImpl() {
+//    return new TinyIntReaderImpl(TinyIntVector.this);
+//  }
 
   /**
    * Get minor type for this vector. The vector holds values belonging

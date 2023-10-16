@@ -21,7 +21,6 @@ import org.apache.arrow.vector.ValueVector;
 import org.apache.arrow.vector.complex.LargeListVector;
 import org.apache.arrow.vector.complex.reader.FieldReader;
 import org.apache.arrow.vector.complex.writer.FieldWriter;
-import org.apache.arrow.vector.holders.UnionHolder;
 import org.apache.arrow.vector.types.Types.MinorType;
 import org.apache.arrow.vector.types.pojo.Field;
 
@@ -62,10 +61,11 @@ public class UnionLargeListReader extends AbstractFieldReader {
     maxOffset = vector.getOffsetBuffer().getLong(((long) index + 1L) * OFFSET_WIDTH);
   }
 
-  @Override
-  public FieldReader reader() {
-    return data.getReader();
-  }
+// Removed for AethraDB as readers are not used.
+//  @Override
+//  public FieldReader reader() {
+//    return data.getReader();
+//  }
 
   @Override
   public Object readObject() {
@@ -77,15 +77,16 @@ public class UnionLargeListReader extends AbstractFieldReader {
     return MinorType.LARGELIST;
   }
 
-  @Override
-  public void read(int index, UnionHolder holder) {
-    setPosition(index);
-    for (int i = -1; i < index; i++) {
-      next();
-    }
-    holder.reader = data.getReader();
-    holder.isSet = data.getReader().isSet() ? 1 : 0;
-  }
+// Removed for AethraDB as readers are not used.
+//  @Override
+//  public void read(int index, UnionHolder holder) {
+//    setPosition(index);
+//    for (int i = -1; i < index; i++) {
+//      next();
+//    }
+//    holder.reader = data.getReader();
+//    holder.isSet = data.getReader().isSet() ? 1 : 0;
+//  }
 
   @Override
   public int size() {
@@ -93,15 +94,16 @@ public class UnionLargeListReader extends AbstractFieldReader {
     return size < 0 ? 0 : size;
   }
 
-  @Override
-  public boolean next() {
-    if (currentOffset + 1 < maxOffset) {
-      data.getReader().setPosition(checkedCastToInt(++currentOffset)); // todo revisit when int64 vectors are done
-      return true;
-    } else {
-      return false;
-    }
-  }
+// Removed for AethraDB as readers are not used.
+//  @Override
+//  public boolean next() {
+//    if (currentOffset + 1 < maxOffset) {
+//      data.getReader().setPosition(checkedCastToInt(++currentOffset)); // todo revisit when int64 vectors are done
+//      return true;
+//    } else {
+//      return false;
+//    }
+//  }
 
   public void copyAsValue(UnionLargeListWriter writer) {
     ComplexCopier.copy(this, (FieldWriter) writer);

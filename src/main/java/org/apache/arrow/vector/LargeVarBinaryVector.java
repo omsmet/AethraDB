@@ -18,8 +18,6 @@
 package org.apache.arrow.vector;
 
 import org.apache.arrow.memory.BufferAllocator;
-import org.apache.arrow.vector.complex.impl.LargeVarBinaryReaderImpl;
-import org.apache.arrow.vector.complex.reader.FieldReader;
 import org.apache.arrow.vector.holders.LargeVarBinaryHolder;
 import org.apache.arrow.vector.holders.NullableLargeVarBinaryHolder;
 import org.apache.arrow.vector.types.Types.MinorType;
@@ -69,10 +67,11 @@ public final class LargeVarBinaryVector extends BaseLargeVariableWidthVector {
     super(field, allocator);
   }
 
-  @Override
-  protected FieldReader getReaderImpl() {
-    return new LargeVarBinaryReaderImpl(LargeVarBinaryVector.this);
-  }
+// Removed for AethraDB as readers are not used.
+//  @Override
+//  protected FieldReader getReaderImpl() {
+//    return new LargeVarBinaryReaderImpl(LargeVarBinaryVector.this);
+//  }
 
   /**
    * Get minor type for this vector. The vector holds values belonging

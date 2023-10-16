@@ -18,8 +18,6 @@
 package org.apache.arrow.vector;
 
 import org.apache.arrow.memory.BufferAllocator;
-import org.apache.arrow.vector.complex.impl.TimeStampNanoTZReaderImpl;
-import org.apache.arrow.vector.complex.reader.FieldReader;
 import org.apache.arrow.vector.holders.NullableTimeStampNanoTZHolder;
 import org.apache.arrow.vector.holders.TimeStampNanoTZHolder;
 import org.apache.arrow.vector.types.TimeUnit;
@@ -77,10 +75,11 @@ public final class TimeStampNanoTZVector extends TimeStampVector {
     timeZone = arrowType.getTimezone();
   }
 
-  @Override
-  protected FieldReader getReaderImpl() {
-    return new TimeStampNanoTZReaderImpl(TimeStampNanoTZVector.this);
-  }
+// Removed for AethraDB as readers are not used.
+//  @Override
+//  protected FieldReader getReaderImpl() {
+//    return new TimeStampNanoTZReaderImpl(TimeStampNanoTZVector.this);
+//  }
 
   /**
    * Get minor type for this vector. The vector holds values belonging

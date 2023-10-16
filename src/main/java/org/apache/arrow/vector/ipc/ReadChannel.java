@@ -18,8 +18,6 @@
 package org.apache.arrow.vector.ipc;
 
 import org.apache.arrow.memory.ArrowBuf;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -30,7 +28,7 @@ import java.nio.channels.ReadableByteChannel;
  */
 public class ReadChannel implements AutoCloseable {
 
-  private static final Logger LOGGER = LoggerFactory.getLogger(ReadChannel.class);
+//  private static final Logger LOGGER = LoggerFactory.getLogger(ReadChannel.class);
 
   private ReadableByteChannel in;
   private long bytesRead = 0;
@@ -52,9 +50,9 @@ public class ReadChannel implements AutoCloseable {
    * @throws IOException if nit enough bytes left to read
    */
   public int readFully(ByteBuffer buffer) throws IOException {
-    if (LOGGER.isDebugEnabled()) {
-      LOGGER.debug("Reading buffer with size: {}", buffer.remaining());
-    }
+//    if (LOGGER.isDebugEnabled()) {
+//      LOGGER.debug("Reading buffer with size: {}", buffer.remaining());
+//    }
     int totalRead = 0;
     while (buffer.remaining() != 0) {
       int read = in.read(buffer);

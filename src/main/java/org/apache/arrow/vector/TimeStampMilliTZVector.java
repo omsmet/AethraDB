@@ -18,8 +18,6 @@
 package org.apache.arrow.vector;
 
 import org.apache.arrow.memory.BufferAllocator;
-import org.apache.arrow.vector.complex.impl.TimeStampMilliTZReaderImpl;
-import org.apache.arrow.vector.complex.reader.FieldReader;
 import org.apache.arrow.vector.holders.NullableTimeStampMilliTZHolder;
 import org.apache.arrow.vector.holders.TimeStampMilliTZHolder;
 import org.apache.arrow.vector.types.TimeUnit;
@@ -77,10 +75,11 @@ public final class TimeStampMilliTZVector extends TimeStampVector {
     timeZone = arrowType.getTimezone();
   }
 
-  @Override
-  protected FieldReader getReaderImpl() {
-    return new TimeStampMilliTZReaderImpl(TimeStampMilliTZVector.this);
-  }
+// Removed for AethraDB as readers are not used.
+//  @Override
+//  protected FieldReader getReaderImpl() {
+//    return new TimeStampMilliTZReaderImpl(TimeStampMilliTZVector.this);
+//  }
 
   /**
    * Get minor type for this vector. The vector holds values belonging

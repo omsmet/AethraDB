@@ -27,7 +27,6 @@ import org.apache.arrow.vector.FieldVector;
 import org.apache.arrow.vector.ValueVector;
 import org.apache.arrow.vector.compare.VectorVisitor;
 import org.apache.arrow.vector.complex.impl.SingleStructReaderImpl;
-import org.apache.arrow.vector.complex.reader.FieldReader;
 import org.apache.arrow.vector.holders.ComplexHolder;
 import org.apache.arrow.vector.types.Types.MinorType;
 import org.apache.arrow.vector.types.pojo.ArrowType;
@@ -105,10 +104,11 @@ public class NonNullableStructVector extends AbstractStructVector {
     this.valueCount = 0;
   }
 
-  @Override
-  public FieldReader getReader() {
-    return reader;
-  }
+// Removed for AethraDB as readers are not used.
+//  @Override
+//  public FieldReader getReader() {
+//    return reader;
+//  }
 
   private transient StructTransferPair ephPair;
 

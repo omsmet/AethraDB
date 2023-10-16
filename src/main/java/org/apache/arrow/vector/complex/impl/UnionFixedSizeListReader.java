@@ -19,10 +19,8 @@ package org.apache.arrow.vector.complex.impl;
 
 import org.apache.arrow.vector.ValueVector;
 import org.apache.arrow.vector.complex.FixedSizeListVector;
-import org.apache.arrow.vector.complex.reader.FieldReader;
 import org.apache.arrow.vector.complex.writer.BaseWriter.ListWriter;
 import org.apache.arrow.vector.complex.writer.FieldWriter;
-import org.apache.arrow.vector.holders.UnionHolder;
 import org.apache.arrow.vector.types.Types.MinorType;
 
 /**
@@ -50,10 +48,11 @@ public class UnionFixedSizeListReader extends AbstractFieldReader {
     return !vector.isNull(idx());
   }
 
-  @Override
-  public FieldReader reader() {
-    return data.getReader();
-  }
+// Removed for AethraDB as readers are not used.
+//  @Override
+//  public FieldReader reader() {
+//    return data.getReader();
+//  }
 
   @Override
   public Object readObject() {
@@ -67,37 +66,41 @@ public class UnionFixedSizeListReader extends AbstractFieldReader {
 
   @Override
   public void setPosition(int index) {
-    super.setPosition(index);
-    data.getReader().setPosition(index * listSize);
-    currentOffset = 0;
+    throw new IllegalStateException("The current reader doesn't support getting setPosition information.");
+// Removed for AethraDB as readers are not used.
+//    super.setPosition(index);
+//    data.getReader().setPosition(index * listSize);
+//    currentOffset = 0;
   }
 
-  @Override
-  public void read(int index, UnionHolder holder) {
-    setPosition(idx());
-    for (int i = -1; i < index; i++) {
-      if (!next()) {
-        throw new IndexOutOfBoundsException("Requested " + index + ", size " + listSize);
-      }
-    }
-    holder.reader = data.getReader();
-    holder.isSet = vector.isNull(idx()) ? 0 : 1;
-  }
+// Removed for AethraDB as readers are not used.
+//  @Override
+//  public void read(int index, UnionHolder holder) {
+//    setPosition(idx());
+//    for (int i = -1; i < index; i++) {
+//      if (!next()) {
+//        throw new IndexOutOfBoundsException("Requested " + index + ", size " + listSize);
+//      }
+//    }
+//    holder.reader = data.getReader();
+//    holder.isSet = vector.isNull(idx()) ? 0 : 1;
+//  }
 
   @Override
   public int size() {
     return listSize;
   }
 
-  @Override
-  public boolean next() {
-    if (currentOffset < listSize) {
-      data.getReader().setPosition(idx() * listSize + currentOffset++);
-      return true;
-    } else {
-      return false;
-    }
-  }
+// Removed for AethraDB as readers are not used.
+//  @Override
+//  public boolean next() {
+//    if (currentOffset < listSize) {
+//      data.getReader().setPosition(idx() * listSize + currentOffset++);
+//      return true;
+//    } else {
+//      return false;
+//    }
+//  }
 
   public void copyAsValue(ListWriter writer) {
     ComplexCopier.copy(this, (FieldWriter) writer);

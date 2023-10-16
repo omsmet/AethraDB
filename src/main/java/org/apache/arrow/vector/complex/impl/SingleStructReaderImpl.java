@@ -18,7 +18,6 @@
 package org.apache.arrow.vector.complex.impl;
 
 
-import org.apache.arrow.vector.ValueVector;
 import org.apache.arrow.vector.complex.NonNullableStructVector;
 import org.apache.arrow.vector.complex.reader.FieldReader;
 import org.apache.arrow.vector.complex.writer.BaseWriter.StructWriter;
@@ -52,21 +51,22 @@ public class SingleStructReaderImpl extends AbstractFieldReader {
     return vector.getField();
   }
 
-  @Override
-  public FieldReader reader(String name) {
-    FieldReader reader = fields.get(name);
-    if (reader == null) {
-      ValueVector child = vector.getChild(name);
-      if (child == null) {
-        reader = NullReader.INSTANCE;
-      } else {
-        reader = child.getReader();
-      }
-      fields.put(name, reader);
-      reader.setPosition(idx());
-    }
-    return reader;
-  }
+// Removed for AethraDB as readers are not used.
+//  @Override
+//  public FieldReader reader(String name) {
+//    FieldReader reader = fields.get(name);
+//    if (reader == null) {
+//      ValueVector child = vector.getChild(name);
+//      if (child == null) {
+//        reader = NullReader.INSTANCE;
+//      } else {
+//        reader = child.getReader();
+//      }
+//      fields.put(name, reader);
+//      reader.setPosition(idx());
+//    }
+//    return reader;
+//  }
 
   @Override
   public void setPosition(int index) {

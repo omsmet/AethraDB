@@ -555,16 +555,17 @@ public class DenseUnionVector extends AbstractContainerVector implements FieldVe
     return new TransferImpl((DenseUnionVector) target);
   }
 
-  @Override
-  public void copyFrom(int inIndex, int outIndex, ValueVector from) {
-    Preconditions.checkArgument(this.getMinorType() == from.getMinorType());
-    DenseUnionVector fromCast = (DenseUnionVector) from;
-    int inOffset = fromCast.offsetBuffer.getInt((long) inIndex * OFFSET_WIDTH);
-    fromCast.getReader().setPosition(inOffset);
-    int outOffset = offsetBuffer.getInt((long) outIndex * OFFSET_WIDTH);
-    getWriter().setPosition(outOffset);
-    ComplexCopier.copy(fromCast.reader, writer);
-  }
+// Removed for AethraDB as readers are not used.
+//  @Override
+//  public void copyFrom(int inIndex, int outIndex, ValueVector from) {
+//    Preconditions.checkArgument(this.getMinorType() == from.getMinorType());
+//    DenseUnionVector fromCast = (DenseUnionVector) from;
+//    int inOffset = fromCast.offsetBuffer.getInt((long) inIndex * OFFSET_WIDTH);
+//    fromCast.getReader().setPosition(inOffset);
+//    int outOffset = offsetBuffer.getInt((long) outIndex * OFFSET_WIDTH);
+//    getWriter().setPosition(outOffset);
+//    ComplexCopier.copy(fromCast.reader, writer);
+//  }
 
   @Override
   public void copyFromSafe(int inIndex, int outIndex, ValueVector from) {
@@ -685,13 +686,14 @@ public class DenseUnionVector extends AbstractContainerVector implements FieldVe
     }
   }
 
-  @Override
-  public FieldReader getReader() {
-    if (reader == null) {
-      reader = new DenseUnionReader(this);
-    }
-    return reader;
-  }
+// Removed for AethraDB as readers are not used.
+//  @Override
+//  public FieldReader getReader() {
+//    if (reader == null) {
+//      reader = new DenseUnionReader(this);
+//    }
+//    return reader;
+//  }
 
   public FieldWriter getWriter() {
     if (writer == null) {

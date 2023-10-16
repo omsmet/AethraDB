@@ -33,7 +33,7 @@ import java.util.Iterator;
  */
 abstract class AbstractBaseReader implements FieldReader {
 
-  static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(AbstractBaseReader.class);
+//  static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(AbstractBaseReader.class);
 
   private int index;
 

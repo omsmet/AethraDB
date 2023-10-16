@@ -38,7 +38,7 @@ import java.util.stream.Collectors;
  * Base class for StructVectors. Currently used by NonNullableStructVector
  */
 public abstract class AbstractStructVector extends AbstractContainerVector {
-  private static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(AbstractContainerVector.class);
+//  private static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(AbstractContainerVector.class);
   private static final String STRUCT_CONFLICT_POLICY_ENV = "ARROW_STRUCT_CONFLICT_POLICY";
   private static final String STRUCT_CONFLICT_POLICY_JVM = "arrow.struct.conflict.policy";
   private static final ConflictPolicy DEFAULT_CONFLICT_POLICY;
@@ -256,10 +256,10 @@ public abstract class AbstractStructVector extends AbstractContainerVector {
         Preconditions.checkNotNull(vector, "vector cannot be null"),
         overwrite
     );
-    if (old) {
-      logger.debug("Field [{}] mutated to [{}] ", name,
-          vector.getClass().getSimpleName());
-    }
+//    if (old) {
+//      logger.debug("Field [{}] mutated to [{}] ", name,
+//          vector.getClass().getSimpleName());
+//    }
   }
 
   /**

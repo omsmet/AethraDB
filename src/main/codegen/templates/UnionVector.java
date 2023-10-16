@@ -497,14 +497,15 @@ public class UnionVector extends AbstractContainerVector implements FieldVector 
     return new TransferImpl((UnionVector) target);
   }
 
-  @Override
-  public void copyFrom(int inIndex, int outIndex, ValueVector from) {
-    Preconditions.checkArgument(this.getMinorType() == from.getMinorType());
-    UnionVector fromCast = (UnionVector) from;
-    fromCast.getReader().setPosition(inIndex);
-    getWriter().setPosition(outIndex);
-    ComplexCopier.copy(fromCast.reader, writer);
-  }
+// Removed for AethraDB as readers are not used.
+//  @Override
+//  public void copyFrom(int inIndex, int outIndex, ValueVector from) {
+//    Preconditions.checkArgument(this.getMinorType() == from.getMinorType());
+//    UnionVector fromCast = (UnionVector) from;
+//    fromCast.getReader().setPosition(inIndex);
+//    getWriter().setPosition(outIndex);
+//    ComplexCopier.copy(fromCast.reader, writer);
+//  }
 
   @Override
   public void copyFromSafe(int inIndex, int outIndex, ValueVector from) {
@@ -585,13 +586,14 @@ public class UnionVector extends AbstractContainerVector implements FieldVector 
     }
   }
 
-  @Override
-  public FieldReader getReader() {
-    if (reader == null) {
-      reader = new UnionReader(this);
-    }
-    return reader;
-  }
+// Removed for AethraDB as readers are not used.
+//  @Override
+//  public FieldReader getReader() {
+//    if (reader == null) {
+//      reader = new UnionReader(this);
+//    }
+//    return reader;
+//  }
 
   public FieldWriter getWriter() {
     if (writer == null) {

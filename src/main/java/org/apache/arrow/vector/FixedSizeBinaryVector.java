@@ -20,8 +20,6 @@ package org.apache.arrow.vector;
 import org.apache.arrow.memory.ArrowBuf;
 import org.apache.arrow.memory.BufferAllocator;
 import org.apache.arrow.util.Preconditions;
-import org.apache.arrow.vector.complex.impl.FixedSizeBinaryReaderImpl;
-import org.apache.arrow.vector.complex.reader.FieldReader;
 import org.apache.arrow.vector.holders.FixedSizeBinaryHolder;
 import org.apache.arrow.vector.holders.NullableFixedSizeBinaryHolder;
 import org.apache.arrow.vector.types.Types.MinorType;
@@ -76,10 +74,11 @@ public class FixedSizeBinaryVector extends BaseFixedWidthVector {
     byteWidth = ((FixedSizeBinary) field.getFieldType().getType()).getByteWidth();
   }
 
-  @Override
-  protected FieldReader getReaderImpl() {
-    return new FixedSizeBinaryReaderImpl(FixedSizeBinaryVector.this);
-  }
+// Removed for AethraDB as readers are not used.
+//  @Override
+//  protected FieldReader getReaderImpl() {
+//    return new FixedSizeBinaryReaderImpl(FixedSizeBinaryVector.this);
+//  }
 
   /**
    * Get minor type for this vector. The vector holds values belonging

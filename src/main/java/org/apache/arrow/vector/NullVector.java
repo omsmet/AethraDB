@@ -23,8 +23,6 @@ import org.apache.arrow.memory.OutOfMemoryException;
 import org.apache.arrow.memory.util.hash.ArrowBufHasher;
 import org.apache.arrow.util.Preconditions;
 import org.apache.arrow.vector.compare.VectorVisitor;
-import org.apache.arrow.vector.complex.impl.NullReader;
-import org.apache.arrow.vector.complex.reader.FieldReader;
 import org.apache.arrow.vector.ipc.message.ArrowFieldNode;
 import org.apache.arrow.vector.types.Types;
 import org.apache.arrow.vector.types.pojo.ArrowType;
@@ -172,10 +170,11 @@ public class NullVector implements FieldVector {
     return new TransferImpl((NullVector) target);
   }
 
-  @Override
-  public FieldReader getReader() {
-    return NullReader.INSTANCE;
-  }
+// Removed for AethraDB as readers are not used.
+//  @Override
+//  public FieldReader getReader() {
+//    return NullReader.INSTANCE;
+//  }
 
   @Override
   public void initializeChildrenFromFields(List<Field> children) {

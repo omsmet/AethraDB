@@ -19,8 +19,6 @@ package org.apache.arrow.vector;
 
 import org.apache.arrow.memory.ArrowBuf;
 import org.apache.arrow.memory.BufferAllocator;
-import org.apache.arrow.vector.complex.impl.TimeMilliReaderImpl;
-import org.apache.arrow.vector.complex.reader.FieldReader;
 import org.apache.arrow.vector.holders.NullableTimeMilliHolder;
 import org.apache.arrow.vector.holders.TimeMilliHolder;
 import org.apache.arrow.vector.types.Types.MinorType;
@@ -75,10 +73,11 @@ public final class TimeMilliVector extends BaseFixedWidthVector {
     super(field, allocator, TYPE_WIDTH);
   }
 
-  @Override
-  protected FieldReader getReaderImpl() {
-    return new TimeMilliReaderImpl(TimeMilliVector.this);
-  }
+// Removed for AethraDB as readers are not used.
+//  @Override
+//  protected FieldReader getReaderImpl() {
+//    return new TimeMilliReaderImpl(TimeMilliVector.this);
+//  }
 
   /**
    * Get minor type for this vector. The vector holds values belonging

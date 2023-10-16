@@ -31,7 +31,7 @@ import java.security.PrivilegedAction;
  * Utilities for memory related operations.
  */
 public class MemoryUtil {
-  private static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(MemoryUtil.class);
+//  private static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(MemoryUtil.class);
 
   private static final Constructor<?> DIRECT_BUFFER_CONSTRUCTOR;
   /**
@@ -102,13 +102,13 @@ public class MemoryUtil {
                       direct.getClass().getDeclaredConstructor(long.class, long.class) :
                       direct.getClass().getDeclaredConstructor(long.class, int.class);
                   constructor.setAccessible(true);
-                  logger.debug("Constructor for direct buffer found and made accessible");
+//                  logger.debug("Constructor for direct buffer found and made accessible");
                   return constructor;
                 } catch (NoSuchMethodException e) {
-                  logger.debug("Cannot get constructor for direct buffer allocation", e);
+//                  logger.debug("Cannot get constructor for direct buffer allocation", e);
                   return e;
                 } catch (SecurityException e) {
-                  logger.debug("Cannot get constructor for direct buffer allocation", e);
+//                  logger.debug("Cannot get constructor for direct buffer allocation", e);
                   return e;
                 }
               }
@@ -120,15 +120,15 @@ public class MemoryUtil {
           try {
             ((Constructor<?>) maybeDirectBufferConstructor).newInstance(address, 1);
             directBufferConstructor = (Constructor<?>) maybeDirectBufferConstructor;
-            logger.debug("direct buffer constructor: available");
+//            logger.debug("direct buffer constructor: available");
           } catch (InstantiationException | IllegalAccessException | InvocationTargetException e) {
-            logger.warn("unable to instantiate a direct buffer via constructor", e);
+//            logger.warn("unable to instantiate a direct buffer via constructor", e);
             directBufferConstructor = null;
           }
         } else {
-          logger.debug(
-              "direct buffer constructor: unavailable",
-              (Throwable) maybeDirectBufferConstructor);
+//          logger.debug(
+//              "direct buffer constructor: unavailable",
+//              (Throwable) maybeDirectBufferConstructor);
           directBufferConstructor = null;
         }
       } finally {

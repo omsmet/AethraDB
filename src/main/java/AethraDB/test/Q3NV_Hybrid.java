@@ -1,7 +1,6 @@
 package AethraDB.test;
 
 import AethraDB.evaluation.codegen.infrastructure.data.ABQArrowTableReader;
-import AethraDB.evaluation.codegen.infrastructure.data.ArrowTableReader;
 import AethraDB.evaluation.general_support.ArrowOptimisations;
 import AethraDB.evaluation.general_support.hashmaps.Int_Hash_Function;
 import AethraDB.test.Q3_Hybrid_Support.KeyMultiRecordMap_1561408618;

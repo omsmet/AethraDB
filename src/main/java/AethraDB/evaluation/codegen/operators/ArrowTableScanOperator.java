@@ -7,8 +7,8 @@ import AethraDB.evaluation.codegen.infrastructure.context.access_path.AccessPath
 import AethraDB.evaluation.codegen.infrastructure.context.access_path.ArrowVectorAccessPath;
 import AethraDB.evaluation.codegen.infrastructure.context.access_path.IndexedArrowVectorElementAccessPath;
 import AethraDB.evaluation.codegen.infrastructure.context.access_path.ScalarVariableAccessPath;
-import AethraDB.evaluation.codegen.infrastructure.data.ABQArrowTableReader;
 import AethraDB.evaluation.codegen.infrastructure.data.ArrowTableReader;
+import AethraDB.evaluation.codegen.infrastructure.data.VirtualArrowTableReader;
 import AethraDB.evaluation.codegen.infrastructure.janino.JaninoOperatorGen;
 import AethraDB.util.arrow.ArrowFileSchemaExtractor;
 import org.apache.arrow.vector.types.pojo.Field;
@@ -211,19 +211,9 @@ public class ArrowTableScanOperator extends CodeGenOperator {
             OptimisationContext oCtx,
             Java.Block whileLoopBody
     ) {
-        // Create an arrow reader instance
+        // Create a virtual arrow reader instance
         File tableFile = new File(this.databasePath + "/" + this.tableName + ".arrow");
-        ArrowTableReader arrowReader;
-        try {
-            arrowReader = new ABQArrowTableReader(
-                    tableFile,
-                    cCtx.getArrowRootAllocator(),
-                    this.isProjecting,
-                    this.projectedColumns
-            );
-        } catch (Exception e) {
-            throw new RuntimeException("Could not create ArrowTableReader in query compilation stage.", e);
-        }
+        ArrowTableReader arrowReader = new VirtualArrowTableReader(tableFile, this.isProjecting, this.projectedColumns);
 
         // Store the arrow reader in the CodeGenContext
         int arrowReaderIndex = cCtx.addArrowReader(arrowReader);

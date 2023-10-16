@@ -154,10 +154,11 @@ public class StructVector extends NonNullableStructVector implements FieldVector
     throw new UnsupportedOperationException("There are no inner vectors. Use getFieldBuffers");
   }
 
-  @Override
-  public NullableStructReaderImpl getReader() {
-    return reader;
-  }
+// Removed for AethraDB as readers are not used.
+//  @Override
+//  public NullableStructReaderImpl getReader() {
+//    return reader;
+//  }
 
   public NullableStructWriter getWriter() {
     return writer;

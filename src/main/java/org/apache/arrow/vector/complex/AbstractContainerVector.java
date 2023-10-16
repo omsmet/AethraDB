@@ -36,7 +36,7 @@ import org.apache.arrow.vector.util.CallBack;
  * <p>This class implements common functionality of composite vectors.
  */
 public abstract class AbstractContainerVector implements ValueVector, DensityAwareVector {
-  static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(AbstractContainerVector.class);
+//  static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(AbstractContainerVector.class);
 
   protected final String name;
   protected final BufferAllocator allocator;

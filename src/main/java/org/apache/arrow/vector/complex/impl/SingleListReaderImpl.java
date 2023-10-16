@@ -59,14 +59,15 @@ public class SingleListReaderImpl extends AbstractFieldReader {
     return reader.readObject();
   }
 
-  @Override
-  public FieldReader reader() {
-    if (reader == null) {
-      reader = container.getChild(name).getReader();
-      setPosition(idx());
-    }
-    return reader;
-  }
+// Removed for AethraDB as readers are not used.
+//  @Override
+//  public FieldReader reader() {
+//    if (reader == null) {
+//      reader = container.getChild(name).getReader();
+//      setPosition(idx());
+//    }
+//    return reader;
+//  }
 
   @Override
   public MinorType getMinorType() {

@@ -22,7 +22,6 @@ import org.apache.arrow.vector.complex.ListVector;
 import org.apache.arrow.vector.complex.reader.FieldReader;
 import org.apache.arrow.vector.complex.writer.BaseWriter.ListWriter;
 import org.apache.arrow.vector.complex.writer.FieldWriter;
-import org.apache.arrow.vector.holders.UnionHolder;
 import org.apache.arrow.vector.types.Types.MinorType;
 import org.apache.arrow.vector.types.pojo.Field;
 
@@ -65,10 +64,11 @@ public class UnionListReader extends AbstractFieldReader {
     }
   }
 
-  @Override
-  public FieldReader reader() {
-    return data.getReader();
-  }
+// Removed for AethraDB as readers are not used.
+//  @Override
+//  public FieldReader reader() {
+//    return data.getReader();
+//  }
 
   @Override
   public Object readObject() {
@@ -80,15 +80,16 @@ public class UnionListReader extends AbstractFieldReader {
     return MinorType.LIST;
   }
 
-  @Override
-  public void read(int index, UnionHolder holder) {
-    setPosition(idx());
-    for (int i = -1; i < index; i++) {
-      next();
-    }
-    holder.reader = data.getReader();
-    holder.isSet = data.getReader().isSet() ? 1 : 0;
-  }
+// Removed for AethraDB as readers are not used.
+//  @Override
+//  public void read(int index, UnionHolder holder) {
+//    setPosition(idx());
+//    for (int i = -1; i < index; i++) {
+//      next();
+//    }
+//    holder.reader = data.getReader();
+//    holder.isSet = data.getReader().isSet() ? 1 : 0;
+//  }
 
   @Override
   public int size() {
@@ -96,15 +97,16 @@ public class UnionListReader extends AbstractFieldReader {
     return size < 0 ? 0 : size;
   }
 
-  @Override
-  public boolean next() {
-    if (currentOffset + 1 < maxOffset) {
-      data.getReader().setPosition(++currentOffset);
-      return true;
-    } else {
-      return false;
-    }
-  }
+// Removed for AethraDB as readers are not used.
+//  @Override
+//  public boolean next() {
+//    if (currentOffset + 1 < maxOffset) {
+//      data.getReader().setPosition(++currentOffset);
+//      return true;
+//    } else {
+//      return false;
+//    }
+//  }
 
   public void copyAsValue(ListWriter writer) {
     ComplexCopier.copy(this, (FieldWriter) writer);

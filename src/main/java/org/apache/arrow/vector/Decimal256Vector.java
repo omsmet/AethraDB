@@ -20,8 +20,6 @@ package org.apache.arrow.vector;
 import org.apache.arrow.memory.ArrowBuf;
 import org.apache.arrow.memory.BufferAllocator;
 import org.apache.arrow.memory.util.MemoryUtil;
-import org.apache.arrow.vector.complex.impl.Decimal256ReaderImpl;
-import org.apache.arrow.vector.complex.reader.FieldReader;
 import org.apache.arrow.vector.holders.Decimal256Holder;
 import org.apache.arrow.vector.holders.NullableDecimal256Holder;
 import org.apache.arrow.vector.types.Types.MinorType;
@@ -88,10 +86,11 @@ public final class Decimal256Vector extends BaseFixedWidthVector {
     this.scale = arrowType.getScale();
   }
 
-  @Override
-  protected FieldReader getReaderImpl() {
-    return new Decimal256ReaderImpl(Decimal256Vector.this);
-  }
+// Removed for AethraDB as readers are not used.
+//  @Override
+//  protected FieldReader getReaderImpl() {
+//    return new Decimal256ReaderImpl(Decimal256Vector.this);
+//  }
 
   /**
    * Get minor type for this vector. The vector holds values belonging

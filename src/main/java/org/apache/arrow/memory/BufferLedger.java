@@ -18,7 +18,6 @@
 package org.apache.arrow.memory;
 
 import org.apache.arrow.memory.util.CommonUtil;
-import org.apache.arrow.memory.util.HistoricalLog;
 import org.apache.arrow.util.Preconditions;
 
 import java.util.IdentityHashMap;
@@ -43,9 +42,9 @@ public class BufferLedger implements ValueWithKeyIncluded<BufferAllocator>, Refe
   private final long lCreationTime = System.nanoTime();
   private final BufferAllocator allocator;
   private final AllocationManager allocationManager;
-  private final HistoricalLog historicalLog =
-      BaseAllocator.DEBUG ? new HistoricalLog(BaseAllocator.DEBUG_LOG_LENGTH,
-        "BufferLedger[%d]", 1) : null;
+//  private final HistoricalLog historicalLog =
+//      BaseAllocator.DEBUG ? new HistoricalLog(BaseAllocator.DEBUG_LOG_LENGTH,
+//        "BufferLedger[%d]", 1) : null;
   private volatile long lDestructionTime = 0;
 
   BufferLedger(final BufferAllocator allocator, final AllocationManager allocationManager) {
@@ -122,10 +121,10 @@ public class BufferLedger implements ValueWithKeyIncluded<BufferAllocator>, Refe
           "ref count decrement should be greater than or equal to 1");
     // decrement the ref count
     final int refCnt = decrement(decrement);
-    if (BaseAllocator.DEBUG) {
-      historicalLog.recordEvent("release(%d). original value: %d",
-          decrement, refCnt + decrement);
-    }
+//    if (BaseAllocator.DEBUG) {
+//      historicalLog.recordEvent("release(%d). original value: %d",
+//          decrement, refCnt + decrement);
+//    }
     // the new ref count should be >= 0
     Preconditions.checkState(refCnt >= 0, "RefCnt has gone negative");
     return refCnt == 0;
@@ -178,9 +177,9 @@ public class BufferLedger implements ValueWithKeyIncluded<BufferAllocator>, Refe
   @Override
   public void retain(int increment) {
     Preconditions.checkArgument(increment > 0, "retain(%s) argument is not positive", increment);
-    if (BaseAllocator.DEBUG) {
-      historicalLog.recordEvent("retain(%d)", increment);
-    }
+//    if (BaseAllocator.DEBUG) {
+//      historicalLog.recordEvent("retain(%d)", increment);
+//    }
     final int originalReferenceCount = bufRefCnt.getAndAdd(increment);
     Preconditions.checkArgument(originalReferenceCount > 0);
   }
@@ -234,12 +233,12 @@ public class BufferLedger implements ValueWithKeyIncluded<BufferAllocator>, Refe
 
     // logging
     if (BaseAllocator.DEBUG) {
-      historicalLog.recordEvent(
-              "ArrowBuf(BufferLedger, BufferAllocator[%s], " +
-                      "UnsafeDirectLittleEndian[identityHashCode == " +
-                      "%d](%s)) => ledger hc == %d",
-              allocator.getName(), System.identityHashCode(derivedBuf), derivedBuf.toString(),
-              System.identityHashCode(this));
+//      historicalLog.recordEvent(
+//              "ArrowBuf(BufferLedger, BufferAllocator[%s], " +
+//                      "UnsafeDirectLittleEndian[identityHashCode == " +
+//                      "%d](%s)) => ledger hc == %d",
+//              allocator.getName(), System.identityHashCode(derivedBuf), derivedBuf.toString(),
+//              System.identityHashCode(this));
 
       synchronized (buffers) {
         buffers.put(derivedBuf, null);
@@ -272,11 +271,11 @@ public class BufferLedger implements ValueWithKeyIncluded<BufferAllocator>, Refe
 
     // logging
     if (BaseAllocator.DEBUG) {
-      historicalLog.recordEvent(
-          "ArrowBuf(BufferLedger, BufferAllocator[%s], " +
-          "UnsafeDirectLittleEndian[identityHashCode == " + "%d](%s)) => ledger hc == %d",
-          allocator.getName(), System.identityHashCode(buf), buf.toString(),
-          System.identityHashCode(this));
+//      historicalLog.recordEvent(
+//          "ArrowBuf(BufferLedger, BufferAllocator[%s], " +
+//          "UnsafeDirectLittleEndian[identityHashCode == " + "%d](%s)) => ledger hc == %d",
+//          allocator.getName(), System.identityHashCode(buf), buf.toString(),
+//          System.identityHashCode(this));
 
       synchronized (buffers) {
         buffers.put(buf, null);
@@ -306,9 +305,9 @@ public class BufferLedger implements ValueWithKeyIncluded<BufferAllocator>, Refe
   @Override
   public ArrowBuf retain(final ArrowBuf srcBuffer, BufferAllocator target) {
 
-    if (BaseAllocator.DEBUG) {
-      historicalLog.recordEvent("retain(%s)", target.getName());
-    }
+//    if (BaseAllocator.DEBUG) {
+//      historicalLog.recordEvent("retain(%s)", target.getName());
+//    }
 
     // the call to associate will return the corresponding reference manager (buffer ledger) for
     // the target allocator. if the allocation manager didn't already have a mapping
@@ -359,10 +358,10 @@ public class BufferLedger implements ValueWithKeyIncluded<BufferAllocator>, Refe
         return true;
       }
 
-      if (BaseAllocator.DEBUG) {
-        this.historicalLog.recordEvent("transferBalance(%s)",
-            targetReferenceManager.getAllocator().getName());
-      }
+//      if (BaseAllocator.DEBUG) {
+//        this.historicalLog.recordEvent("transferBalance(%s)",
+//            targetReferenceManager.getAllocator().getName());
+//      }
 
       boolean overlimit = targetAllocator.forceAllocate(allocationManager.getSize());
       allocator.releaseBytes(allocationManager.getSize());

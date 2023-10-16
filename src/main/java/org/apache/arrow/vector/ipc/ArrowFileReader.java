@@ -29,8 +29,6 @@ import org.apache.arrow.vector.ipc.message.ArrowRecordBatch;
 import org.apache.arrow.vector.ipc.message.MessageSerializer;
 import org.apache.arrow.vector.types.pojo.Schema;
 import org.apache.arrow.vector.validate.MetadataV4UnionChecker;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -46,7 +44,7 @@ import java.util.Map;
  */
 public class ArrowFileReader extends ArrowReader {
 
-  private static final Logger LOGGER = LoggerFactory.getLogger(ArrowFileReader.class);
+//  private static final Logger LOGGER = LoggerFactory.getLogger(ArrowFileReader.class);
 
   private SeekableReadChannel in;
   private ArrowFooter footer;
@@ -103,7 +101,7 @@ public class ArrowFileReader extends ArrowReader {
         throw new InvalidArrowFileException("invalid footer length: " + footerLength);
       }
       long footerOffset = footerLengthOffset - footerLength;
-      LOGGER.debug("Footer starts at {}, length: {}", footerOffset, footerLength);
+//      LOGGER.debug("Footer starts at {}, length: {}", footerOffset, footerLength);
       ByteBuffer footerBuffer = ByteBuffer.allocate(footerLength);
       in.setPosition(footerOffset);
       in.readFully(footerBuffer);
@@ -205,8 +203,8 @@ public class ArrowFileReader extends ArrowReader {
   private ArrowDictionaryBatch readDictionaryBatch(SeekableReadChannel in,
                                                    ArrowBlock block,
                                                    BufferAllocator allocator) throws IOException {
-    LOGGER.debug("DictionaryRecordBatch at {}, metadata: {}, body: {}",
-        block.getOffset(), block.getMetadataLength(), block.getBodyLength());
+//    LOGGER.debug("DictionaryRecordBatch at {}, metadata: {}, body: {}",
+//        block.getOffset(), block.getMetadataLength(), block.getBodyLength());
     in.setPosition(block.getOffset());
     ArrowDictionaryBatch batch = MessageSerializer.deserializeDictionaryBatch(in, block, allocator);
     if (batch == null) {
@@ -218,9 +216,9 @@ public class ArrowFileReader extends ArrowReader {
   private ArrowRecordBatch readRecordBatch(SeekableReadChannel in,
                                            ArrowBlock block,
                                            BufferAllocator allocator) throws IOException {
-    LOGGER.debug("RecordBatch at {}, metadata: {}, body: {}",
-        block.getOffset(), block.getMetadataLength(),
-        block.getBodyLength());
+//    LOGGER.debug("RecordBatch at {}, metadata: {}, body: {}",
+//        block.getOffset(), block.getMetadataLength(),
+//        block.getBodyLength());
     in.setPosition(block.getOffset());
     ArrowRecordBatch batch = MessageSerializer.deserializeRecordBatch(in, block, allocator);
     if (batch == null) {

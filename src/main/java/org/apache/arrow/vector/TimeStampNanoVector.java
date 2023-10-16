@@ -18,8 +18,6 @@
 package org.apache.arrow.vector;
 
 import org.apache.arrow.memory.BufferAllocator;
-import org.apache.arrow.vector.complex.impl.TimeStampNanoReaderImpl;
-import org.apache.arrow.vector.complex.reader.FieldReader;
 import org.apache.arrow.vector.holders.NullableTimeStampNanoHolder;
 import org.apache.arrow.vector.holders.TimeStampNanoHolder;
 import org.apache.arrow.vector.types.Types.MinorType;
@@ -73,10 +71,11 @@ public final class TimeStampNanoVector extends TimeStampVector {
     super(field, allocator);
   }
 
-  @Override
-  protected FieldReader getReaderImpl() {
-    return new TimeStampNanoReaderImpl(TimeStampNanoVector.this);
-  }
+// Removed for AethraDB as readers are not used.
+//  @Override
+//  protected FieldReader getReaderImpl() {
+//    return new TimeStampNanoReaderImpl(TimeStampNanoVector.this);
+//  }
 
   /**
    * Get minor type for this vector. The vector holds values belonging

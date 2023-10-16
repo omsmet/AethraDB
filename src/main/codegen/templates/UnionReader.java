@@ -109,12 +109,14 @@ public class UnionReader extends AbstractFieldReader {
   private SingleStructReaderImpl structReader;
 
   private StructReader getStruct() {
-    if (structReader == null) {
-      structReader = (SingleStructReaderImpl) data.getStruct().getReader();
-      structReader.setPosition(idx());
-      readers[MinorType.STRUCT.ordinal()] = structReader;
-    }
-    return structReader;
+    throw new UnsupportedOperationException("UnionReader.getStruct cannot be used due to AethraDB optimisations");
+// Removed for AethraDB as readers are not used.
+//    if (structReader == null) {
+//      structReader = (SingleStructReaderImpl) data.getStruct().getReader();
+//      structReader.setPosition(idx());
+//      readers[MinorType.STRUCT.ordinal()] = structReader;
+//    }
+//    return structReader;
   }
 
   private UnionListReader listReader;

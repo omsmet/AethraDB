@@ -18,8 +18,6 @@
 package org.apache.arrow.memory.rounding;
 
 import org.apache.arrow.memory.util.CommonUtil;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * The default rounding policy. That is, if the requested size is within the chunk size,
@@ -27,7 +25,7 @@ import org.slf4j.LoggerFactory;
  * will be identical to the requested size.
  */
 public class DefaultRoundingPolicy implements RoundingPolicy {
-  private static final Logger logger = LoggerFactory.getLogger(DefaultRoundingPolicy.class);
+//  private static final Logger logger = LoggerFactory.getLogger(DefaultRoundingPolicy.class);
   public final long chunkSize;
 
   /**
@@ -61,10 +59,10 @@ public class DefaultRoundingPolicy implements RoundingPolicy {
       defaultMaxOrder = 11;
     }
     DEFAULT_CHUNK_SIZE = validateAndCalculateChunkSize(defaultPageSize, defaultMaxOrder);
-    if (logger.isDebugEnabled()) {
-      logger.debug("-Dorg.apache.memory.allocator.pageSize: {}", defaultPageSize);
-      logger.debug("-Dorg.apache.memory.allocator.maxOrder: {}", defaultMaxOrder);
-    }
+//    if (logger.isDebugEnabled()) {
+//      logger.debug("-Dorg.apache.memory.allocator.pageSize: {}", defaultPageSize);
+//      logger.debug("-Dorg.apache.memory.allocator.maxOrder: {}", defaultMaxOrder);
+//    }
   }
 
   private static int validateAndCalculatePageShifts(int pageSize) {

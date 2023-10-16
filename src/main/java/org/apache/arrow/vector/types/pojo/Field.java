@@ -27,11 +27,16 @@ import org.apache.arrow.flatbuf.KeyValue;
 import org.apache.arrow.flatbuf.Type;
 import org.apache.arrow.memory.BufferAllocator;
 import org.apache.arrow.util.Collections2;
+import org.apache.arrow.vector.DateDayVector;
 import org.apache.arrow.vector.FieldVector;
+import org.apache.arrow.vector.FixedSizeBinaryVector;
+import org.apache.arrow.vector.Float8Vector;
+import org.apache.arrow.vector.IntVector;
 import org.apache.arrow.vector.TypeLayout;
+import org.apache.arrow.vector.VarCharVector;
+import org.apache.arrow.vector.types.DateUnit;
+import org.apache.arrow.vector.types.FloatingPointPrecision;
 import org.apache.arrow.vector.types.pojo.ArrowType.ExtensionType;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -53,7 +58,7 @@ import static org.apache.arrow.vector.types.pojo.Schema.convertMetadata;
  */
 public class Field {
 
-  private static final Logger logger = LoggerFactory.getLogger(Field.class);
+//  private static final Logger logger = LoggerFactory.getLogger(Field.class);
 
   public static Field nullablePrimitive(String name, ArrowType.PrimitiveType type) {
     return nullable(name, type);
@@ -106,7 +111,38 @@ public class Field {
    * Construct a new vector of this type using the given allocator.
    */
   public FieldVector createVector(BufferAllocator allocator) {
-    FieldVector vector = fieldType.createNewSingleVector(this, allocator, null);
+    ArrowType fieldType = this.fieldType.getType();
+    FieldVector vector;
+
+    // Fast path for common vector types
+    // DATE
+    if (fieldType instanceof ArrowType.Date atd && atd.getUnit() == DateUnit.DAY) {
+      vector = new DateDayVector(this, allocator);
+
+    }
+    // DOUBLE
+    else if (fieldType instanceof ArrowType.FloatingPoint atfp && atfp.getPrecision() == FloatingPointPrecision.DOUBLE) {
+      vector = new Float8Vector(this, allocator);
+
+    }
+    // FIXED SIZE BINARY
+    else if (fieldType instanceof ArrowType.FixedSizeBinary) {
+      vector = new FixedSizeBinaryVector(this, allocator);
+
+    }
+    // INT
+    else if (fieldType instanceof ArrowType.Int ati && ati.getBitWidth() == 32 && ati.isSigned) {
+      vector = new IntVector(this, allocator);
+
+    // VARCHAR
+    } else if (fieldType instanceof ArrowType.Utf8) {
+      vector = new VarCharVector(this, allocator);
+
+    // DEFAULT
+    } else {
+      vector = this.fieldType.createNewSingleVector(this, allocator, null);
+    }
+
     vector.initializeChildrenFromFields(children);
     return vector;
   }
@@ -126,7 +162,39 @@ public class Field {
 
     String name = field.name();
     boolean nullable = field.nullable();
-    ArrowType type = getTypeForField(field);
+
+    // Obtain the field type, we use a fast-path for common fields
+    byte fieldTypeType = field.typeType();
+    ArrowType type;
+
+    if (fieldTypeType == Type.Int) {
+      org.apache.arrow.flatbuf.Int intType = (org.apache.arrow.flatbuf.Int) field.type(new org.apache.arrow.flatbuf.Int());
+      int bitWidth = intType.bitWidth();
+      boolean isSigned = intType.isSigned();
+      type = new ArrowType.Int(bitWidth, isSigned);
+
+    } else if (fieldTypeType == Type.FloatingPoint) {
+      org.apache.arrow.flatbuf.FloatingPoint floatingpointType = (org.apache.arrow.flatbuf.FloatingPoint) field.type(new org.apache.arrow.flatbuf.FloatingPoint());
+      short precision = floatingpointType.precision();
+      type = new ArrowType.FloatingPoint(FloatingPointPrecision.fromFlatbufID(precision));
+
+    } else if (fieldTypeType == Type.Utf8) {
+      org.apache.arrow.flatbuf.Utf8 utf8Type = (org.apache.arrow.flatbuf.Utf8) field.type(new org.apache.arrow.flatbuf.Utf8());
+      type = new ArrowType.Utf8();
+
+    } else if (fieldTypeType == Type.FixedSizeBinary) {
+      org.apache.arrow.flatbuf.FixedSizeBinary fixedsizebinaryType = (org.apache.arrow.flatbuf.FixedSizeBinary) field.type(new org.apache.arrow.flatbuf.FixedSizeBinary());
+      int byteWidth = fixedsizebinaryType.byteWidth();
+      type = new ArrowType.FixedSizeBinary(byteWidth);
+
+    } else if (fieldTypeType == Type.Date) {
+      org.apache.arrow.flatbuf.Date dateType = (org.apache.arrow.flatbuf.Date) field.type(new org.apache.arrow.flatbuf.Date());
+      short unit = dateType.unit();
+      type = new ArrowType.Date(DateUnit.fromFlatbufID(unit));
+
+    } else {
+      type = getTypeForField(field);
+    }
 
     if (metadata.containsKey(ExtensionType.EXTENSION_METADATA_KEY_NAME)) {
       final String extensionName = metadata.get(ExtensionType.EXTENSION_METADATA_KEY_NAME);
@@ -134,10 +202,10 @@ public class Field {
       ExtensionType extensionType = ExtensionTypeRegistry.lookup(extensionName);
       if (extensionType != null) {
         type = extensionType.deserialize(type, extensionMetadata);
-      } else {
+      } // else {
         // Otherwise, we haven't registered the type
-        logger.info("Unrecognized extension type: {}", extensionName);
-      }
+//        logger.info("Unrecognized extension type: {}", extensionName);
+//      }
     }
 
     DictionaryEncoding dictionary = null;

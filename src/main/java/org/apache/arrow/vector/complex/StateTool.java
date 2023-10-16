@@ -25,7 +25,7 @@ import java.util.Arrays;
 public class StateTool {
   private StateTool() {}
 
-  static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(StateTool.class);
+//  static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(StateTool.class);
 
   /**
    * Verifies <code>currentState</code> is in one of <code>expectedStates</code>,

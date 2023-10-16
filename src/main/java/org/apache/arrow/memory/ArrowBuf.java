@@ -19,7 +19,6 @@ package org.apache.arrow.memory;
 
 import org.apache.arrow.memory.BaseAllocator.Verbosity;
 import org.apache.arrow.memory.util.CommonUtil;
-import org.apache.arrow.memory.util.HistoricalLog;
 import org.apache.arrow.memory.util.MemoryUtil;
 import org.apache.arrow.util.Preconditions;
 import org.apache.arrow.util.VisibleForTesting;
@@ -56,7 +55,7 @@ import static org.apache.arrow.memory.util.LargeMemoryUtil.checkedCastToInt;
  */
 public final class ArrowBuf implements AutoCloseable {
 
-  private static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(ArrowBuf.class);
+//  private static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(ArrowBuf.class);
 
   private static final int SHORT_SIZE = Short.BYTES;
   private static final int INT_SIZE = Integer.BYTES;
@@ -72,8 +71,8 @@ public final class ArrowBuf implements AutoCloseable {
   private final long addr;
   private long readerIndex;
   private long writerIndex;
-  private final HistoricalLog historicalLog = BaseAllocator.DEBUG ?
-          new HistoricalLog(BaseAllocator.DEBUG_LOG_LENGTH, "ArrowBuf[%d]", id) : null;
+//  private final HistoricalLog historicalLog = BaseAllocator.DEBUG ?
+//          new HistoricalLog(BaseAllocator.DEBUG_LOG_LENGTH, "ArrowBuf[%d]", id) : null;
   private volatile long capacity;
 
   /**
@@ -93,9 +92,9 @@ public final class ArrowBuf implements AutoCloseable {
     this.capacity = capacity;
     this.readerIndex = 0;
     this.writerIndex = 0;
-    if (BaseAllocator.DEBUG) {
-      historicalLog.recordEvent("create()");
-    }
+//    if (BaseAllocator.DEBUG) {
+//      historicalLog.recordEvent("create()");
+//    }
   }
 
   public int refCnt() {
@@ -313,9 +312,9 @@ public final class ArrowBuf implements AutoCloseable {
     // check bounds
     Preconditions.checkArgument(fieldLength >= 0, "expecting non-negative data length");
     if (index < 0 || index > capacity() - fieldLength) {
-      if (BaseAllocator.DEBUG) {
-        historicalLog.logHistory(logger);
-      }
+//      if (BaseAllocator.DEBUG) {
+//        historicalLog.logHistory(logger);
+//      }
       throw new IndexOutOfBoundsException(String.format(
         "index: %d, length: %d (expected: range(0, %d))", index, fieldLength, capacity()));
     }
@@ -1109,10 +1108,10 @@ public final class ArrowBuf implements AutoCloseable {
   public void print(StringBuilder sb, int indent, Verbosity verbosity) {
     CommonUtil.indent(sb, indent).append(toString());
 
-    if (BaseAllocator.DEBUG && verbosity.includeHistoricalLog) {
-      sb.append("\n");
-      historicalLog.buildHistory(sb, indent + 1, verbosity.includeStackTraces);
-    }
+//    if (BaseAllocator.DEBUG && verbosity.includeHistoricalLog) {
+//      sb.append("\n");
+//      historicalLog.buildHistory(sb, indent + 1, verbosity.includeStackTraces);
+//    }
   }
 
   /**

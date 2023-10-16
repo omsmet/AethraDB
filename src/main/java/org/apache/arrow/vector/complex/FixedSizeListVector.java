@@ -35,7 +35,6 @@ import org.apache.arrow.vector.ZeroVector;
 import org.apache.arrow.vector.compare.VectorVisitor;
 import org.apache.arrow.vector.complex.impl.UnionFixedSizeListReader;
 import org.apache.arrow.vector.complex.impl.UnionFixedSizeListWriter;
-import org.apache.arrow.vector.complex.reader.FieldReader;
 import org.apache.arrow.vector.ipc.message.ArrowFieldNode;
 import org.apache.arrow.vector.types.Types.MinorType;
 import org.apache.arrow.vector.types.pojo.ArrowType;
@@ -182,16 +181,17 @@ public class FixedSizeListVector extends BaseValueVector implements BaseListVect
     throw new UnsupportedOperationException("There are no inner vectors. Use getFieldBuffers");
   }
 
-  @Override
-  protected FieldReader getReaderImpl() {
-    return new UnionFixedSizeListReader(this);
-  }
-
-  @Override
-  public UnionFixedSizeListReader getReader() {
-    reader = (UnionFixedSizeListReader) super.getReader();
-    return reader;
-  }
+// Removed for AethraDB as readers are not used.
+//  @Override
+//  protected FieldReader getReaderImpl() {
+//    return new UnionFixedSizeListReader(this);
+//  }
+//
+//  @Override
+//  public UnionFixedSizeListReader getReader() {
+//    reader = (UnionFixedSizeListReader) super.getReader();
+//    return reader;
+//  }
 
   private void invalidateReader() {
     reader = null;

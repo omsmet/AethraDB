@@ -29,8 +29,6 @@ import org.apache.arrow.vector.ipc.message.ArrowFooter;
 import org.apache.arrow.vector.ipc.message.ArrowRecordBatch;
 import org.apache.arrow.vector.ipc.message.IpcOption;
 import org.apache.arrow.vector.ipc.message.MessageSerializer;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.nio.channels.WritableByteChannel;
@@ -45,7 +43,7 @@ import java.util.Set;
  */
 public class ArrowFileWriter extends ArrowWriter {
 
-  private static final Logger LOGGER = LoggerFactory.getLogger(ArrowFileWriter.class);
+//  private static final Logger LOGGER = LoggerFactory.getLogger(ArrowFileWriter.class);
 
   // All ArrowBlocks written are saved in these lists to be passed to ArrowFooter in endInternal.
   private final List<ArrowBlock> dictionaryBlocks = new ArrayList<>();
@@ -121,9 +119,9 @@ public class ArrowFileWriter extends ArrowWriter {
       throw new InvalidArrowFileException("invalid footer");
     }
     out.writeIntLittleEndian(footerLength);
-    LOGGER.debug("Footer starts at {}, length: {}", footerStart, footerLength);
+//    LOGGER.debug("Footer starts at {}, length: {}", footerStart, footerLength);
     ArrowMagic.writeMagic(out, false);
-    LOGGER.debug("magic written, now at {}", out.getCurrentPosition());
+//    LOGGER.debug("magic written, now at {}", out.getCurrentPosition());
   }
 
   @Override

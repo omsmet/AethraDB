@@ -10,7 +10,6 @@ import AethraDB.evaluation.codegen.operators.QueryResultPrinterOperator;
 import AethraDB.evaluation.general_support.QueryCodePrinter;
 import AethraDB.util.AethraDatabase;
 import AethraDB.util.JNI.JNIEnv;
-import org.apache.arrow.memory.RootAllocator;
 import org.codehaus.commons.compiler.CompileException;
 import org.codehaus.janino.Java;
 import org.graalvm.nativeimage.IsolateThread;
@@ -101,8 +100,7 @@ public class AethraDBGenerator {
      */
     private static void internalCodegen(boolean useVectorisedProcessing, boolean summariseResultAsCount) throws Exception {
         // Instantiate helper objects
-        RootAllocator rootAllocator = new RootAllocator();
-        CodeGenContext cCtx = new CodeGenContext(rootAllocator);
+        CodeGenContext cCtx = new CodeGenContext(null);
         OptimisationContext oCtx = new OptimisationContext();
 
         // Wrap the root operator in the required summarisation and print operators

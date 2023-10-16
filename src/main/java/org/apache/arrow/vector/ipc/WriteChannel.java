@@ -21,8 +21,6 @@ import com.google.flatbuffers.FlatBufferBuilder;
 import org.apache.arrow.memory.ArrowBuf;
 import org.apache.arrow.vector.ipc.message.FBSerializable;
 import org.apache.arrow.vector.ipc.message.MessageSerializer;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -41,7 +39,7 @@ import java.nio.channels.WritableByteChannel;
  * </p>
  */
 public class WriteChannel implements AutoCloseable {
-  private static final Logger LOGGER = LoggerFactory.getLogger(WriteChannel.class);
+//  private static final Logger LOGGER = LoggerFactory.getLogger(WriteChannel.class);
 
   private static final byte[] ZERO_BYTES = new byte[8];
 
@@ -104,9 +102,9 @@ public class WriteChannel implements AutoCloseable {
    */
   public long write(ByteBuffer buffer) throws IOException {
     long length = buffer.remaining();
-    if (LOGGER.isDebugEnabled()) {
-      LOGGER.debug("Writing buffer with size: {}", length);
-    }
+//    if (LOGGER.isDebugEnabled()) {
+//      LOGGER.debug("Writing buffer with size: {}", length);
+//    }
     while (buffer.hasRemaining()) {
       out.write(buffer);
     }

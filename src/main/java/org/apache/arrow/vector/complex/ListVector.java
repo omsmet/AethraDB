@@ -32,11 +32,8 @@ import org.apache.arrow.vector.FieldVector;
 import org.apache.arrow.vector.ValueVector;
 import org.apache.arrow.vector.ZeroVector;
 import org.apache.arrow.vector.compare.VectorVisitor;
-import org.apache.arrow.vector.complex.impl.ComplexCopier;
 import org.apache.arrow.vector.complex.impl.UnionListReader;
 import org.apache.arrow.vector.complex.impl.UnionListWriter;
-import org.apache.arrow.vector.complex.reader.FieldReader;
-import org.apache.arrow.vector.complex.writer.FieldWriter;
 import org.apache.arrow.vector.ipc.message.ArrowFieldNode;
 import org.apache.arrow.vector.types.Types.MinorType;
 import org.apache.arrow.vector.types.pojo.ArrowType;
@@ -339,22 +336,23 @@ public class ListVector extends BaseRepeatedValueVector implements PromotableVec
     copyFrom(inIndex, outIndex, from);
   }
 
-  /**
-   * Copy a cell value from a particular index in source vector to a particular
-   * position in this vector.
-   * @param inIndex position to copy from in source vector
-   * @param outIndex position to copy to in this vector
-   * @param from source vector
-   */
-  @Override
-  public void copyFrom(int inIndex, int outIndex, ValueVector from) {
-    Preconditions.checkArgument(this.getMinorType() == from.getMinorType());
-    FieldReader in = from.getReader();
-    in.setPosition(inIndex);
-    FieldWriter out = getWriter();
-    out.setPosition(outIndex);
-    ComplexCopier.copy(in, out);
-  }
+// Removed for AethraDB as readers are not used.
+//  /**
+//   * Copy a cell value from a particular index in source vector to a particular
+//   * position in this vector.
+//   * @param inIndex position to copy from in source vector
+//   * @param outIndex position to copy to in this vector
+//   * @param from source vector
+//   */
+//  @Override
+//  public void copyFrom(int inIndex, int outIndex, ValueVector from) {
+//    Preconditions.checkArgument(this.getMinorType() == from.getMinorType());
+//    FieldReader in = from.getReader();
+//    in.setPosition(inIndex);
+//    FieldWriter out = getWriter();
+//    out.setPosition(outIndex);
+//    ComplexCopier.copy(in, out);
+//  }
 
   /**
    * Get the inner data vector for this list vector.
@@ -566,16 +564,17 @@ public class ListVector extends BaseRepeatedValueVector implements PromotableVec
     }
   }
 
-  @Override
-  protected FieldReader getReaderImpl() {
-    return new UnionListReader(this);
-  }
-
-  @Override
-  public UnionListReader getReader() {
-    reader = (UnionListReader) super.getReader();
-    return reader;
-  }
+// Removed for AethraDB as readers are not used.
+//  @Override
+//  protected FieldReader getReaderImpl() {
+//    return new UnionListReader(this);
+//  }
+//
+//  @Override
+//  public UnionListReader getReader() {
+//    reader = (UnionListReader) super.getReader();
+//    return reader;
+//  }
 
   /** Initialize the child data vector to field type.  */
   public <T extends ValueVector> AddOrGetResult<T> addOrGetVector(FieldType fieldType) {

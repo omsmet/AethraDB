@@ -22,7 +22,6 @@ import org.apache.arrow.memory.BufferAllocator;
 import org.apache.arrow.memory.OutOfMemoryException;
 import org.apache.arrow.memory.util.hash.ArrowBufHasher;
 import org.apache.arrow.vector.compare.VectorVisitor;
-import org.apache.arrow.vector.complex.reader.FieldReader;
 import org.apache.arrow.vector.types.Types.MinorType;
 import org.apache.arrow.vector.types.pojo.Field;
 import org.apache.arrow.vector.util.CallBack;
@@ -144,13 +143,14 @@ public interface ValueVector extends Closeable, Iterable<ValueVector> {
    */
   TransferPair makeTransferPair(ValueVector target);
 
-  /**
-   * Get a reader for this vector.
-   *
-   * @return a {@link org.apache.arrow.vector.complex.reader.FieldReader field reader} that supports reading values
-   *         from this vector.
-   */
-  FieldReader getReader();
+// Removed for AethraDB as readers are not used.
+//  /**
+//   * Get a reader for this vector.
+//   *
+//   * @return a {@link org.apache.arrow.vector.complex.reader.FieldReader field reader} that supports reading values
+//   *         from this vector.
+//   */
+//  FieldReader getReader();
 
   /**
    * Get the number of bytes used by this vector.

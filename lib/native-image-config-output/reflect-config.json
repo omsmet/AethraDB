@@ -362,13 +362,6 @@
   "methods":[{"name":"<init>","parameterTypes":["sun.security.x509.X500Name"] }]
 },
 {
-  "name":"org.apache.arrow.memory.ArrowBuf"
-},
-{
-  "name":"org.apache.arrow.memory.DefaultAllocationManagerFactory",
-  "fields":[{"name":"FACTORY"}]
-},
-{
   "name":"org.apache.arrow.vector.BaseFixedWidthVector",
   "queryAllDeclaredMethods":true
 },
