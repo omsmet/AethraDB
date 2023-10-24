@@ -37,7 +37,7 @@ public class CommonMapGenerator {
             QueryVariableType sourceType, String sourceVariableName, Java.Block codeGenResult) {
 
         // Determine if we need to copy the value into a new array
-        if (sourceType == QueryVariableType.S_FL_BIN || sourceType == QueryVariableType.S_VARCHAR) {
+        if (sourceType.logicalType == QueryVariableType.LogicalType.S_FL_BIN || sourceType == QueryVariableType.S_VARCHAR) {
             String copyVariableName = sourceVariableName + "_copy";
 
             // int source_length = source.length;
@@ -111,7 +111,7 @@ public class CommonMapGenerator {
             QueryVariableType sourceType, String sourceVariableName, List<Java.Statement> codeGenResult) {
 
         // Determine if we need to copy the value into a new array
-        if (sourceType == QueryVariableType.S_FL_BIN || sourceType == QueryVariableType.S_VARCHAR) {
+        if (sourceType.logicalType == QueryVariableType.LogicalType.S_FL_BIN || sourceType == QueryVariableType.S_VARCHAR) {
             String copyVariableName = sourceVariableName + "_copy";
 
             // int source_length = source.length;

@@ -18,7 +18,6 @@ import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableTy
 import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableType.P_BOOLEAN;
 import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableType.P_INT;
 import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableType.P_LONG;
-import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableType.S_FL_BIN;
 import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableType.S_VARCHAR;
 import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableTypeMethods.isPrimitive;
 import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableTypeMethods.primitiveMemberTypeForArray;
@@ -38,6 +37,7 @@ import static AethraDB.evaluation.codegen.infrastructure.janino.JaninoMethodGen.
 import static AethraDB.evaluation.codegen.infrastructure.janino.JaninoMethodGen.createMethodInvocation;
 import static AethraDB.evaluation.codegen.infrastructure.janino.JaninoMethodGen.createMethodInvocationStm;
 import static AethraDB.evaluation.codegen.infrastructure.janino.JaninoMethodGen.createReturnStm;
+import static AethraDB.evaluation.codegen.infrastructure.janino.JaninoOperatorGen.fixedLengthBinaryEq;
 import static AethraDB.evaluation.codegen.infrastructure.janino.JaninoOperatorGen.lt;
 import static AethraDB.evaluation.codegen.infrastructure.janino.JaninoOperatorGen.mul;
 import static AethraDB.evaluation.codegen.infrastructure.janino.JaninoOperatorGen.postIncrement;
@@ -150,7 +150,7 @@ public class KeyValueMapGenerator {
      */
     public KeyValueMapGenerator(QueryVariableType[] keyTypes, QueryVariableType[] valueTypes) {
         for (QueryVariableType keyType : keyTypes) {
-            if (!isPrimitive(keyType) && keyType != S_FL_BIN && keyType != S_VARCHAR)
+            if (!isPrimitive(keyType) && keyType.logicalType != QueryVariableType.LogicalType.S_FL_BIN && keyType != S_VARCHAR)
                 throw new IllegalArgumentException("KeyValueMapGenerator expects a primitive key type, not " + keyType);
         }
 
@@ -276,7 +276,7 @@ public class KeyValueMapGenerator {
         // Create a field for each section of the key
         for (int i = 0; i < this.keyFieldNames.length; i++) {
             Java.Type fieldType;
-            if (this.keyTypes[i] == S_FL_BIN || this.keyTypes[i] == S_VARCHAR)
+            if (this.keyTypes[i].logicalType == QueryVariableType.LogicalType.S_FL_BIN || this.keyTypes[i] == S_VARCHAR)
                 fieldType = JaninoGeneralGen.createPrimitiveArrayType(JaninoGeneralGen.getLocation(), Java.Primitive.BYTE);
             else
                 fieldType = toJavaType(getLocation(), this.keyTypes[i]);
@@ -590,7 +590,7 @@ public class KeyValueMapGenerator {
         List<Java.Statement> incrementForKeyMethodBody = new ArrayList<>();
 
         // Create the first key ordinal to be non-negative
-        if (this.keyTypes[0] == S_FL_BIN || this.keyTypes[0] == S_VARCHAR) {
+        if (this.keyTypes[0].logicalType == QueryVariableType.LogicalType.S_FL_BIN || this.keyTypes[0] == S_VARCHAR) {
             incrementForKeyMethodBody.add(
                     generateNonNullCheck(
                             JaninoGeneralGen.createAmbiguousNameRef(
@@ -907,14 +907,29 @@ public class KeyValueMapGenerator {
 
         // Generate the disjunction for the while-loop guard
         Java.Rvalue nextLoopDisjunction;
-        if (this.keyTypes[0] == S_FL_BIN || this.keyTypes[0] == S_VARCHAR) {
+        if (this.keyTypes[0].logicalType == QueryVariableType.LogicalType.S_FL_BIN) {
+            nextLoopDisjunction = JaninoOperatorGen.not(
+                    JaninoGeneralGen.getLocation(),
+                    fixedLengthBinaryEq(
+                            getLocation(),
+                            new Java.FieldAccessExpression(
+                                    JaninoGeneralGen.getLocation(),
+                                    createAmbiguousNameRef(getLocation(), currentRecord),
+                                    this.keyFieldNames[0]
+                            ),
+                            JaninoGeneralGen.createAmbiguousNameRef(JaninoGeneralGen.getLocation(), formalParameters[0].name),
+                            this.keyTypes[0].byteWidth
+                    )
+            );
+
+        } else if (this.keyTypes[0] == S_VARCHAR) {
             nextLoopDisjunction = JaninoOperatorGen.not(
                     JaninoGeneralGen.getLocation(),
                     createMethodInvocation(
                             JaninoGeneralGen.getLocation(),
                             JaninoGeneralGen.createAmbiguousNameRef(JaninoGeneralGen.getLocation(), "Arrays"),
                             "equals",
-                            new Java.Rvalue[] {
+                            new Java.Rvalue[]{
                                     new Java.FieldAccessExpression(
                                             JaninoGeneralGen.getLocation(),
                                             createAmbiguousNameRef(getLocation(), currentRecord),
@@ -940,14 +955,29 @@ public class KeyValueMapGenerator {
 
         for (int i = 1; i < this.keyFieldNames.length; i++) {
             Java.Rvalue conditionCheck;
-            if (this.keyTypes[i] == S_FL_BIN || this.keyTypes[i] == S_VARCHAR) {
+            if (this.keyTypes[i].logicalType == QueryVariableType.LogicalType.S_FL_BIN) {
+                conditionCheck = JaninoOperatorGen.not(
+                        JaninoGeneralGen.getLocation(),
+                        fixedLengthBinaryEq(
+                                getLocation(),
+                                new Java.FieldAccessExpression(
+                                        JaninoGeneralGen.getLocation(),
+                                        createAmbiguousNameRef(getLocation(), currentRecord),
+                                        this.keyFieldNames[i]
+                                ),
+                                JaninoGeneralGen.createAmbiguousNameRef(JaninoGeneralGen.getLocation(), formalParameters[i].name),
+                                this.keyTypes[i].byteWidth
+                        )
+                );
+
+            } else if (this.keyTypes[i] == S_VARCHAR) {
                 conditionCheck = JaninoOperatorGen.not(
                         JaninoGeneralGen.getLocation(),
                         createMethodInvocation(
                                 JaninoGeneralGen.getLocation(),
                                 JaninoGeneralGen.createAmbiguousNameRef(JaninoGeneralGen.getLocation(), "Arrays"),
                                 "equals",
-                                new Java.Rvalue[] {
+                                new Java.Rvalue[]{
                                         new Java.FieldAccessExpression(
                                                 JaninoGeneralGen.getLocation(),
                                                 createAmbiguousNameRef(getLocation(), currentRecord),
@@ -1477,7 +1507,7 @@ public class KeyValueMapGenerator {
         for (int i = 0; i < this.keyFieldNames.length; i++) {
             Java.MethodInvocation hashMethodInvocation = createMethodInvocation(
                     JaninoGeneralGen.getLocation(),
-                    switch (this.keyTypes[i]) {
+                    switch (this.keyTypes[i].logicalType) {
                         case P_DOUBLE -> JaninoGeneralGen.createAmbiguousNameRef(JaninoGeneralGen.getLocation(), "Double_Hash_Function");
                         case P_INT, P_INT_DATE -> JaninoGeneralGen.createAmbiguousNameRef(JaninoGeneralGen.getLocation(), "Int_Hash_Function");
                         case S_FL_BIN, S_VARCHAR -> JaninoGeneralGen.createAmbiguousNameRef(JaninoGeneralGen.getLocation(), "Char_Arr_Hash_Function");

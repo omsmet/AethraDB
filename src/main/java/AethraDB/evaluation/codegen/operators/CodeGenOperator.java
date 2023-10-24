@@ -196,12 +196,17 @@ public abstract class CodeGenOperator {
             // We allocate a new variable and initialise its value based on whether the read needs
             // to be optimised or not
             String operandVariableName;
-            if (ordinalType == QueryVariableType.S_FL_BIN) {
-                // Allocate a global byte array cache variable to avoid allocations (initially null)
+            if (ordinalType.logicalType == QueryVariableType.LogicalType.S_FL_BIN) {
+                // Allocate a global byte array cache variable to avoid allocations
                 operandVariableName = cCtx.defineQueryGlobalVariable(
                         "byte_array_cache",
                         JaninoGeneralGen.createPrimitiveArrayType(JaninoGeneralGen.getLocation(), Java.Primitive.BYTE),
-                        new Java.NullLiteral(JaninoGeneralGen.getLocation()),
+                        new Java.NewArray(
+                                JaninoGeneralGen.getLocation(),
+                                JaninoGeneralGen.createPrimitiveType(JaninoGeneralGen.getLocation(), Java.Primitive.BYTE),
+                                new Java.Rvalue[] { JaninoGeneralGen.createIntegerLiteral(JaninoGeneralGen.getLocation(), ordinalType.byteWidth) },
+                                0
+                        ),
                         false);
 
                 // Perform an optimised read and assign the returned byte array to the variable

@@ -33,27 +33,18 @@ import java.util.List;
 
 import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableType.ARRAY_DOUBLE_VECTOR;
 import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableType.ARRAY_DOUBLE_VECTOR_W_SELECTION_VECTOR;
-import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableType.ARRAY_DOUBLE_VECTOR_W_VALIDITY_MASK;
-import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableType.ARRAY_FIXED_LENGTH_BINARY_VECTOR;
 import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableType.ARRAY_INT_VECTOR;
 import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableType.ARRAY_VARCHAR_VECTOR;
 import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_DOUBLE_VECTOR;
 import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_DOUBLE_VECTOR_W_SELECTION_VECTOR;
-import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_DOUBLE_VECTOR_W_VALIDITY_MASK;
-import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_FIXED_LENGTH_BINARY_VECTOR;
-import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_FIXED_LENGTH_BINARY_VECTOR_W_SELECTION_VECTOR;
-import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_FIXED_LENGTH_BINARY_VECTOR_W_VALIDITY_MASK;
 import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_INT_VECTOR;
 import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_INT_VECTOR_W_SELECTION_VECTOR;
-import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_INT_VECTOR_W_VALIDITY_MASK;
 import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableType.MAP_GENERATED;
 import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableType.P_A_LONG;
 import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableType.P_DOUBLE;
 import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableType.P_INT;
 import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableType.P_LONG;
-import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableType.S_A_FL_BIN;
 import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableType.S_A_VARCHAR;
-import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableType.S_FL_BIN;
 import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableType.S_VARCHAR;
 import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableTypeMethods.primitiveArrayTypeForPrimitive;
 import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableTypeMethods.primitiveType;
@@ -382,6 +373,9 @@ public class AggregationOperator extends CodeGenOperator {
     public List<Java.Statement> consumeNonVec(CodeGenContext cCtx, OptimisationContext oCtx) {
         List<Java.Statement> codeGenResult = new ArrayList<>();
 
+        if (this.useSIMDNonVec(cCtx))
+            throw new UnsupportedOperationException("AggregationOperator.consumeNonVec no longer supports SIMD");
+
         // Declare the required aggregation state
         this.declareAggregationState(cCtx);
 
@@ -413,20 +407,6 @@ public class AggregationOperator extends CodeGenOperator {
                                             ((ScalarVariableAccessPath) this.aggregationStateVariables[i]).write()
                                     ));
 
-                        } else if (useSIMD && firstOrdinalAP instanceof SIMDLoopAccessPath slap) {
-                            // For a count aggregation over a SIMD loop access path, add the number of true entries in the valid mask
-                            codeGenResult.add(
-                                    createVariableAdditionAssignmentStm(
-                                            JaninoGeneralGen.getLocation(),
-                                            ((ScalarVariableAccessPath) this.aggregationStateVariables[i]).write(),
-                                            createMethodInvocation(
-                                                    JaninoGeneralGen.getLocation(),
-                                                    slap.readSIMDMask(),
-                                                    "trueCount"
-                                            )
-                                    )
-                            );
-
                         } else {
                             throw new UnsupportedOperationException(
                                     "AggregationOperator.consumeNonVec does not support this AccessPath for the COUNT aggregation while "
@@ -454,68 +434,6 @@ public class AggregationOperator extends CodeGenOperator {
                                             iaveap.readGeneric() // Read generic is applicable since this case will only occur for numeric columns
                                     ));
 
-                        } else if (useSIMD && inputOrdinalAP instanceof SIMDLoopAccessPath slap) {
-                            // Need to perform a SIMD reduce lane operation
-                            // [SIMDVectorType] [SIMDVector] = IntVector.fromSegment(
-                            //      [lhsAP.readVectorSpecies()],
-                            //      [lhsAP.readMemorySegment()],
-                            //      [lhsAP.readArrowVectorOffset()] * [lhsAP.readArrowVector().TYPE_WIDTH],
-                            //      java.nio.ByteOrder.LITTLE_ENDIAN,
-                            //      [lhsAP.readSIMDMask()]
-                            // );
-                            String SIMDVectorName = cCtx.defineVariable("SIMDVector");
-                            String vectorCreationMethodName = switch (slap.getType()) {
-                                case VECTOR_DOUBLE_MASKED -> "createDoubleVector";
-                                case VECTOR_INT_MASKED -> "createIntVector";
-                                default -> throw new UnsupportedOperationException(
-                                        "AggregationOperator.consumeNonVec does not support the provided SIMD-Loop AP type " + slap.getType());
-                            };
-
-                            codeGenResult.add(
-                                    createLocalVariable(
-                                            JaninoGeneralGen.getLocation(),
-                                            toJavaType(JaninoGeneralGen.getLocation(), slap.getType()),
-                                            SIMDVectorName,
-                                            createMethodInvocation(
-                                                    JaninoGeneralGen.getLocation(),
-                                                    JaninoGeneralGen.createAmbiguousNameRef(JaninoGeneralGen.getLocation(), "oCtx"),
-                                                    vectorCreationMethodName,
-                                                    new Java.Rvalue[] {
-                                                            slap.readVectorSpecies(),
-                                                            slap.readMemorySegment(),
-                                                            JaninoOperatorGen.mul(
-                                                                    JaninoGeneralGen.getLocation(),
-                                                                    slap.readArrowVectorOffset(),
-                                                                    JaninoGeneralGen.createAmbiguousNameRef(
-                                                                            JaninoGeneralGen.getLocation(),
-                                                                            slap.getArrowVectorAccessPath().getVariableName() + ".TYPE_WIDTH"
-                                                                    )
-                                                            ),
-                                                            JaninoGeneralGen.createAmbiguousNameRef(JaninoGeneralGen.getLocation(), "java.nio.ByteOrder.LITTLE_ENDIAN"),
-                                                            slap.readSIMDMask()
-                                                    }
-                                            )
-                                    )
-                            );
-
-                            // Now reduce the vector by summing all entries
-                            // this.aggregationStateVariables[i] += [SIMDVector].reduceLanes(ADD, slap.readSIMDMask());
-                            codeGenResult.add(
-                                    createVariableAdditionAssignmentStm(
-                                            JaninoGeneralGen.getLocation(),
-                                            ((ScalarVariableAccessPath) this.aggregationStateVariables[i]).write(),
-                                            createMethodInvocation(
-                                                    JaninoGeneralGen.getLocation(),
-                                                    JaninoGeneralGen.createAmbiguousNameRef(JaninoGeneralGen.getLocation(), SIMDVectorName),
-                                                    "reduceLanes",
-                                                    new Java.Rvalue[] {
-                                                            JaninoGeneralGen.createAmbiguousNameRef(JaninoGeneralGen.getLocation(), "jdk.incubator.vector.VectorOperators.ADD"),
-                                                            slap.readSIMDMask()
-                                                    }
-                                            )
-                                    )
-                            );
-
                         } else {
                             throw new UnsupportedOperationException(
                                     "AggregationOperator.consumeNonVec does not support this AccessPath for the SUM aggregation while "
@@ -534,126 +452,73 @@ public class AggregationOperator extends CodeGenOperator {
             Java.Rvalue[] aggregationValues = new Java.Rvalue[this.aggregationFunctions.length];
             Java.Block hashMapMaintenanceTarget;
 
-            // Hashing of key-columns depends on whether we are in SIMD mode or not
-            if (!this.useSIMDNonVec(cCtx)) {
-                // Ensure we have "local" access paths for the key column values
-                Java.Rvalue[] keyColumnRValues = new Java.Rvalue[this.groupByKeyColumnIndices.length];
-                keyColumnAccessPaths = new AccessPath[keyColumnRValues.length];
-                for (int i = 0; i < keyColumnRValues.length; i++) {
-                    keyColumnRValues[i] = getRValueFromOrdinalAccessPathNonVec(cCtx, this.groupByKeyColumnIndices[i], codeGenResult);
-                    keyColumnAccessPaths[i] = cCtx.getCurrentOrdinalMapping().get(this.groupByKeyColumnIndices[i]);
-                }
+            // Ensure we have "local" access paths for the key column values
+            Java.Rvalue[] keyColumnRValues = new Java.Rvalue[this.groupByKeyColumnIndices.length];
+            keyColumnAccessPaths = new AccessPath[keyColumnRValues.length];
+            for (int i = 0; i < keyColumnRValues.length; i++) {
+                keyColumnRValues[i] = getRValueFromOrdinalAccessPathNonVec(cCtx, this.groupByKeyColumnIndices[i], codeGenResult);
+                keyColumnAccessPaths[i] = cCtx.getCurrentOrdinalMapping().get(this.groupByKeyColumnIndices[i]);
+            }
 
-                // Now compute the pre-hash value in a local variable
-                keyColumnPreHashAccessPath =
-                        new ScalarVariableAccessPath(cCtx.defineVariable("group_key_pre_hash"), P_LONG);
-                for (int i = 0; i < keyColumnRValues.length; i++) {
+            // Now compute the pre-hash value in a local variable
+            keyColumnPreHashAccessPath =
+                    new ScalarVariableAccessPath(cCtx.defineVariable("group_key_pre_hash"), P_LONG);
+            for (int i = 0; i < keyColumnRValues.length; i++) {
 
-                    Java.AmbiguousName hashFunctionContainer = switch (this.groupByKeyColumnsTypes[i]) {
-                        case P_DOUBLE -> JaninoGeneralGen.createAmbiguousNameRef(JaninoGeneralGen.getLocation(), "Double_Hash_Function");
-                        case P_INT, P_INT_DATE -> JaninoGeneralGen.createAmbiguousNameRef(JaninoGeneralGen.getLocation(), "Int_Hash_Function");
-                        case S_FL_BIN, S_VARCHAR -> JaninoGeneralGen.createAmbiguousNameRef(JaninoGeneralGen.getLocation(), "Char_Arr_Hash_Function");
+                Java.AmbiguousName hashFunctionContainer = switch (this.groupByKeyColumnsTypes[i].logicalType) {
+                    case P_DOUBLE -> JaninoGeneralGen.createAmbiguousNameRef(JaninoGeneralGen.getLocation(), "Double_Hash_Function");
+                    case P_INT, P_INT_DATE -> JaninoGeneralGen.createAmbiguousNameRef(JaninoGeneralGen.getLocation(), "Int_Hash_Function");
+                    case S_FL_BIN, S_VARCHAR -> JaninoGeneralGen.createAmbiguousNameRef(JaninoGeneralGen.getLocation(), "Char_Arr_Hash_Function");
 
-                        default -> throw new UnsupportedOperationException("AggregationOperator.consumeNonVec does not support this group-by key type");
-                    };
+                    default -> throw new UnsupportedOperationException("AggregationOperator.consumeNonVec does not support this group-by key type");
+                };
 
-                    Java.MethodInvocation currentPreHashInvocation = createMethodInvocation(
-                            JaninoGeneralGen.getLocation(),
-                            hashFunctionContainer,
-                            "preHash",
-                            new Java.Rvalue[]{ keyColumnRValues[i] }
-                    );
+                Java.MethodInvocation currentPreHashInvocation = createMethodInvocation(
+                        JaninoGeneralGen.getLocation(),
+                        hashFunctionContainer,
+                        "preHash",
+                        new Java.Rvalue[]{ keyColumnRValues[i] }
+                );
 
-                    if (i == 0) {
-                        // On the first key column, need to declare and initialise the variable
-                        codeGenResult.add(
-                                createLocalVariable(
-                                        JaninoGeneralGen.getLocation(),
-                                        toJavaType(JaninoGeneralGen.getLocation(), keyColumnPreHashAccessPath.getType()),
-                                        keyColumnPreHashAccessPath.getVariableName(),
-                                        currentPreHashInvocation
-                                ));
-
-                    } else {
-                        // On all others, we "extend" the pre-hash using the XOR operator
-                        codeGenResult.add(
-                            createVariableXorAssignmentStm(
+                if (i == 0) {
+                    // On the first key column, need to declare and initialise the variable
+                    codeGenResult.add(
+                            createLocalVariable(
                                     JaninoGeneralGen.getLocation(),
-                                    keyColumnPreHashAccessPath.write(),
+                                    toJavaType(JaninoGeneralGen.getLocation(), keyColumnPreHashAccessPath.getType()),
+                                    keyColumnPreHashAccessPath.getVariableName(),
                                     currentPreHashInvocation
                             ));
-                    }
 
+                } else {
+                    // On all others, we "extend" the pre-hash using the XOR operator
+                    codeGenResult.add(
+                        createVariableXorAssignmentStm(
+                                JaninoGeneralGen.getLocation(),
+                                keyColumnPreHashAccessPath.write(),
+                                currentPreHashInvocation
+                        ));
                 }
 
-                // Also obtain the values to insert into the hash-map later on
-                for (int i = 0; i < this.aggregationFunctions.length; i++) {
-                    AggregationFunction currentFunction = this.aggregationFunctions[i];
-
-                    if (currentFunction == AggregationFunction.G_COUNT) {
-                        aggregationValues[i] = JaninoGeneralGen.createIntegerLiteral(JaninoGeneralGen.getLocation(), 1);
-                    } else if (currentFunction == AggregationFunction.G_SUM) {
-                        aggregationValues[i] = this.getRValueFromOrdinalAccessPathNonVec(cCtx, this.aggregationFunctionInputOrdinals[i][0], codeGenResult);
-                    }
-
-                    // No other possibilities due to the constructor
-
-                }
-
-                // Set the correct hashMapMaintenanceTarget
-                hashMapMaintenanceTarget = createBlock(JaninoGeneralGen.getLocation());
-                codeGenResult.add(hashMapMaintenanceTarget);
-
-            } else { // this.useSIMDNonVec(cCtx)
-
-                // TODO: extend to multiple key version later on
-                if (this.groupByKeyColumnIndices.length > 1)
-                    throw new UnsupportedOperationException("AggregationOperator.consumeNonVec only supports a single key column in SIMD operation");
-
-                // Perform the SIMD-ed pre-hashing and flattening
-                var preHashAndFlattenResult = Int_Hash_Function.preHashAndFlattenSIMD(
-                        cCtx,
-                        cCtx.getCurrentOrdinalMapping().get(this.groupByKeyColumnIndices[0])
-                );
-                keyColumnAccessPaths = new AccessPath[] { preHashAndFlattenResult.keyColumnAccessPath };
-                keyColumnPreHashAccessPath = preHashAndFlattenResult.keyColumnPreHashAccessPath;
-                codeGenResult.addAll(preHashAndFlattenResult.generatedCode);
-
-                // Obtain the values to insert into the hash-map later on
-                for (int i = 0; i < this.aggregationFunctions.length; i++) {
-                    AggregationFunction currentFunction = this.aggregationFunctions[i];
-
-                    if (currentFunction == AggregationFunction.G_COUNT) {
-                        aggregationValues[i] = JaninoGeneralGen.createIntegerLiteral(JaninoGeneralGen.getLocation(), 1);
-
-                    } else if (currentFunction == AggregationFunction.G_SUM) {
-
-                        AccessPath valueAP = cCtx.getCurrentOrdinalMapping().get(this.aggregationFunctionInputOrdinals[i][0]);
-                        if (valueAP instanceof SIMDLoopAccessPath valueAP_slap) {
-                            // aggregationValues[i] = [valueAP_slap.readArrowVector()].get([valueAP_slap.readArrowVectorOffset()] + [simd_vector_i]);
-                            aggregationValues[i] = createMethodInvocation(
-                                    JaninoGeneralGen.getLocation(),
-                                    valueAP_slap.readArrowVector(),
-                                    "get",
-                                    new Java.Rvalue[]{
-                                            JaninoOperatorGen.plus(
-                                                    JaninoGeneralGen.getLocation(),
-                                                    valueAP_slap.readArrowVectorOffset(),
-                                                    preHashAndFlattenResult.simdVectorIAp.read()
-                                            )
-                                    }
-                            );
-
-                        } else {
-                            throw new UnsupportedOperationException(
-                                    "AggregationOperator.consumeNonVec does not support this valueAP for hash-map maintenance");
-                        }
-                    }
-                }
-
-                // And set the correct hashMapMaintenanceTarget
-                hashMapMaintenanceTarget = preHashAndFlattenResult.flattenedForLoopBody;
             }
+
+            // Also obtain the values to insert into the hash-map later on
+            for (int i = 0; i < this.aggregationFunctions.length; i++) {
+                AggregationFunction currentFunction = this.aggregationFunctions[i];
+
+                if (currentFunction == AggregationFunction.G_COUNT) {
+                    aggregationValues[i] = JaninoGeneralGen.createIntegerLiteral(JaninoGeneralGen.getLocation(), 1);
+                } else if (currentFunction == AggregationFunction.G_SUM) {
+                    aggregationValues[i] = this.getRValueFromOrdinalAccessPathNonVec(cCtx, this.aggregationFunctionInputOrdinals[i][0], codeGenResult);
+                }
+
+                // No other possibilities due to the constructor
+
+            }
+
+            // Set the correct hashMapMaintenanceTarget
+            hashMapMaintenanceTarget = createBlock(JaninoGeneralGen.getLocation());
+            codeGenResult.add(hashMapMaintenanceTarget);
 
             // Now perform hash-table maintenance by collecting the correct arguments for the
             // incrementForKey method of the hash-table based on the aggregation functions
@@ -763,10 +628,11 @@ public class AggregationOperator extends CodeGenOperator {
                 // primitiveType[] groupKeyVector_i = cCtx.getAllocationManager().get[primitiveType]Vector();
                 ArrayAccessPath groupKeyVectorArrayAP = new ArrayAccessPath(
                         cCtx.defineVariable("groupKeyVector_" + i),
-                        (currentKeyPrimitiveType == S_FL_BIN) ? S_A_FL_BIN :
-                                (currentKeyPrimitiveType == S_VARCHAR) ? S_A_VARCHAR : primitiveArrayTypeForPrimitive(currentKeyPrimitiveType));
+                        (currentKeyPrimitiveType.logicalType == QueryVariableType.LogicalType.S_FL_BIN)
+                                ? new QueryVariableType(QueryVariableType.LogicalType.S_A_FL_BIN, currentKeyPrimitiveType.byteWidth)
+                                : (currentKeyPrimitiveType == S_VARCHAR) ? S_A_VARCHAR : primitiveArrayTypeForPrimitive(currentKeyPrimitiveType));
 
-                String initMethodName = switch (currentKeyPrimitiveType) {
+                String initMethodName = switch (currentKeyPrimitiveType.logicalType) {
                     case P_DOUBLE -> "getDoubleVector";
                     case P_INT, P_INT_DATE -> "getIntVector";
                     case S_FL_BIN, S_VARCHAR -> "getNestedByteVector";
@@ -808,7 +674,7 @@ public class AggregationOperator extends CodeGenOperator {
                             = primitiveArrayTypeForPrimitive(this.aggregationMapGenerator.valueTypes[currentMapValueOrdinalIndex]);
                     ArrayAccessPath aggregationResultVectorAP = new ArrayAccessPath(aggregationResultVectorName, resultType);
 
-                    String allocationManagerMethodName = switch (resultType) {
+                    String allocationManagerMethodName = switch (resultType.logicalType) {
                         case P_A_DOUBLE -> "getDoubleVector";
                         case P_A_INT -> "getIntVector";
                         case P_A_LONG -> "getLongVector";
@@ -1249,22 +1115,20 @@ public class AggregationOperator extends CodeGenOperator {
                 Java.Rvalue[] methodInvocationArguments = new Java.Rvalue[numberOfArguments];
                 int currentMethodInvocationArgumentIndex = 0;
                 methodInvocationArguments[currentMethodInvocationArgumentIndex++] = this.groupKeyPreHashVector.read();
-                methodInvocationArguments[currentMethodInvocationArgumentIndex++] = switch (keyColumnsAccessPathTypes[i]) {
+                methodInvocationArguments[currentMethodInvocationArgumentIndex++] = switch (keyColumnsAccessPathTypes[i].logicalType) {
                     case ARRAY_DOUBLE_VECTOR, ARRAY_FIXED_LENGTH_BINARY_VECTOR, ARRAY_INT_VECTOR, ARRAY_INT_DATE_VECTOR, ARRAY_VARCHAR_VECTOR
                             -> ((ArrayVectorAccessPath) keyColumnsAccessPaths[i]).getVectorVariable().read();
                     case ARROW_FIXED_LENGTH_BINARY_VECTOR, ARROW_INT_VECTOR
                             -> ((ArrowVectorAccessPath) keyColumnsAccessPaths[i]).read();
                     case ARROW_FIXED_LENGTH_BINARY_VECTOR_W_SELECTION_VECTOR, ARROW_INT_VECTOR_W_SELECTION_VECTOR
                             -> ((ArrowVectorWithSelectionVectorAccessPath) keyColumnsAccessPaths[i]).readArrowVector();
-                    case ARROW_FIXED_LENGTH_BINARY_VECTOR_W_VALIDITY_MASK, ARROW_INT_VECTOR_W_VALIDITY_MASK
-                            -> ((ArrowVectorWithValidityMaskAccessPath) keyColumnsAccessPaths[i]).readArrowVector();
 
                     default -> throw new UnsupportedOperationException("AggregationOperator.consumeVec does not support this key column access path type");
                 };
 
                 // Check if we need to add a length parameter
                 if (arrayVector) {
-                    methodInvocationArguments[currentMethodInvocationArgumentIndex++] = switch (keyColumnsAccessPathTypes[i]) {
+                    methodInvocationArguments[currentMethodInvocationArgumentIndex++] = switch (keyColumnsAccessPathTypes[i].logicalType) {
                         case ARRAY_DOUBLE_VECTOR, ARRAY_FIXED_LENGTH_BINARY_VECTOR, ARRAY_INT_VECTOR, ARRAY_INT_DATE_VECTOR, ARRAY_VARCHAR_VECTOR
                                 -> ((ArrayVectorAccessPath) keyColumnsAccessPaths[i]).getVectorLengthVariable().read();
 
@@ -1274,19 +1138,15 @@ public class AggregationOperator extends CodeGenOperator {
 
                 // Check if we need to add filtering arguments
                 if (accountForFiltering) {
-                    methodInvocationArguments[currentMethodInvocationArgumentIndex++] = switch (keyColumnsAccessPathTypes[i]) {
+                    methodInvocationArguments[currentMethodInvocationArgumentIndex++] = switch (keyColumnsAccessPathTypes[i].logicalType) {
                         case ARROW_FIXED_LENGTH_BINARY_VECTOR_W_SELECTION_VECTOR, ARROW_INT_VECTOR_W_SELECTION_VECTOR
                                 -> ((ArrowVectorWithSelectionVectorAccessPath) keyColumnsAccessPaths[i]).readSelectionVector();
-                        case ARROW_FIXED_LENGTH_BINARY_VECTOR_W_VALIDITY_MASK, ARROW_INT_VECTOR_W_VALIDITY_MASK
-                                -> ((ArrowVectorWithValidityMaskAccessPath) keyColumnsAccessPaths[i]).readValidityMask();
 
                         default -> throw new UnsupportedOperationException("AggregationOperator.consumeVec does not support this filtering key column access path type");
                     };
-                    methodInvocationArguments[currentMethodInvocationArgumentIndex++] = switch (keyColumnsAccessPathTypes[i]) {
+                    methodInvocationArguments[currentMethodInvocationArgumentIndex++] = switch (keyColumnsAccessPathTypes[i].logicalType) {
                         case ARROW_FIXED_LENGTH_BINARY_VECTOR_W_SELECTION_VECTOR, ARROW_INT_VECTOR_W_SELECTION_VECTOR
                                 -> ((ArrowVectorWithSelectionVectorAccessPath) keyColumnsAccessPaths[i]).readSelectionVectorLength();
-                        case ARROW_FIXED_LENGTH_BINARY_VECTOR_W_VALIDITY_MASK, ARROW_INT_VECTOR_W_VALIDITY_MASK
-                                -> ((ArrowVectorWithValidityMaskAccessPath) keyColumnsAccessPaths[i]).readValidityMaskLength();
 
                         default -> throw new UnsupportedOperationException("AggregationOperator.consumeVec does not support this filtering key column access path type");
                     };
@@ -1455,29 +1315,8 @@ public class AggregationOperator extends CodeGenOperator {
                         );
 
 
-                    }  else if (inputOrdinalType == ARROW_DOUBLE_VECTOR_W_VALIDITY_MASK || inputOrdinalType == ARROW_INT_VECTOR_W_VALIDITY_MASK) {
-                        ArrowVectorWithValidityMaskAccessPath castInputOrdinal = (ArrowVectorWithValidityMaskAccessPath) inputOrdinal;
-
-                        // Simply take the value indicated by the access path
-                        incrementForKeyArguments[currentArgumentIndex++] = createMethodInvocation(
-                                JaninoGeneralGen.getLocation(),
-                                castInputOrdinal.readArrowVector(),
-                                "get",
-                                new Java.Rvalue[] { recordIndexAP.read() }
-                        );
-
                     } else if (inputOrdinalType == ARRAY_DOUBLE_VECTOR_W_SELECTION_VECTOR) {
                         ArrayVectorWithSelectionVectorAccessPath castInputOrdinal = (ArrayVectorWithSelectionVectorAccessPath) inputOrdinal;
-
-                        // Simply take the value indicated by the access path
-                        incrementForKeyArguments[currentArgumentIndex++] = JaninoGeneralGen.createArrayElementAccessExpr(
-                                JaninoGeneralGen.getLocation(),
-                                castInputOrdinal.getArrayVectorVariable().getVectorVariable().read(),
-                                recordIndexAP.read()
-                        );
-
-                    } else if (inputOrdinalType == ARRAY_DOUBLE_VECTOR_W_VALIDITY_MASK) {
-                        ArrayVectorWithValidityMaskAccessPath castInputOrdinal = (ArrayVectorWithValidityMaskAccessPath) inputOrdinal;
 
                         // Simply take the value indicated by the access path
                         incrementForKeyArguments[currentArgumentIndex++] = JaninoGeneralGen.createArrayElementAccessExpr(
@@ -1576,14 +1415,12 @@ public class AggregationOperator extends CodeGenOperator {
         this.groupByKeyColumnsTypes = new QueryVariableType[this.groupByKeyColumnIndices.length];
         for (int i = 0; i < this.groupByKeyColumnsTypes.length; i++) {
             QueryVariableType ordinalType = om.get(this.groupByKeyColumnIndices[i]).getType();
-            if (ordinalType == S_FL_BIN
-                    || ordinalType == ARRAY_FIXED_LENGTH_BINARY_VECTOR
-                    || ordinalType == ARROW_FIXED_LENGTH_BINARY_VECTOR
-                    || ordinalType == ARROW_FIXED_LENGTH_BINARY_VECTOR_W_SELECTION_VECTOR
-                    || ordinalType == ARROW_FIXED_LENGTH_BINARY_VECTOR_W_VALIDITY_MASK)
-                ordinalType = S_FL_BIN;
-            else if (ordinalType == S_VARCHAR
-                    || ordinalType == ARRAY_VARCHAR_VECTOR)
+            if (ordinalType.logicalType == QueryVariableType.LogicalType.S_FL_BIN
+                    || ordinalType.logicalType == QueryVariableType.LogicalType.ARRAY_FIXED_LENGTH_BINARY_VECTOR
+                    || ordinalType.logicalType == QueryVariableType.LogicalType.ARROW_FIXED_LENGTH_BINARY_VECTOR
+                    || ordinalType.logicalType == QueryVariableType.LogicalType.ARROW_FIXED_LENGTH_BINARY_VECTOR_W_SELECTION_VECTOR)
+                ordinalType = new QueryVariableType(QueryVariableType.LogicalType.S_FL_BIN, ordinalType.byteWidth);
+            else if (ordinalType == S_VARCHAR || ordinalType == ARRAY_VARCHAR_VECTOR)
                 ordinalType = S_VARCHAR;
             else
                 ordinalType = primitiveType(ordinalType);

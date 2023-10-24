@@ -21,21 +21,18 @@ import org.codehaus.janino.Java;
 import java.util.ArrayList;
 import java.util.List;
 
-import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableType.ARRAY_FIXED_LENGTH_BINARY_VECTOR;
 import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableType.ARRAY_INT_VECTOR;
 import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableType.ARRAY_VARCHAR_VECTOR;
-import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_FIXED_LENGTH_BINARY_VECTOR;
 import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_INT_VECTOR;
 import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_INT_VECTOR_W_SELECTION_VECTOR;
-import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_INT_VECTOR_W_VALIDITY_MASK;
 import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_VARCHAR_VECTOR;
+import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableType.LogicalType.ARRAY_FIXED_LENGTH_BINARY_VECTOR;
+import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableType.LogicalType.ARROW_FIXED_LENGTH_BINARY_VECTOR;
 import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableType.MAP_GENERATED;
 import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableType.P_A_LONG;
 import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableType.P_INT;
 import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableType.P_LONG;
-import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableType.S_A_FL_BIN;
 import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableType.S_A_VARCHAR;
-import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableType.S_FL_BIN;
 import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableType.S_VARCHAR;
 import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableTypeMethods.primitiveArrayTypeForPrimitive;
 import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableTypeMethods.primitiveType;
@@ -556,7 +553,7 @@ public class JoinOperator extends CodeGenOperator {
         // Allocate the result vectors first
         for (int i = 0; i < this.resultVectorDefinitions.size(); i++) {
             ArrayAccessPath vectorDescription = this.resultVectorDefinitions.get(i);
-            String instantiationMethod = switch (vectorDescription.getType()) {
+            String instantiationMethod = switch (vectorDescription.getType().logicalType) {
                 case P_A_BOOLEAN -> "getBooleanVector";
                 case P_A_DOUBLE -> "getDoubleVector";
                 case P_A_INT, P_A_INT_DATE -> "getIntVector";
@@ -631,9 +628,9 @@ public class JoinOperator extends CodeGenOperator {
 
             QueryVariableType primitiveOrdinalType;
             QueryVariableType primitiveArrayType;
-            if (ordinalType == ARROW_FIXED_LENGTH_BINARY_VECTOR || ordinalType == ARRAY_FIXED_LENGTH_BINARY_VECTOR) {
-                primitiveOrdinalType = S_FL_BIN;
-                primitiveArrayType = S_A_FL_BIN;
+            if (ordinalType.logicalType == ARROW_FIXED_LENGTH_BINARY_VECTOR || ordinalType.logicalType == ARRAY_FIXED_LENGTH_BINARY_VECTOR) {
+                primitiveOrdinalType = new QueryVariableType(QueryVariableType.LogicalType.S_FL_BIN, ordinalType.byteWidth);
+                primitiveArrayType = new QueryVariableType(QueryVariableType.LogicalType.S_A_FL_BIN, ordinalType.byteWidth);
             } else if (ordinalType == ARROW_VARCHAR_VECTOR || ordinalType == ARRAY_VARCHAR_VECTOR) {
                 primitiveOrdinalType = S_VARCHAR;
                 primitiveArrayType = S_A_VARCHAR;
@@ -916,134 +913,7 @@ public class JoinOperator extends CodeGenOperator {
                     )
             );
 
-        } else if (buildKeyAPType == ARROW_INT_VECTOR_W_VALIDITY_MASK) {
-            // We know that all other vectors on the build side must be of some arrow/array vector type
-            // with a selection vector
-            ArrowVectorWithValidityMaskAccessPath buildKeyAVWVMAP = ((ArrowVectorWithValidityMaskAccessPath) buildKeyAP);
-
-            // VectorisedHashOperators.constructPreHashKeyVector[SIMD](
-            //         [this.preHashVectorAP.read()], [buildKeyAVWVMAP.arrowVector], [buildKeyAVWVMAP.validityMask], [buildKeyAVWVMAP.validityMaskLength], false);
-            codeGenResult.add(
-                    createMethodInvocationStm(
-                            getLocation(),
-                            createAmbiguousNameRef(getLocation(), "VectorisedHashOperators"),
-                            vectorisedHashMethodName,
-                            new Java.Rvalue[]{
-                                    this.preHashVectorAP.read(),
-                                    buildKeyAVWVMAP.readArrowVector(),
-                                    buildKeyAVWVMAP.readValidityMask(),
-                                    buildKeyAVWVMAP.readValidityMaskLength(),
-                                    new Java.BooleanLiteral(getLocation(), "false")
-                            }
-                    ));
-
-            // Now iterate over the selection vector to construct the hash-table records and insert them into the table
-            // int recordCount = [buildKeyAVWSVAP.buildKeyAVWVMAP.arrowVector.getValueCount()];
-            ScalarVariableAccessPath recordCountAP = new ScalarVariableAccessPath(
-                    cCtx.defineVariable("recordCount"),
-                    P_INT
-            );
-            codeGenResult.add(
-                    createLocalVariable(
-                            getLocation(),
-                            createPrimitiveType(getLocation(), Java.Primitive.INT),
-                            recordCountAP.getVariableName(),
-                            createMethodInvocation(
-                                    getLocation(),
-                                    buildKeyAVWVMAP.readArrowVector(),
-                                    "getValueCount"
-                            )
-                    )
-            );
-
-            // for (int i = 0; i < recordCount; i++) { [insertionLoopBody] }
-            ScalarVariableAccessPath insertionLoopIndexVariable =
-                    new ScalarVariableAccessPath(cCtx.defineVariable("i"), P_INT);
-            Java.Block insertionLoopBody = new Java.Block(getLocation());
-            codeGenResult.add(
-                    JaninoControlGen.createForLoop(
-                            getLocation(),
-                            createLocalVariable(
-                                    getLocation(),
-                                    toJavaType(getLocation(), insertionLoopIndexVariable.getType()),
-                                    insertionLoopIndexVariable.getVariableName(),
-                                    createIntegerLiteral(getLocation(), 0)
-                            ),
-                            JaninoOperatorGen.lt(
-                                    getLocation(),
-                                    insertionLoopIndexVariable.read(),
-                                    recordCountAP.read()
-                            ),
-                            JaninoOperatorGen.postIncrement(getLocation(), insertionLoopIndexVariable.write()),
-                            insertionLoopBody
-                    )
-            );
-
-            // Skip invalid records
-            insertionLoopBody.addStatement(
-                    JaninoControlGen.createIfNotContinue(
-                            getLocation(),
-                            createArrayElementAccessExpr(
-                                    getLocation(),
-                                    buildKeyAVWVMAP.readValidityMask(),
-                                    insertionLoopIndexVariable.read()
-                            )
-                    )
-            );
-
-            // Insert the record into the hash-table
-            // Get the key
-            // int left_join_record_key = [buildKeyAVWSVAP].get([selected_record_index]);
-            ScalarVariableAccessPath leftJoinRecordKeyAP = new ScalarVariableAccessPath(
-                    cCtx.defineVariable("left_join_record_key"),
-                    P_INT
-            );
-            insertionLoopBody.addStatement(
-                    createLocalVariable(
-                            getLocation(),
-                            toJavaType(getLocation(), leftJoinRecordKeyAP.getType()),
-                            leftJoinRecordKeyAP.getVariableName(),
-                            createMethodInvocation(
-                                    getLocation(),
-                                    buildKeyAVWVMAP.readArrowVector(),
-                                    "get",
-                                    new Java.Rvalue[] { insertionLoopIndexVariable.read() }
-                            )
-                    )
-            );
-
-            // Get the values for the remaining columns to prevent key duplication
-            Java.Rvalue[] columnValues = new Java.Rvalue[currentOrdinalMapping.size() - 1];
-            int currentValueColumnIndex = 0;
-            for (int i = 0; i < columnValues.length; i++) {
-                if (i == buildKeyOrdinal)
-                    continue;
-
-                columnValues[currentValueColumnIndex++] = createMethodInvocation(
-                        getLocation(),
-                        ((ArrowVectorWithValidityMaskAccessPath) currentOrdinalMapping.get(i)).readArrowVector(),
-                        "get",
-                        new Java.Rvalue[] { insertionLoopIndexVariable.read() }
-                );
-            }
-
-            // [join_map].associate([left_join_record_key], [preHashVector][[insertionLoopIndexVariable]], [columnValues])
-            Java.Rvalue[] associateCallArgs = new Java.Rvalue[columnValues.length + 2];
-            associateCallArgs[0] = leftJoinRecordKeyAP.read();
-            associateCallArgs[1] = createArrayElementAccessExpr(
-                    getLocation(), preHashVectorAP.read(), insertionLoopIndexVariable.read());
-            System.arraycopy(columnValues, 0, associateCallArgs, 2, columnValues.length);
-
-            insertionLoopBody.addStatement(
-                    createMethodInvocationStm(
-                            getLocation(),
-                            this.joinMapAP.read(),
-                            "associate",
-                            associateCallArgs
-                    )
-            );
-
-        } else if (buildKeyAPType == ARRAY_INT_VECTOR) {
+        }  else if (buildKeyAPType == ARRAY_INT_VECTOR) {
             // We know that all other vectors on the build side must be of some arrow/array vector type
             // without any validity mask/selection vector
             ArrayVectorAccessPath buildKeyAVAP = ((ArrayVectorAccessPath) buildKeyAP);
@@ -1279,67 +1149,7 @@ public class JoinOperator extends CodeGenOperator {
                     }
             );
 
-        } else if (buildKeyAPType == ARROW_INT_VECTOR_W_VALIDITY_MASK) {
-            // We know that all other vectors on the probe side must be of some arrow vector type
-            // with a validity mask
-            ArrowVectorWithValidityMaskAccessPath buildKeyAVWVMAP = ((ArrowVectorWithValidityMaskAccessPath) buildKeyAP);
-
-            // VectorisedHashOperators.constructPreHashKeyVector[SIMD](
-            // [this.preHashVectorAP.read()], [buildKeyAVWVMAP.arrowVector], [buildKeyAVWVMAP.validityMask], [buildKeyAVWVMAP.validityMaskLength], false);
-            codeGenResult.add(
-                    createMethodInvocationStm(
-                            getLocation(),
-                            createAmbiguousNameRef(getLocation(), "VectorisedHashOperators"),
-                            vectorisedHashMethodName,
-                            new Java.Rvalue[]{
-                                    this.preHashVectorAP.read(),
-                                    buildKeyAVWVMAP.readArrowVector(),
-                                    buildKeyAVWVMAP.readValidityMask(),
-                                    buildKeyAVWVMAP.readValidityMaskLength(),
-                                    new Java.BooleanLiteral(getLocation(), "false")
-                            }
-                    ));
-
-            // Setup the initialisation code for the recordCount variable
-            recordCountInitialisation = createMethodInvocation(
-                    getLocation(),
-                    buildKeyAVWVMAP.readArrowVector(),
-                    "getValueCount"
-            );
-
-            // Add code for skipping keys of invalid records
-            // if (!(validityMask[currentLoopIndex])) {
-            //     currentLoopIndex++;
-            //     continue;
-            // }
-            Java.Block incrementContinueBlock = new Java.Block(getLocation());
-            incrementContinueBlock.addStatement(JaninoOperatorGen.postIncrementStm(getLocation(), recordIndexAP.write()));
-            incrementContinueBlock.addStatement(new Java.ContinueStatement(getLocation(), null));
-            recordIndexAPRelatedStatements = JaninoControlGen.createIf(
-                    getLocation(),
-                    JaninoOperatorGen.not(
-                            getLocation(),
-                            createArrayElementAccessExpr(
-                                    getLocation(),
-                                    buildKeyAVWVMAP.readValidityMask(),
-                                    recordIndexAP.read()
-                            )
-                    ),
-                    incrementContinueBlock
-            );
-
-            // Setup the code for obtaining the right_join_key variable value
-            // int right_join_key = [buildKeyAVWVMAP.readArrowVector()].get([recordIndexAP.read()]);
-            rightJoinKeyReadCode = createMethodInvocation(
-                    getLocation(),
-                    buildKeyAVWVMAP.readArrowVector(),
-                    "get",
-                    new Java.Rvalue[] {
-                            recordIndexAP.read()
-                    }
-            );
-
-        } else if (buildKeyAPType == ARRAY_INT_VECTOR) {
+        }  else if (buildKeyAPType == ARRAY_INT_VECTOR) {
             // We know that all other vectors on the probe side must be of some array vector type
             // without any validity mask/selection vector
             ArrayVectorAccessPath buildKeyAVAP = ((ArrayVectorAccessPath) buildKeyAP);
@@ -1624,8 +1434,8 @@ public class JoinOperator extends CodeGenOperator {
                 }
 
                 QueryVariableType rightJoinColumnType;
-                if (rightJoinColumnAP.getType() == ARROW_FIXED_LENGTH_BINARY_VECTOR)
-                    rightJoinColumnType = S_FL_BIN;
+                if (rightJoinColumnAP.getType().logicalType == ARROW_FIXED_LENGTH_BINARY_VECTOR)
+                    rightJoinColumnType = new QueryVariableType(QueryVariableType.LogicalType.S_FL_BIN, rightJoinColumnAP.getType().byteWidth);
                 else if (rightJoinColumnAP.getType() == ARROW_VARCHAR_VECTOR)
                     rightJoinColumnType = S_VARCHAR;
                 else
@@ -1830,9 +1640,10 @@ public class JoinOperator extends CodeGenOperator {
             if (relationColumnType == S_VARCHAR
                     || relationColumnType == ARROW_VARCHAR_VECTOR || relationColumnType == ARRAY_VARCHAR_VECTOR)
                 primitiveColumnTypes[i] = S_VARCHAR;
-            else if (relationColumnType == S_FL_BIN
-                    || relationColumnType == ARROW_FIXED_LENGTH_BINARY_VECTOR || relationColumnType == ARRAY_FIXED_LENGTH_BINARY_VECTOR)
-                primitiveColumnTypes[i] = S_FL_BIN;
+            else if (relationColumnType.logicalType == QueryVariableType.LogicalType.S_FL_BIN
+                    || relationColumnType.logicalType == QueryVariableType.LogicalType.ARROW_FIXED_LENGTH_BINARY_VECTOR
+                    || relationColumnType.logicalType == QueryVariableType.LogicalType.ARRAY_FIXED_LENGTH_BINARY_VECTOR)
+                primitiveColumnTypes[i] = new QueryVariableType(QueryVariableType.LogicalType.S_FL_BIN, relationColumnType.byteWidth);
             else
                 primitiveColumnTypes[i] = primitiveType(relationColumnType);
         }

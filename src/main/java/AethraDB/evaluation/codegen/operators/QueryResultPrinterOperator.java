@@ -93,7 +93,7 @@ public class QueryResultPrinterOperator extends CodeGenOperator {
 
             // Convert fixed length strings
             QueryVariableType ordinalType = cCtx.getCurrentOrdinalMapping().get(i).getType();
-            if (ordinalType == QueryVariableType.S_FL_BIN || ordinalType == QueryVariableType.S_VARCHAR) {
+            if (ordinalType.logicalType == QueryVariableType.LogicalType.S_FL_BIN || ordinalType == QueryVariableType.S_VARCHAR) {
                 printValue = createClassInstance(
                         getLocation(),
                         createReferenceType(getLocation(), "java.lang.String"),
@@ -164,8 +164,7 @@ public class QueryResultPrinterOperator extends CodeGenOperator {
             boolean isDate =
                        ordinalType == QueryVariableType.ARROW_DATE_VECTOR
                     || ordinalType == QueryVariableType.ARRAY_INT_DATE_VECTOR
-                    || ordinalType == QueryVariableType.ARROW_DATE_VECTOR_W_SELECTION_VECTOR
-                    || ordinalType == QueryVariableType.ARROW_DATE_VECTOR_W_VALIDITY_MASK;
+                    || ordinalType == QueryVariableType.ARROW_DATE_VECTOR_W_SELECTION_VECTOR;
             String vectorisedPrintOperatorsMethodName = isDate ? "printDate" : "print";
 
             if (ordinalAccessPath instanceof ArrowVectorAccessPath avap) {

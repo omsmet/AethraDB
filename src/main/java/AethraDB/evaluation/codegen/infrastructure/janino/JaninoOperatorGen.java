@@ -5,6 +5,9 @@ import org.codehaus.commons.compiler.Location;
 import org.codehaus.janino.Java;
 
 import static AethraDB.evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createAmbiguousNameRef;
+import static AethraDB.evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createArrayElementAccessExpr;
+import static AethraDB.evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createIntegerLiteral;
+import static AethraDB.evaluation.codegen.infrastructure.janino.JaninoGeneralGen.getLocation;
 import static AethraDB.evaluation.codegen.infrastructure.janino.JaninoMethodGen.createMethodInvocation;
 
 /**
@@ -161,19 +164,90 @@ public class JaninoOperatorGen {
      */
     public static Java.Rvalue eq(Location location, Java.Rvalue lhs, Java.Rvalue rhs) {
         // Need to handle some types with more care
-        if (lhs instanceof Java.NewInitializedArray || rhs instanceof Java.NewInitializedArray) {
-            return createMethodInvocation(
-                    location,
-                    createAmbiguousNameRef(location, "Arrays"),
-                    "equals",
-                    new Java.Rvalue[] {
-                            lhs,
-                            rhs
-                    }
-            );
+        if (lhs instanceof Java.AmbiguousName lhsName && rhs instanceof Java.NewInitializedArray rhsArr) {
+            return arrayEq(location, lhsName, rhsArr);
+        } else if (lhs instanceof Java.NewInitializedArray lhsArr && rhs instanceof Java.AmbiguousName rhsName) {
+            return arrayEq(location, rhsName, lhsArr);
+        } else if (lhs instanceof Java.NewInitializedArray || rhs instanceof Java.NewInitializedArray) {
+            throw new UnsupportedOperationException("JaninoOperatorGen.eq did not expect this array comparison combination");
         }
 
         return new Java.BinaryOperation(location, lhs, "==", rhs);
+    }
+
+    /**
+     * Create an equality comparison operator of an array variable against an array constant
+     * @param location The location at which the operator is requested for generation.
+     * @param arrayName The name of the array variable of the comparison.
+     * @param constArr The "constant" that the array variable should be compared against for equality.
+     * @return The comparison operator.
+     */
+    public static Java.Rvalue arrayEq(Location location, Java.AmbiguousName arrayName, Java.NewInitializedArray constArr) {
+        Java.ArrayInitializer constArrInit = constArr.arrayInitializer;
+        Java.ArrayInitializerOrRvalue[] constArrayValues = constArrInit.values;
+
+        // Check lengths for equality
+        Java.Rvalue result = eq(
+                location,
+                new Java.FieldAccessExpression(location, arrayName, "length"),
+                createIntegerLiteral(location, constArrayValues.length));
+
+        // Now check the indices for equality
+        for (int i = 0; i < constArrayValues.length; i++) {
+            if (!(constArrayValues[i] instanceof Java.SimpleConstant constValue))
+                throw new UnsupportedOperationException("JaninoOperatorGen.arrayEq expects SimpleConstants in constArr");
+
+            result = and(
+                    location,
+                    result,
+                    eq(
+                            location,
+                            createArrayElementAccessExpr(location, arrayName, createIntegerLiteral(location, i)),
+                            constValue
+                    )
+            );
+        }
+
+        return result;
+    }
+
+    /**
+     * Create an equality comparison operator for two fixed-size binary values.
+     * @param location The location at which the operator is requested for generation.
+     * @param lhs The left-hand side of the comparison.
+     * @param rhs The right-hand side of the comparison.
+     * @param fsbLength The number of indices to compare (i.e. the fixed-size width of the values).
+     * @return The comparison operator.
+     */
+    public static Java.Rvalue fixedLengthBinaryEq(Location location, Java.Rvalue lhs, Java.Rvalue rhs, int fsbLength) {
+        // Check lengths for equality
+        Java.Rvalue result = eq(
+                location,
+                new Java.FieldAccessExpression(location, lhs, "length"),
+                createIntegerLiteral(location, fsbLength));
+
+        result = and(
+                location,
+                result,
+                eq(
+                        location,
+                        new Java.FieldAccessExpression(location, rhs, "length"),
+                        createIntegerLiteral(location, fsbLength)));
+
+        // Now check the indices for equality
+        for (int i = 0; i < fsbLength; i++) {
+            result = and(
+                    location,
+                    result,
+                    eq(
+                            location,
+                            createArrayElementAccessExpr(location, lhs, createIntegerLiteral(location, i)),
+                            createArrayElementAccessExpr(location, rhs, createIntegerLiteral(location, i))
+                    )
+            );
+        }
+
+        return result;
     }
 
     /**

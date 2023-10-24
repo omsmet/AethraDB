@@ -28,21 +28,15 @@ import java.util.List;
 
 import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_DATE_VECTOR;
 import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_DATE_VECTOR_W_SELECTION_VECTOR;
-import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_DATE_VECTOR_W_VALIDITY_MASK;
 import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_DOUBLE_VECTOR;
 import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_DOUBLE_VECTOR_W_SELECTION_VECTOR;
-import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_DOUBLE_VECTOR_W_VALIDITY_MASK;
-import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_FIXED_LENGTH_BINARY_VECTOR;
 import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_INT_VECTOR;
 import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_INT_VECTOR_W_SELECTION_VECTOR;
-import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_INT_VECTOR_W_VALIDITY_MASK;
 import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableType.P_A_INT;
 import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableType.P_DOUBLE;
 import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableType.P_INT;
 import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableType.P_INT_DATE;
-import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableType.S_FL_BIN;
 import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableTypeMethods.arrowVectorWithSelectionVectorType;
-import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableTypeMethods.arrowVectorWithValidityMaskType;
 import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableTypeMethods.toJavaType;
 import static AethraDB.evaluation.codegen.infrastructure.janino.JaninoControlGen.createIfNotContinue;
 import static AethraDB.evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createAmbiguousNameRef;
@@ -422,7 +416,7 @@ public class FilterOperator extends CodeGenOperator {
 
         } else if (rhs instanceof AethraStringLiteral rhsLit) {
             rhsScalar = createInitialisedByteArray(getLocation(), rhsLit.value);
-            rhsScalarType = S_FL_BIN;
+            rhsScalarType = new QueryVariableType(QueryVariableType.LogicalType.S_FL_BIN, rhsLit.value.length);
 
         } else if (rhs instanceof AethraBinaryFunction abf && abf.firstOperand instanceof AethraDateDayLiteral) {
             // Deal with special date specification format
@@ -434,23 +428,20 @@ public class FilterOperator extends CodeGenOperator {
         // Currently the filter operator only supports the below types, check this condition
         if (
                 (
-                   lhsAP.getType() != ARROW_DATE_VECTOR
-                && lhsAP.getType() != ARROW_DATE_VECTOR_W_SELECTION_VECTOR
-                && lhsAP.getType() != ARROW_DATE_VECTOR_W_VALIDITY_MASK
-                && lhsAP.getType() != ARROW_DOUBLE_VECTOR
-                && lhsAP.getType() != ARROW_DOUBLE_VECTOR_W_SELECTION_VECTOR
-                && lhsAP.getType() != ARROW_DOUBLE_VECTOR_W_VALIDITY_MASK
-                && lhsAP.getType() != ARROW_FIXED_LENGTH_BINARY_VECTOR
-                && lhsAP.getType() != ARROW_INT_VECTOR
-                && lhsAP.getType() != ARROW_INT_VECTOR_W_SELECTION_VECTOR
-                && lhsAP.getType() != ARROW_INT_VECTOR_W_VALIDITY_MASK
+                   lhsAP.getType().logicalType != QueryVariableType.LogicalType.ARROW_DATE_VECTOR
+                && lhsAP.getType().logicalType != QueryVariableType.LogicalType.ARROW_DATE_VECTOR_W_SELECTION_VECTOR
+                && lhsAP.getType().logicalType != QueryVariableType.LogicalType.ARROW_DOUBLE_VECTOR
+                && lhsAP.getType().logicalType != QueryVariableType.LogicalType.ARROW_DOUBLE_VECTOR_W_SELECTION_VECTOR
+                && lhsAP.getType().logicalType != QueryVariableType.LogicalType.ARROW_FIXED_LENGTH_BINARY_VECTOR
+                && lhsAP.getType().logicalType != QueryVariableType.LogicalType.ARROW_INT_VECTOR
+                && lhsAP.getType().logicalType != QueryVariableType.LogicalType.ARROW_INT_VECTOR_W_SELECTION_VECTOR
                 )
                 ||
                 (
-                   rhsScalarType != P_DOUBLE
-                && rhsScalarType != P_INT
-                && rhsScalarType != P_INT_DATE
-                && rhsScalarType != S_FL_BIN
+                   rhsScalarType.logicalType != QueryVariableType.LogicalType.P_DOUBLE
+                && rhsScalarType.logicalType != QueryVariableType.LogicalType.P_INT
+                && rhsScalarType.logicalType != QueryVariableType.LogicalType.P_INT_DATE
+                && rhsScalarType.logicalType != QueryVariableType.LogicalType.S_FL_BIN
                 )
         ) {
             throw new UnsupportedOperationException(
@@ -487,7 +478,7 @@ public class FilterOperator extends CodeGenOperator {
                 P_INT
         );
 
-        if (lhsAP instanceof ArrowVectorAccessPath lhsArrowVecAP && !this.useSIMDVec()) {
+        if (lhsAP instanceof ArrowVectorAccessPath lhsArrowVecAP) {
             // int ordinal_[index]_sel_vec_length = VectorisedFilterOperators.[operatorName](
             //      lhsArrowVecAP.read(), rhsIntScalar, ordinal_[index]_sel_vec);
             codegenResult.add(
@@ -499,7 +490,7 @@ public class FilterOperator extends CodeGenOperator {
                                     getLocation(),
                                     createAmbiguousNameRef(getLocation(), "VectorisedFilterOperators"),
                                     operatorName,
-                                    new Java.Rvalue[] {
+                                    new Java.Rvalue[]{
                                             lhsArrowVecAP.read(),
                                             rhsScalar,
                                             selectionResultAP.read()
@@ -508,31 +499,7 @@ public class FilterOperator extends CodeGenOperator {
                     )
             );
 
-        } else if (lhsAP instanceof ArrowVectorAccessPath lhsArrowVecAP && this.useSIMDVec()) {
-            // int ordinal_[index]_val_mask_length = VectorisedFilterOperators.[operatorName]SIMD(
-            //      lhsArrowVecAP.read(), rhsIntScalar, ordinal_[index]_val_mask);
-            codegenResult.add(
-                    createLocalVariable(
-                            getLocation(),
-                            toJavaType(getLocation(), selectionResultLengthAP.getType()),
-                            selectionResultLengthAP.getVariableName(),
-                            createMethodInvocation(
-                                    getLocation(),
-                                    createAmbiguousNameRef(
-                                            getLocation(),
-                                            "VectorisedFilterOperators"
-                                    ),
-                                    operatorName + "SIMD",
-                                    new Java.Rvalue[] {
-                                            lhsArrowVecAP.read(),
-                                            rhsScalar,
-                                            selectionResultAP.read()
-                                    }
-                            )
-                    )
-            );
-
-        } else if (lhsAP instanceof ArrowVectorWithSelectionVectorAccessPath lhsArrowVecWSAP && !this.useSIMDVec()) {
+        } else if (lhsAP instanceof ArrowVectorWithSelectionVectorAccessPath lhsArrowVecWSAP) {
             // int ordinal_[index]_sel_vec_length = VectorisedFilterOperators.[operatorName](
             //      lhsArrowVecWSAP.readArrowVector(), rhsIntScalar, ordinal_[index]_sel_vec,
             //      lhsArrowVecWSAP.readSelectionVector(), lhsArrowVecWSAP.readSelectionVectorLength());
@@ -556,30 +523,6 @@ public class FilterOperator extends CodeGenOperator {
                     )
             );
 
-        } else if (lhsAP instanceof ArrowVectorWithValidityMaskAccessPath lhsAvwvmAP && this.useSIMDVec()) {
-            // int ordinal_[index]_val_mask_length = VectorisedFilterOperators.[operatorName]SIMD(
-            //      lhsAvwvmAP.readArrowVector(), rhsIntScalar, ordinal_[index]_val_mask,
-            //      lhsAvwvmAP.readValidityMask(), lhsAvwvmAP.readValidityMaskLength());
-            codegenResult.add(
-                    createLocalVariable(
-                            getLocation(),
-                            toJavaType(getLocation(), selectionResultLengthAP.getType()),
-                            selectionResultLengthAP.getVariableName(),
-                            createMethodInvocation(
-                                    getLocation(),
-                                    createAmbiguousNameRef(getLocation(), "VectorisedFilterOperators"),
-                                    operatorName + "SIMD",
-                                    new Java.Rvalue[] {
-                                            lhsAvwvmAP.readArrowVector(),
-                                            rhsScalar,
-                                            selectionResultAP.read(),
-                                            lhsAvwvmAP.readValidityMask(),
-                                            lhsAvwvmAP.readValidityMaskLength()
-                                    }
-                            )
-                    )
-            );
-
         } else {
             throw new UnsupportedOperationException(
                     "FilterOperator.consumeVecComparisonOperator does not support this left-hand access path and simd enabled combination");
@@ -589,29 +532,17 @@ public class FilterOperator extends CodeGenOperator {
         List<AccessPath> updatedOrdinalMapping = cCtx.getCurrentOrdinalMapping().stream().map(
                 entry -> {
                     if (entry instanceof ArrowVectorAccessPath avapEntry && !this.useSIMDVec())
-                        return new ArrowVectorWithSelectionVectorAccessPath(
+                        return (AccessPath) new ArrowVectorWithSelectionVectorAccessPath(
                                 avapEntry,
                                 selectionResultAP,
                                 selectionResultLengthAP,
                                 arrowVectorWithSelectionVectorType(avapEntry.getType()));
-                    else if (entry instanceof ArrowVectorAccessPath avapEntry && this.useSIMDVec())
-                        return new ArrowVectorWithValidityMaskAccessPath(
-                                avapEntry,
-                                selectionResultAP,
-                                selectionResultLengthAP,
-                                arrowVectorWithValidityMaskType(avapEntry.getType()));
                     else if (entry instanceof ArrowVectorWithSelectionVectorAccessPath avwsvapEntry && !this.useSIMDVec())
                         return new ArrowVectorWithSelectionVectorAccessPath(
                                 avwsvapEntry.getArrowVectorVariable(),
                                 selectionResultAP,
                                 selectionResultLengthAP,
                                 arrowVectorWithSelectionVectorType(avwsvapEntry.getArrowVectorVariable().getType()));
-                    else if (entry instanceof ArrowVectorWithValidityMaskAccessPath avwvmapEntry && this.useSIMDVec())
-                        return new ArrowVectorWithValidityMaskAccessPath(
-                                avwvmapEntry.getArrowVectorVariable(),
-                                selectionResultAP,
-                                selectionResultLengthAP,
-                                arrowVectorWithValidityMaskType(avwvmapEntry.getArrowVectorVariable().getType()));
                     else
                         throw new UnsupportedOperationException(
                                 "We expected all ordinals to be of specific vector types");

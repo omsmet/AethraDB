@@ -417,10 +417,9 @@ public class ProjectOperator extends CodeGenOperator {
                                     JaninoGeneralGen.createAmbiguousNameRef(JaninoGeneralGen.getLocation(), "cCtx"),
                                     "getAllocationManager"
                             ),
-                            switch (returnVectorType) {
+                            switch (returnVectorType.logicalType) {
                                 case P_A_BOOLEAN -> "getBooleanVector";
                                 case P_A_DOUBLE -> "getDoubleVector";
-                                case P_A_FLOAT -> "getFloatVector";
                                 case P_A_INT -> "getIntVector";
                                 case P_A_LONG -> "getLongVector";
                                 default -> throw new UnsupportedOperationException("ProjectOperator.createVecComputationCode cannot allocate this result type");
@@ -514,38 +513,6 @@ public class ProjectOperator extends CodeGenOperator {
                         QueryVariableTypeMethods.arrayVectorWithSelectionVectorType(QueryVariableTypeMethods.vectorTypeForPrimitiveArrayType(returnVectorType))
                 );
 
-            } else if (lhopResult instanceof ScalarVariableAccessPath lhopScalar && rhopResult instanceof ArrowVectorWithValidityMaskAccessPath rhopAVWVMAP) {
-                // length = operatorMethodName(
-                //         lhopScalar, rhopArrowVector, rhopValidityMask, rhopValidityMaskLength, result);
-                codeGenResult.add(
-                        JaninoVariableGen.createVariableAssignmentStm(
-                                JaninoGeneralGen.getLocation(),
-                                projectionComputationResultLengthAP.write(),
-                                JaninoMethodGen.createMethodInvocation(
-                                        JaninoGeneralGen.getLocation(),
-                                        JaninoGeneralGen.createAmbiguousNameRef(JaninoGeneralGen.getLocation(), "VectorisedArithmeticOperators"),
-                                        operatorMethodName,
-                                        new Java.Rvalue[]{
-                                                lhopScalar.read(),
-                                                rhopAVWVMAP.readArrowVector(),
-                                                rhopAVWVMAP.readValidityMask(),
-                                                rhopAVWVMAP.readValidityMaskLength(),
-                                                projectionComputationResultAP.read()
-                                        }
-                                )
-                        )
-                );
-                return new ArrayVectorWithValidityMaskAccessPath(
-                        new ArrayVectorAccessPath(
-                                projectionComputationResultAP,
-                                projectionComputationResultLengthAP,
-                                QueryVariableTypeMethods.vectorTypeForPrimitiveArrayType(returnVectorType)
-                        ),
-                        rhopAVWVMAP.getValidityMaskVariable(),
-                        rhopAVWVMAP.getValidityMaskLengthVariable(),
-                        QueryVariableTypeMethods.arrayVectorWithValidityMaskType(QueryVariableTypeMethods.vectorTypeForPrimitiveArrayType(returnVectorType))
-                );
-
             } else if (lhopResult instanceof ArrowVectorAccessPath lhopArrowVec && rhopResult instanceof ArrayVectorAccessPath rhopArrayVec) {
                 // length = operatorMethodName(lhopArrowVec, rhopArrayVec, rhopArrayVecLength, result);
                 codeGenResult.add(
@@ -607,44 +574,6 @@ public class ProjectOperator extends CodeGenOperator {
                         lhopAVWSVAP.getSelectionVectorVariable(),
                         lhopAVWSVAP.getSelectionVectorLengthVariable(),
                         QueryVariableTypeMethods.arrayVectorWithSelectionVectorType(QueryVariableTypeMethods.vectorTypeForPrimitiveArrayType(returnVectorType))
-                );
-
-            } else if (lhopResult instanceof ArrowVectorWithValidityMaskAccessPath lhopAVWVMAP
-                    && rhopResult instanceof ArrayVectorWithValidityMaskAccessPath rhopAVWVMAP) {
-                // The vectors should have the same validity mask by design
-                assert lhopAVWVMAP.getValidityMaskVariable().getVariableName().equals(
-                        rhopAVWVMAP.getValidityMaskVariable().getVariableName());
-
-                // length = operatorMethodName(
-                //         lhopArrowVec, rhopArrayVec, rhopArrayVecLength, lhopAVWSVAP.readValidityMask(), lhopAVWSVAP.readValidityMaskLength(), result);
-                codeGenResult.add(
-                        JaninoVariableGen.createVariableAssignmentStm(
-                                JaninoGeneralGen.getLocation(),
-                                projectionComputationResultLengthAP.write(),
-                                JaninoMethodGen.createMethodInvocation(
-                                        JaninoGeneralGen.getLocation(),
-                                        JaninoGeneralGen.createAmbiguousNameRef(JaninoGeneralGen.getLocation(), "VectorisedArithmeticOperators"),
-                                        operatorMethodName,
-                                        new Java.Rvalue[]{
-                                                lhopAVWVMAP.readArrowVector(),
-                                                rhopAVWVMAP.getArrayVectorVariable().getVectorVariable().read(),
-                                                rhopAVWVMAP.getArrayVectorVariable().getVectorLengthVariable().read(),
-                                                lhopAVWVMAP.readValidityMask(),
-                                                lhopAVWVMAP.readValidityMaskLength(),
-                                                projectionComputationResultAP.read()
-                                        }
-                                )
-                        )
-                );
-                return new ArrayVectorWithValidityMaskAccessPath(
-                        new ArrayVectorAccessPath(
-                                projectionComputationResultAP,
-                                projectionComputationResultLengthAP,
-                                QueryVariableTypeMethods.vectorTypeForPrimitiveArrayType(returnVectorType)
-                        ),
-                        lhopAVWVMAP.getValidityMaskVariable(),
-                        lhopAVWVMAP.getValidityMaskLengthVariable(),
-                        QueryVariableTypeMethods.arrayVectorWithValidityMaskType(QueryVariableTypeMethods.vectorTypeForPrimitiveArrayType(returnVectorType))
                 );
 
             } else if (lhopResult instanceof ArrayVectorAccessPath lhopArrayVec && rhopResult instanceof ArrayVectorAccessPath rhopArrayVec) {
@@ -711,44 +640,6 @@ public class ProjectOperator extends CodeGenOperator {
                         QueryVariableTypeMethods.arrayVectorWithSelectionVectorType(QueryVariableTypeMethods.vectorTypeForPrimitiveArrayType(returnVectorType))
                 );
 
-            } else if (lhopResult instanceof ArrayVectorWithValidityMaskAccessPath lhopAVWVMAP
-                    && rhopResult instanceof ArrayVectorWithValidityMaskAccessPath rhopAVWVMAP) {
-                // The vectors should have the same validity mask by design
-                assert lhopAVWVMAP.getValidityMaskVariable().getVariableName().equals(
-                        rhopAVWVMAP.getValidityMaskVariable().getVariableName());
-
-                // length = operatorMethodName(lhopArrayVec, lhopArrayVecLength, rhopArrayVec, rhopArrayVecLength, lhopValMask, lhopValMaskLen, result);
-                codeGenResult.add(
-                        JaninoVariableGen.createVariableAssignmentStm(
-                                JaninoGeneralGen.getLocation(),
-                                projectionComputationResultLengthAP.write(),
-                                JaninoMethodGen.createMethodInvocation(
-                                        JaninoGeneralGen.getLocation(),
-                                        JaninoGeneralGen.createAmbiguousNameRef(JaninoGeneralGen.getLocation(), "VectorisedArithmeticOperators"),
-                                        operatorMethodName,
-                                        new Java.Rvalue[]{
-                                                lhopAVWVMAP.getArrayVectorVariable().getVectorVariable().read(),
-                                                lhopAVWVMAP.getArrayVectorVariable().getVectorLengthVariable().read(),
-                                                rhopAVWVMAP.getArrayVectorVariable().getVectorVariable().read(),
-                                                rhopAVWVMAP.getArrayVectorVariable().getVectorLengthVariable().read(),
-                                                lhopAVWVMAP.readValidityMask(),
-                                                lhopAVWVMAP.readValidityMaskLength(),
-                                                projectionComputationResultAP.read()
-                                        }
-                                )
-                        )
-                );
-                return new ArrayVectorWithValidityMaskAccessPath(
-                        new ArrayVectorAccessPath(
-                                projectionComputationResultAP,
-                                projectionComputationResultLengthAP,
-                                QueryVariableTypeMethods.vectorTypeForPrimitiveArrayType(returnVectorType)
-                        ),
-                        lhopAVWVMAP.getValidityMaskVariable(),
-                        lhopAVWVMAP.getValidityMaskLengthVariable(),
-                        QueryVariableTypeMethods.arrayVectorWithValidityMaskType(QueryVariableTypeMethods.vectorTypeForPrimitiveArrayType(returnVectorType))
-                );
-
             } else if (lhopResult instanceof ArrowVectorWithSelectionVectorAccessPath lhopAVWSVAP
                     && rhopResult instanceof ArrowVectorWithSelectionVectorAccessPath rhopAVWSVAP) {
                 // The vectors should have the same selection vector by design
@@ -783,42 +674,6 @@ public class ProjectOperator extends CodeGenOperator {
                         lhopAVWSVAP.getSelectionVectorVariable(),
                         lhopAVWSVAP.getSelectionVectorLengthVariable(),
                         QueryVariableTypeMethods.arrayVectorWithSelectionVectorType(QueryVariableTypeMethods.vectorTypeForPrimitiveArrayType(returnVectorType))
-                );
-
-            } else if (lhopResult instanceof ArrowVectorWithValidityMaskAccessPath lhopAVWVMAP
-                    && rhopResult instanceof ArrowVectorWithValidityMaskAccessPath rhopAVWVMAP) {
-                // The vectors should have the same validity mask by design
-                assert lhopAVWVMAP.getValidityMaskVariable().getVariableName().equals(
-                        rhopAVWVMAP.getValidityMaskVariable().getVariableName());
-
-                // length = operatorMethodName(lhopArrowVec, rhopArrowVec, lhopValMask, lhopValMaskLen, result);
-                codeGenResult.add(
-                        JaninoVariableGen.createVariableAssignmentStm(
-                                JaninoGeneralGen.getLocation(),
-                                projectionComputationResultLengthAP.write(),
-                                JaninoMethodGen.createMethodInvocation(
-                                        JaninoGeneralGen.getLocation(),
-                                        JaninoGeneralGen.createAmbiguousNameRef(JaninoGeneralGen.getLocation(), "VectorisedArithmeticOperators"),
-                                        operatorMethodName,
-                                        new Java.Rvalue[]{
-                                                lhopAVWVMAP.readArrowVector(),
-                                                rhopAVWVMAP.readArrowVector(),
-                                                lhopAVWVMAP.readValidityMask(),
-                                                lhopAVWVMAP.readValidityMaskLength(),
-                                                projectionComputationResultAP.read()
-                                        }
-                                )
-                        )
-                );
-                return new ArrayVectorWithValidityMaskAccessPath(
-                        new ArrayVectorAccessPath(
-                                projectionComputationResultAP,
-                                projectionComputationResultLengthAP,
-                                QueryVariableTypeMethods.vectorTypeForPrimitiveArrayType(returnVectorType)
-                        ),
-                        lhopAVWVMAP.getValidityMaskVariable(),
-                        lhopAVWVMAP.getValidityMaskLengthVariable(),
-                        QueryVariableTypeMethods.arrayVectorWithValidityMaskType(QueryVariableTypeMethods.vectorTypeForPrimitiveArrayType(returnVectorType))
                 );
 
             } else {

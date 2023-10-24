@@ -18,7 +18,6 @@ import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableTy
 import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableType.P_BOOLEAN;
 import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableType.P_INT;
 import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableType.P_LONG;
-import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableType.S_FL_BIN;
 import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableType.S_VARCHAR;
 import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableTypeMethods.isPrimitive;
 import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableTypeMethods.primitiveArrayTypeForPrimitive;
@@ -163,7 +162,7 @@ public class KeyMultiRecordMapGenerator {
             throw new IllegalArgumentException("KeyMultiRecordMapGenerator expects a primitive key type, not " + keyType);
         for (int i = 0; i < valueTypes.length; i++) {
             QueryVariableType valueType = valueTypes[i];
-            if (!isPrimitive(valueType) && valueType != S_FL_BIN && valueType != S_VARCHAR)
+            if (!isPrimitive(valueType) && valueType.logicalType != QueryVariableType.LogicalType.S_FL_BIN && valueType != S_VARCHAR)
                 throw new IllegalArgumentException("KeyMultiRecordMapGenerator expects primitive value types, not " + valueType);
         }
 
@@ -1710,7 +1709,7 @@ public class KeyMultiRecordMapGenerator {
                         "preHash",
                         createMethodInvocation(
                                 JaninoGeneralGen.getLocation(),
-                                switch (keyType) {
+                                switch (keyType.logicalType) {
                                     case P_INT -> JaninoGeneralGen.createAmbiguousNameRef(JaninoGeneralGen.getLocation(), "Int_Hash_Function");
                                     default -> throw new UnsupportedOperationException(
                                             "This key-type is currently not supported by the KeyMultiRecordMapGenerator");
