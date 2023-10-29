@@ -50,6 +50,8 @@ public final class QueryVariableTypeMethods {
 
             case ARROW_INT_VECTOR_W_SELECTION_VECTOR -> QueryVariableType.P_INT;
 
+            case ARRAY_INT_VECTOR_W_SELECTION_VECTOR -> QueryVariableType.P_INT;
+
             case ARRAY_DOUBLE_VECTOR -> QueryVariableType.P_DOUBLE;
             case ARRAY_INT_VECTOR -> QueryVariableType.P_INT;
             case ARRAY_LONG_VECTOR -> QueryVariableType.P_LONG;
@@ -165,6 +167,7 @@ public final class QueryVariableTypeMethods {
     public static QueryVariableType arrayVectorWithSelectionVectorType(QueryVariableType arrowType) {
         return switch (arrowType.logicalType) {
             case ARRAY_DOUBLE_VECTOR, ARRAY_DOUBLE_VECTOR_W_SELECTION_VECTOR -> QueryVariableType.ARRAY_DOUBLE_VECTOR_W_SELECTION_VECTOR;
+            case ARRAY_INT_VECTOR, ARRAY_INT_VECTOR_W_SELECTION_VECTOR -> QueryVariableType.ARRAY_INT_VECTOR_W_SELECTION_VECTOR;
             default ->
                     throw new IllegalArgumentException("arrayVectorWithSelectionVectorType cannot handle this type" + arrowType);
         };

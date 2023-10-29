@@ -196,6 +196,8 @@ public class ProjectOperator extends CodeGenOperator {
                 primitiveReturnType = QueryVariableType.P_DOUBLE;
             else if (primLhsResType == QueryVariableType.P_INT && primRhsResType == QueryVariableType.P_DOUBLE)
                 primitiveReturnType = QueryVariableType.P_DOUBLE;
+            else if (primLhsResType == QueryVariableType.P_INT && primRhsResType == QueryVariableType.P_INT)
+                primitiveReturnType = QueryVariableType.P_INT;
             else
                 throw new UnsupportedOperationException("ProjectOperator.createNonVecComputationCode could not determine desired return type");
 
@@ -296,6 +298,10 @@ public class ProjectOperator extends CodeGenOperator {
             QueryVariableType primitiveReturnType;
             if (primitiveTbResultType == QueryVariableType.P_DOUBLE && primitiveFbResultType == QueryVariableType.P_DOUBLE)
                 primitiveReturnType = QueryVariableType.P_DOUBLE;
+            else if (primitiveTbResultType == QueryVariableType.P_INT && primitiveFbResultType == QueryVariableType.P_INT)
+                primitiveReturnType = QueryVariableType.P_INT;
+            else if (primitiveTbResultType == QueryVariableType.P_INT && primitiveFbResultType == QueryVariableType.P_LONG)
+                primitiveReturnType = QueryVariableType.P_LONG;
             else
                 throw new UnsupportedOperationException("ProjectOperator.createNonVecComputation could not determine the return type");
 
@@ -401,6 +407,8 @@ public class ProjectOperator extends CodeGenOperator {
                 primitiveReturnType = QueryVariableType.P_DOUBLE;
             else if (primLhsResType == QueryVariableType.P_INT && primRhsResType == QueryVariableType.P_DOUBLE)
                 primitiveReturnType = QueryVariableType.P_DOUBLE;
+            else if (primLhsResType == QueryVariableType.P_INT && primRhsResType == QueryVariableType.P_INT)
+                primitiveReturnType = QueryVariableType.P_INT;
             else
                 throw new UnsupportedOperationException("ProjectOperator.createVecComputationCode could not determine desired return type");
 

@@ -28,6 +28,7 @@ import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableTy
 import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_VARCHAR_VECTOR;
 import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableType.LogicalType.ARRAY_FIXED_LENGTH_BINARY_VECTOR;
 import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableType.LogicalType.ARROW_FIXED_LENGTH_BINARY_VECTOR;
+import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableType.LogicalType.ARROW_FIXED_LENGTH_BINARY_VECTOR_W_SELECTION_VECTOR;
 import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableType.MAP_GENERATED;
 import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableType.P_A_LONG;
 import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableType.P_INT;
@@ -628,7 +629,8 @@ public class JoinOperator extends CodeGenOperator {
 
             QueryVariableType primitiveOrdinalType;
             QueryVariableType primitiveArrayType;
-            if (ordinalType.logicalType == ARROW_FIXED_LENGTH_BINARY_VECTOR || ordinalType.logicalType == ARRAY_FIXED_LENGTH_BINARY_VECTOR) {
+            if (ordinalType.logicalType == ARROW_FIXED_LENGTH_BINARY_VECTOR || ordinalType.logicalType == ARRAY_FIXED_LENGTH_BINARY_VECTOR
+                || ordinalType.logicalType == ARROW_FIXED_LENGTH_BINARY_VECTOR_W_SELECTION_VECTOR) {
                 primitiveOrdinalType = new QueryVariableType(QueryVariableType.LogicalType.S_FL_BIN, ordinalType.byteWidth);
                 primitiveArrayType = new QueryVariableType(QueryVariableType.LogicalType.S_A_FL_BIN, ordinalType.byteWidth);
             } else if (ordinalType == ARROW_VARCHAR_VECTOR || ordinalType == ARRAY_VARCHAR_VECTOR) {
@@ -889,12 +891,27 @@ public class JoinOperator extends CodeGenOperator {
                 if (i == buildKeyOrdinal)
                     continue;
 
-                columnValues[currentValueColumnIndex++] = createMethodInvocation(
-                        getLocation(),
-                        ((ArrowVectorWithSelectionVectorAccessPath) currentOrdinalMapping.get(i)).readArrowVector(),
-                        "get",
-                        new Java.Rvalue[] { selectedRecordIndexAP.read() }
-                );
+                AccessPath currentOrdinalAP = currentOrdinalMapping.get(i);
+                if (currentOrdinalAP instanceof ArrowVectorWithSelectionVectorAccessPath avwsvap) {
+                    columnValues[currentValueColumnIndex++] = createMethodInvocation(
+                            getLocation(),
+                            avwsvap.readArrowVector(),
+                            "get",
+                            new Java.Rvalue[] { selectedRecordIndexAP.read() }
+                    );
+
+                } else if (currentOrdinalAP instanceof ArrayVectorWithSelectionVectorAccessPath avwsvap) {
+                    columnValues[currentValueColumnIndex++] = createArrayElementAccessExpr(
+                            getLocation(),
+                            avwsvap.getArrayVectorVariable().getVectorVariable().read(),
+                           selectedRecordIndexAP.read()
+                    );
+
+                } else {
+                    throw new UnsupportedOperationException("JoinOperator.consumeVecBuild encountered unexpected AccessPath type");
+
+                }
+
             }
 
             // [join_map].associate([left_join_record_key], [preHashVector][[selectedRecordIndexAP]], [columnValues])
@@ -1434,7 +1451,7 @@ public class JoinOperator extends CodeGenOperator {
                 }
 
                 QueryVariableType rightJoinColumnType;
-                if (rightJoinColumnAP.getType().logicalType == ARROW_FIXED_LENGTH_BINARY_VECTOR)
+                if (rightJoinColumnAP.getType().logicalType == ARROW_FIXED_LENGTH_BINARY_VECTOR || rightJoinColumnAP.getType().logicalType == ARROW_FIXED_LENGTH_BINARY_VECTOR_W_SELECTION_VECTOR)
                     rightJoinColumnType = new QueryVariableType(QueryVariableType.LogicalType.S_FL_BIN, rightJoinColumnAP.getType().byteWidth);
                 else if (rightJoinColumnAP.getType() == ARROW_VARCHAR_VECTOR)
                     rightJoinColumnType = S_VARCHAR;
@@ -1642,6 +1659,7 @@ public class JoinOperator extends CodeGenOperator {
                 primitiveColumnTypes[i] = S_VARCHAR;
             else if (relationColumnType.logicalType == QueryVariableType.LogicalType.S_FL_BIN
                     || relationColumnType.logicalType == QueryVariableType.LogicalType.ARROW_FIXED_LENGTH_BINARY_VECTOR
+                    || relationColumnType.logicalType == QueryVariableType.LogicalType.ARROW_FIXED_LENGTH_BINARY_VECTOR_W_SELECTION_VECTOR
                     || relationColumnType.logicalType == QueryVariableType.LogicalType.ARRAY_FIXED_LENGTH_BINARY_VECTOR)
                 primitiveColumnTypes[i] = new QueryVariableType(QueryVariableType.LogicalType.S_FL_BIN, relationColumnType.byteWidth);
             else

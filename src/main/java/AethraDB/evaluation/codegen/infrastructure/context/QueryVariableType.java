@@ -59,6 +59,7 @@ public final class QueryVariableType {
 
         // Array vector with selection vector types
         ARRAY_DOUBLE_VECTOR_W_SELECTION_VECTOR,
+        ARRAY_INT_VECTOR_W_SELECTION_VECTOR,
 
         // Complex types
         MAP_GENERATED,
@@ -130,6 +131,7 @@ public final class QueryVariableType {
 
     // Array vector with selection vector types
     public static final QueryVariableType ARRAY_DOUBLE_VECTOR_W_SELECTION_VECTOR = new QueryVariableType(LogicalType.ARRAY_DOUBLE_VECTOR_W_SELECTION_VECTOR, -1);
+    public static final QueryVariableType ARRAY_INT_VECTOR_W_SELECTION_VECTOR = new QueryVariableType(LogicalType.ARRAY_INT_VECTOR_W_SELECTION_VECTOR, -1);
 
     // Complex types
     public static final QueryVariableType MAP_GENERATED = new QueryVariableType(LogicalType.MAP_GENERATED, -1);

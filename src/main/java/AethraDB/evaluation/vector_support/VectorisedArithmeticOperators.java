@@ -1,11 +1,38 @@
 package AethraDB.evaluation.vector_support;
 
 import org.apache.arrow.vector.Float8Vector;
+import org.apache.arrow.vector.IntVector;
 
 /**
  * Class containing vectorised primitives for arithmetic operators.
  */
 public class VectorisedArithmeticOperators extends VectorisedOperators {
+
+    /**
+     * Method to multiply two int vectors, but only at the indices indicated by a given selection vector.
+     * @param lhsArrowVector The left-hand side int vector, represented as an arrow vector.
+     * @param rhsArrowVector The right-hand side int vector, represented as an arrow vector.
+     * @param selectionVector The vector indicating which indices the operation should be performed at.
+     * @param selectionVectorLength The length of the valid portion of {@code selectionVector}.
+     * @param result The array to which the result should be written.
+     * @return The length of the valid portion of {@code result}.
+     */
+    public static int multiply(
+            IntVector lhsArrowVector,
+            IntVector rhsArrowVector,
+            int[] selectionVector,
+            int selectionVectorLength,
+            int[] result) {
+        int vectorLength = lhsArrowVector.getValueCount();
+        assert vectorLength == rhsArrowVector.getValueCount();
+
+        for (int i = 0; i < selectionVectorLength; i++) {
+            int selectedIndex = selectionVector[i];
+            result[selectedIndex] = lhsArrowVector.get(selectedIndex) * rhsArrowVector.get(selectedIndex);
+        }
+
+        return vectorLength;
+    }
 
     /**
      * Method to multiply two double vectors.

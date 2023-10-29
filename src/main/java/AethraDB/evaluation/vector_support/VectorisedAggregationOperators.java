@@ -29,6 +29,20 @@ public class VectorisedAggregationOperators extends VectorisedOperators {
     }
 
     /**
+     * Method for computing the sum of all valid entries in a vector.
+     * @param vector The vector to compute the sum of.
+     * @param vectorLength The length of the valid portion of {@code vector}.
+     * @return The sum of all entries in {@code vector}.
+     */
+    public static long vectorSum(int[] vector, int vectorLength) {
+        long sum = 0;
+        for (int i = 0; i < vectorLength; i++) {
+            sum += vector[i];
+        }
+        return sum;
+    }
+
+    /**
      * Method for computing the sum of all valid entries in a vector as indicated by a selection vector.
      * @param vector The vector to compute the sum of.
      * @param vectorLength The length of the valid portion of {@code vector}.

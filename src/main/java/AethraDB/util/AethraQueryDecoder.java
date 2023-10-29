@@ -312,6 +312,8 @@ public class AethraQueryDecoder {
             // Decode the null literal to the appropriate type
             if (literal.contains("DOUBLE"))
                 return new AethraDoubleLiteral(Double.NaN);
+            else if (literal.contains("INTEGER"))
+                return new AethraIntegerLiteral("0");
             else
                 throw new UnsupportedOperationException("AethraQueryDecoder.decodeLiteral cannot determine the type of the null literal: " + literal);
 

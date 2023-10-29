@@ -1053,6 +1053,18 @@ public class AggregationOperator extends CodeGenOperator {
                                     }
                             );
 
+                        } else if (inputOrdinalAP instanceof ArrayVectorAccessPath avap) {
+                            // sum += VectorisedAggregationOperators.vectorSum(avwsvap.vector, avwsvap.vectorLength,);
+                            sumIncrementRValue = createMethodInvocation(
+                                    JaninoGeneralGen.getLocation(),
+                                    JaninoGeneralGen.createAmbiguousNameRef(JaninoGeneralGen.getLocation(), "VectorisedAggregationOperators"),
+                                    "vectorSum",
+                                    new Java.Rvalue[]{
+                                            avap.getVectorVariable().read(),
+                                            avap.getVectorLengthVariable().read(),
+                                    }
+                            );
+
                         } else if (inputOrdinalAP instanceof ArrayVectorWithValidityMaskAccessPath avwvmap) {
                             // sum += VectorisedAggregationOperators.vectorSum(avwvmap.vector, avwvmap.vectorLength, avwvmap.validityMask, avwvmap.validityMaskLength);
                             sumIncrementRValue = createMethodInvocation(
@@ -1074,7 +1086,7 @@ public class AggregationOperator extends CodeGenOperator {
                         }
 
                         // Do the actual increment
-                        // count += [countIncrementRValue];
+                        // sum += [sumIncrementRValue];
                         codeGenResult.add(
                                 createVariableAdditionAssignmentStm(
                                         JaninoGeneralGen.getLocation(),
@@ -1397,9 +1409,15 @@ public class AggregationOperator extends CodeGenOperator {
                     );
 
                 } else if (this.aggregationFunctions[i] == AggregationFunction.NG_SUM) {
+                    QueryVariableType sumType = primitiveType(om.get(this.aggregationFunctionInputOrdinals[i][0]).getType());
+
+                    // Upgrade sum type in case of int
+                    if (sumType == P_INT)
+                        sumType = P_LONG;
+
                     this.aggregationStateVariables[i] = new ScalarVariableAccessPath(
                             cCtx.defineVariable("sum"),
-                            primitiveType(om.get(this.aggregationFunctionInputOrdinals[i][0]).getType())
+                            sumType
                     );
 
                 }

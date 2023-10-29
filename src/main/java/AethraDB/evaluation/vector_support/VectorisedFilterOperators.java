@@ -17,6 +17,17 @@ public class VectorisedFilterOperators extends VectorisedOperators {
 
     /* TO PREVENT IMPLEMENTATION OVERHEAD, THE BELOW METHODS DO NOT HAVE JAVADOC, AS THEY SHOULD BE SELF EXPLANATORY */
 
+    public static int eq(IntVector vector, int condition, int[] selectionVector) {
+        int selectionVectorIndex = 0;
+
+        for (int i = 0; i < vector.getValueCount(); i++) {
+            if (vector.get(i) == condition)
+                selectionVector[selectionVectorIndex++] = i;
+        }
+
+        return selectionVectorIndex;
+    }
+
     public static int gt(IntVector vector, int condition, int[] selectionVector) {
         int selectionVectorIndex = 0;
 
@@ -62,6 +73,24 @@ public class VectorisedFilterOperators extends VectorisedOperators {
     }
 
     /* --------------------------------------------------------------------------------------------------- */
+
+    public static int eq(
+            IntVector vector,
+            int condition,
+            int[] selectionVector,
+            int[] validIndices,
+            int validIndicesCount
+    ) {
+        int selectionVectorIndex = 0;
+
+        for (int i = 0; i < validIndicesCount; i++) {
+            int validIndex = validIndices[i];
+            if (vector.get(validIndex) == condition)
+                selectionVector[selectionVectorIndex++] = validIndex;
+        }
+
+        return selectionVectorIndex;
+    }
 
     public static int gt(
             IntVector vector,
