@@ -521,6 +521,30 @@ public class ProjectOperator extends CodeGenOperator {
                         QueryVariableTypeMethods.arrayVectorWithSelectionVectorType(QueryVariableTypeMethods.vectorTypeForPrimitiveArrayType(returnVectorType))
                 );
 
+            } else if (lhopResult instanceof ArrowVectorAccessPath lhopArrowVec && rhopResult instanceof ArrowVectorAccessPath rhopArrowVec) {
+                // length = operatorMethodName(lhopArrowVec, rhopArrowVec, result);
+                codeGenResult.add(
+                        JaninoVariableGen.createVariableAssignmentStm(
+                                JaninoGeneralGen.getLocation(),
+                                projectionComputationResultLengthAP.write(),
+                                JaninoMethodGen.createMethodInvocation(
+                                        JaninoGeneralGen.getLocation(),
+                                        JaninoGeneralGen.createAmbiguousNameRef(JaninoGeneralGen.getLocation(), "VectorisedArithmeticOperators"),
+                                        operatorMethodName,
+                                        new Java.Rvalue[]{
+                                                lhopArrowVec.read(),
+                                                rhopArrowVec.read(),
+                                                projectionComputationResultAP.read()
+                                        }
+                                )
+                        )
+                );
+                return new ArrayVectorAccessPath(
+                        projectionComputationResultAP,
+                        projectionComputationResultLengthAP,
+                        QueryVariableTypeMethods.vectorTypeForPrimitiveArrayType(returnVectorType)
+                );
+
             } else if (lhopResult instanceof ArrowVectorAccessPath lhopArrowVec && rhopResult instanceof ArrayVectorAccessPath rhopArrayVec) {
                 // length = operatorMethodName(lhopArrowVec, rhopArrayVec, rhopArrayVecLength, result);
                 codeGenResult.add(
@@ -535,6 +559,31 @@ public class ProjectOperator extends CodeGenOperator {
                                                 lhopArrowVec.read(),
                                                 rhopArrayVec.getVectorVariable().read(),
                                                 rhopArrayVec.getVectorLengthVariable().read(),
+                                                projectionComputationResultAP.read()
+                                        }
+                                )
+                        )
+                );
+                return new ArrayVectorAccessPath(
+                        projectionComputationResultAP,
+                        projectionComputationResultLengthAP,
+                        QueryVariableTypeMethods.vectorTypeForPrimitiveArrayType(returnVectorType)
+                );
+
+            } else if (lhopResult instanceof ArrayVectorAccessPath lhopArrayVec && rhopResult instanceof ArrowVectorAccessPath rhopArrowVec) {
+                // length = operatorMethodName(lhopArrayVec, lhsArrayVecLength, rhopArrowVec, result);
+                codeGenResult.add(
+                        JaninoVariableGen.createVariableAssignmentStm(
+                                JaninoGeneralGen.getLocation(),
+                                projectionComputationResultLengthAP.write(),
+                                JaninoMethodGen.createMethodInvocation(
+                                        JaninoGeneralGen.getLocation(),
+                                        JaninoGeneralGen.createAmbiguousNameRef(JaninoGeneralGen.getLocation(), "VectorisedArithmeticOperators"),
+                                        operatorMethodName,
+                                        new Java.Rvalue[]{
+                                                lhopArrayVec.getVectorVariable().read(),
+                                                lhopArrayVec.getVectorLengthVariable().read(),
+                                                rhopArrowVec.read(),
                                                 projectionComputationResultAP.read()
                                         }
                                 )

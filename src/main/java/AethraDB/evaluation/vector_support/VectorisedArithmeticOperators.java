@@ -98,6 +98,24 @@ public class VectorisedArithmeticOperators extends VectorisedOperators {
     }
 
     /**
+     * Method to multiply two double vectors.
+     * @param lhsArrayVector The left-hand side double vector, represented as an array.
+     * @param lhsArrayVectorLength The length of the valid portion of {@code lhsArrayVector}.
+     * @param rhsArrowVector The right-hand side double vector, represented as an arrow vector.
+     * @param result The array to which the result should be written.
+     * @return The length of the valid portion of {@code result}.
+     */
+    public static int multiply(double[] lhsArrayVector, int lhsArrayVectorLength, Float8Vector rhsArrowVector, double[] result) {
+        assert lhsArrayVectorLength == rhsArrowVector.getValueCount();
+
+        for (int i = 0; i < lhsArrayVectorLength; i++) {
+            result[i] = lhsArrayVector[i] * rhsArrowVector.get(i);
+        }
+
+        return lhsArrayVectorLength;
+    }
+
+    /**
      * Method to multiply two double vectors, but only at the indices indicated by a given selection vector.
      * @param lhsArrowVector The left-hand side double vector, represented as an arrow vector.
      * @param rhsArrayVector The right-hand side double vector, represented as an array.
@@ -217,6 +235,23 @@ public class VectorisedArithmeticOperators extends VectorisedOperators {
     }
 
     /**
+     * Method to create a double vector by "pairwise" adding two double vectors.
+     * @param lhsArrowVector The left-hand side double vector, represented as an arrow vector.
+     * @param rhsArrowVector The right-hand side double vector, represented as an arrow vector.
+     * @param result The array to which the result should be written.
+     * @return The length of the valid portion of {@code result}.
+     */
+    public static int add(Float8Vector lhsArrowVector, Float8Vector rhsArrowVector, double[] result) {
+        int vectorLength = rhsArrowVector.getValueCount();
+
+        for (int i = 0; i < vectorLength; i++) {
+            result[i] = lhsArrowVector.get(i) + rhsArrowVector.get(i);
+        }
+
+        return vectorLength;
+    }
+
+    /**
      * Method to create a double vector by "pairwise" subtracting a double vector from a scalar value.
      * @param lhsScalar The left-hand side scalar value to subtract from.
      * @param rhsArrowVector The right-hand side double vector, represented as an arrow vector.
@@ -258,6 +293,27 @@ public class VectorisedArithmeticOperators extends VectorisedOperators {
         }
 
         return vectorLength;
+    }
+
+    /**
+     * Method to create a double vector by "pairwise" subtracting two double vectors.
+     * @param lhsArrayVector The left-hand side double vector, represented as an array vector.
+     * @param lhsArrayVectorLength The length of the valid portion of {@code lhsArrayVector}.
+     * @param rhsArrowVector The right-hand side double vector, represented as an arrow vector.
+     * @param result The array to which the result should be written.
+     * @return The length of the valid portion of {@code result}.
+     */
+    public static int subtract(
+            double[] lhsArrayVector,
+            int lhsArrayVectorLength,
+            Float8Vector rhsArrowVector,
+            double[] result)
+    {
+        for (int i = 0; i < lhsArrayVectorLength; i++) {
+            result[i] = lhsArrayVector[i] - rhsArrowVector.get(i);
+        }
+
+        return lhsArrayVectorLength;
     }
 
     /**

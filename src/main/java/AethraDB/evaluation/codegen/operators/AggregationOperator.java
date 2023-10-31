@@ -1053,6 +1053,17 @@ public class AggregationOperator extends CodeGenOperator {
                                     }
                             );
 
+                        } else if (inputOrdinalAP instanceof ArrowVectorAccessPath avap) {
+                            // sum += VectorisedAggregationOperators.vectorSum(avap);
+                            sumIncrementRValue = createMethodInvocation(
+                                    JaninoGeneralGen.getLocation(),
+                                    JaninoGeneralGen.createAmbiguousNameRef(JaninoGeneralGen.getLocation(), "VectorisedAggregationOperators"),
+                                    "vectorSum",
+                                    new Java.Rvalue[]{
+                                            avap.read()
+                                    }
+                            );
+
                         } else if (inputOrdinalAP instanceof ArrayVectorAccessPath avap) {
                             // sum += VectorisedAggregationOperators.vectorSum(avwsvap.vector, avwsvap.vectorLength,);
                             sumIncrementRValue = createMethodInvocation(

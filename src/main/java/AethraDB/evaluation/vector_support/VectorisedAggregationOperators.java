@@ -1,6 +1,7 @@
 package AethraDB.evaluation.vector_support;
 
 import AethraDB.evaluation.general_support.hashmaps.KeyValueMapGenerator;
+import org.apache.arrow.vector.Float8Vector;
 
 /**
  * Class containing vectorised primitives for aggregation operators.
@@ -36,6 +37,34 @@ public class VectorisedAggregationOperators extends VectorisedOperators {
      */
     public static long vectorSum(int[] vector, int vectorLength) {
         long sum = 0;
+        for (int i = 0; i < vectorLength; i++) {
+            sum += vector[i];
+        }
+        return sum;
+    }
+
+    /**
+     * Method for computing the sum of all entries in a vector.
+     * @param vector The vector to compute the sum of.
+     * @return The sum of all entries in {@code vector}.
+     */
+    public static double vectorSum(Float8Vector vector) {
+        int vectorLength = vector.getValueCount();
+        double sum = 0;
+        for (int i = 0; i < vectorLength; i++) {
+            sum += vector.get(i);
+        }
+        return sum;
+    }
+
+    /**
+     * Method for computing the sum of all valid entries in a vector.
+     * @param vector The vector to compute the sum of, represented as an array vector.
+     * @param vectorLength The length of the valid portion of {@code vector}.
+     * @return The sum of all entries in {@code vector}.
+     */
+    public static double vectorSum(double[] vector, int vectorLength) {
+        double sum = 0;
         for (int i = 0; i < vectorLength; i++) {
             sum += vector[i];
         }
