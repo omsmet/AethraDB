@@ -8,10 +8,8 @@ import AethraDB.evaluation.codegen.infrastructure.context.access_path.AccessPath
 import AethraDB.evaluation.codegen.infrastructure.context.access_path.ArrayAccessPath;
 import AethraDB.evaluation.codegen.infrastructure.context.access_path.ArrayVectorAccessPath;
 import AethraDB.evaluation.codegen.infrastructure.context.access_path.ArrayVectorWithSelectionVectorAccessPath;
-import AethraDB.evaluation.codegen.infrastructure.context.access_path.ArrayVectorWithValidityMaskAccessPath;
 import AethraDB.evaluation.codegen.infrastructure.context.access_path.ArrowVectorAccessPath;
 import AethraDB.evaluation.codegen.infrastructure.context.access_path.ArrowVectorWithSelectionVectorAccessPath;
-import AethraDB.evaluation.codegen.infrastructure.context.access_path.ArrowVectorWithValidityMaskAccessPath;
 import AethraDB.evaluation.codegen.infrastructure.context.access_path.IndexedArrowVectorElementAccessPath;
 import AethraDB.evaluation.codegen.infrastructure.context.access_path.ScalarVariableAccessPath;
 import AethraDB.evaluation.codegen.infrastructure.janino.JaninoGeneralGen;

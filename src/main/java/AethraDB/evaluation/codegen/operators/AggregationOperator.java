@@ -13,13 +13,11 @@ import AethraDB.evaluation.codegen.infrastructure.context.access_path.ArrowVecto
 import AethraDB.evaluation.codegen.infrastructure.context.access_path.ArrowVectorWithValidityMaskAccessPath;
 import AethraDB.evaluation.codegen.infrastructure.context.access_path.IndexedArrowVectorElementAccessPath;
 import AethraDB.evaluation.codegen.infrastructure.context.access_path.MapAccessPath;
-import AethraDB.evaluation.codegen.infrastructure.context.access_path.SIMDLoopAccessPath;
 import AethraDB.evaluation.codegen.infrastructure.context.access_path.ScalarVariableAccessPath;
 import AethraDB.evaluation.codegen.infrastructure.janino.JaninoClassGen;
 import AethraDB.evaluation.codegen.infrastructure.janino.JaninoControlGen;
 import AethraDB.evaluation.codegen.infrastructure.janino.JaninoGeneralGen;
 import AethraDB.evaluation.codegen.infrastructure.janino.JaninoOperatorGen;
-import AethraDB.evaluation.general_support.hashmaps.Int_Hash_Function;
 import AethraDB.evaluation.general_support.hashmaps.KeyValueMapGenerator;
 import AethraDB.util.language.AethraExpression;
 import AethraDB.util.language.function.AethraFunction;
@@ -50,6 +48,8 @@ import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableTy
 import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableTypeMethods.primitiveType;
 import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableTypeMethods.toJavaType;
 import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableTypeMethods.vectorTypeForPrimitiveArrayType;
+import static AethraDB.evaluation.codegen.infrastructure.janino.JaninoGeneralGen.createAmbiguousNameRef;
+import static AethraDB.evaluation.codegen.infrastructure.janino.JaninoGeneralGen.getLocation;
 import static AethraDB.evaluation.codegen.infrastructure.janino.JaninoMethodGen.createBlock;
 import static AethraDB.evaluation.codegen.infrastructure.janino.JaninoMethodGen.createMethodInvocation;
 import static AethraDB.evaluation.codegen.infrastructure.janino.JaninoMethodGen.createMethodInvocationStm;
@@ -961,6 +961,9 @@ public class AggregationOperator extends CodeGenOperator {
     public List<Java.Statement> consumeVec(CodeGenContext cCtx, OptimisationContext oCtx) {
         List<Java.Statement> codeGenResult = new ArrayList<>();
 
+        if (this.useSIMDVec())
+            throw new UnsupportedOperationException("AggregationOperator.consumeVec no longer supports SIMD");
+
         // Declare the required aggregation state
         this.declareAggregationState(cCtx);
 
@@ -1123,10 +1126,9 @@ public class AggregationOperator extends CodeGenOperator {
             boolean accountForFiltering = keyColumnsAccessPaths[0] instanceof ArrowVectorWithSelectionVectorAccessPath
                     || keyColumnsAccessPaths[0] instanceof ArrowVectorWithValidityMaskAccessPath;
             for (int i = 0; i < keyColumnsAccessPaths.length; i++) {
-                // Hashing of the key-column depends on whether we are in SIMD mode or not
-                String methodInvocationName = "constructPreHashKeyVector";
-                if (this.useSIMDVec())
-                    methodInvocationName += "SIMD";
+                // Hashing of the key-column depends on whether we need to extend the vector or not
+                String methodInvocationName = (i == 0) ? "constructPreHashKeyVectorInit" : "constructPreHashKeyVectorExtend";
+
 
                 // The number of arguments depends on the current vector type
                 boolean arrayVector = keyColumnsAccessPaths[i] instanceof ArrayVectorAccessPath
@@ -1134,7 +1136,7 @@ public class AggregationOperator extends CodeGenOperator {
                         || keyColumnsAccessPaths[i] instanceof ArrayVectorWithValidityMaskAccessPath;
 
                 // Determine the arguments
-                int numberOfArguments = 3 + (arrayVector ? 1 : 0) + (accountForFiltering ? 2 : 0);
+                int numberOfArguments = 2 + (arrayVector ? 1 : 0) + (accountForFiltering ? 2 : 0);
                 Java.Rvalue[] methodInvocationArguments = new Java.Rvalue[numberOfArguments];
                 int currentMethodInvocationArgumentIndex = 0;
                 methodInvocationArguments[currentMethodInvocationArgumentIndex++] = this.groupKeyPreHashVector.read();
@@ -1174,8 +1176,6 @@ public class AggregationOperator extends CodeGenOperator {
                         default -> throw new UnsupportedOperationException("AggregationOperator.consumeVec does not support this filtering key column access path type");
                     };
                 }
-                methodInvocationArguments[currentMethodInvocationArgumentIndex++] =
-                        new Java.BooleanLiteral(JaninoGeneralGen.getLocation(), (i == 0) ? "false" : "true");
 
                 // Perform the actual hashing
                 codeGenResult.add(
@@ -1256,27 +1256,106 @@ public class AggregationOperator extends CodeGenOperator {
             // Obtain the key arguments
             for (int i = 0; i < this.groupByKeyColumnIndices.length; i++) {
                 AccessPath currentKeyOrdinal = currentOrdinalMapping.get(this.groupByKeyColumnIndices[i]);
+                QueryVariableType.LogicalType currentKeyOrdinalLogicalType = currentKeyOrdinal.getType().logicalType;
+
                 if (currentKeyOrdinal instanceof ArrowVectorAccessPath avap) {
-                    incrementForKeyArguments[currentArgumentIndex++] = createMethodInvocation(
-                            JaninoGeneralGen.getLocation(),
-                            avap.read(),
-                            "get",
-                            new Java.Rvalue[] { recordIndexAP.read() }
-                    );
+                    // Need to possibly account for FixedLengthBinaryVector optimisation
+                    if (currentKeyOrdinalLogicalType == QueryVariableType.LogicalType.ARROW_FIXED_LENGTH_BINARY_VECTOR) {
+                        // Allocate a global byte array cache variable to avoid allocations
+                        String byteArrayCacheName = cCtx.defineQueryGlobalVariable(
+                                "byte_array_cache",
+                                JaninoGeneralGen.createPrimitiveArrayType(JaninoGeneralGen.getLocation(), Java.Primitive.BYTE),
+                                new Java.NewArray(
+                                        JaninoGeneralGen.getLocation(),
+                                        JaninoGeneralGen.createPrimitiveType(JaninoGeneralGen.getLocation(), Java.Primitive.BYTE),
+                                        new Java.Rvalue[] {
+                                                JaninoGeneralGen.createIntegerLiteral(JaninoGeneralGen.getLocation(), currentKeyOrdinal.getType().byteWidth)
+                                        },
+                                        0
+                                ),
+                                false);
+
+                        // Perform an optimised read (which will write the appropriate value into the cache array
+                        tableMaintenanceLoopBody.addStatement(
+                                createMethodInvocationStm(
+                                        getLocation(),
+                                        createAmbiguousNameRef(getLocation(), "ArrowOptimisations"),
+                                        "getFixedSizeBinaryValue",
+                                        new Java.Rvalue[] {
+                                                avap.read(),
+                                                recordIndexAP.read(),
+                                                createAmbiguousNameRef(getLocation(), byteArrayCacheName)
+                                        }
+                                ));
+
+                        // Set the argument to read from the byte cache
+                        incrementForKeyArguments[currentArgumentIndex++] = createAmbiguousNameRef(
+                                JaninoGeneralGen.getLocation(),
+                                byteArrayCacheName
+                        );
+
+                    } else if (currentKeyOrdinalLogicalType == QueryVariableType.LogicalType.ARROW_VARCHAR_VECTOR) {
+                        throw new UnsupportedOperationException("AggregationOperator.consumeVec: need to implement varchar read optimisation");
+
+                    } else {
+                        incrementForKeyArguments[currentArgumentIndex++] = createMethodInvocation(
+                                JaninoGeneralGen.getLocation(),
+                                avap.read(),
+                                "get",
+                                new Java.Rvalue[] { recordIndexAP.read() }
+                        );
+
+                    }
+
                 } else if (currentKeyOrdinal instanceof ArrowVectorWithSelectionVectorAccessPath avwsvap) {
-                    incrementForKeyArguments[currentArgumentIndex++] = createMethodInvocation(
-                            JaninoGeneralGen.getLocation(),
-                            avwsvap.readArrowVector(),
-                            "get",
-                            new Java.Rvalue[] { recordIndexAP.read() }
-                    );
-                } else if (currentKeyOrdinal instanceof ArrowVectorWithValidityMaskAccessPath avwvmap) {
-                    incrementForKeyArguments[currentArgumentIndex++] = createMethodInvocation(
-                            JaninoGeneralGen.getLocation(),
-                            avwvmap.readArrowVector(),
-                            "get",
-                            new Java.Rvalue[] { recordIndexAP.read() }
-                    );
+                    // Need to possibly account for FixedLengthBinaryVector optimisation
+                    if (currentKeyOrdinalLogicalType == QueryVariableType.LogicalType.ARROW_FIXED_LENGTH_BINARY_VECTOR_W_SELECTION_VECTOR) {
+                        // Allocate a global byte array cache variable to avoid allocations
+                        String byteArrayCacheName = cCtx.defineQueryGlobalVariable(
+                                "byte_array_cache",
+                                JaninoGeneralGen.createPrimitiveArrayType(JaninoGeneralGen.getLocation(), Java.Primitive.BYTE),
+                                new Java.NewArray(
+                                        JaninoGeneralGen.getLocation(),
+                                        JaninoGeneralGen.createPrimitiveType(JaninoGeneralGen.getLocation(), Java.Primitive.BYTE),
+                                        new Java.Rvalue[] {
+                                                JaninoGeneralGen.createIntegerLiteral(JaninoGeneralGen.getLocation(), currentKeyOrdinal.getType().byteWidth)
+                                        },
+                                        0
+                                ),
+                                false);
+
+                        // Perform an optimised read (which will write the appropriate value into the cache array
+                        tableMaintenanceLoopBody.addStatement(
+                                createMethodInvocationStm(
+                                        getLocation(),
+                                        createAmbiguousNameRef(getLocation(), "ArrowOptimisations"),
+                                        "getFixedSizeBinaryValue",
+                                        new Java.Rvalue[] {
+                                                avwsvap.getArrowVectorVariable().read(),
+                                                recordIndexAP.read(),
+                                                createAmbiguousNameRef(getLocation(), byteArrayCacheName)
+                                        }
+                                ));
+
+                        // Set the argument to read from the byte cache
+                        incrementForKeyArguments[currentArgumentIndex++] = createAmbiguousNameRef(
+                                JaninoGeneralGen.getLocation(),
+                                byteArrayCacheName
+                        );
+
+                    } else if (currentKeyOrdinalLogicalType == QueryVariableType.LogicalType.ARROW_VARCHAR_VECTOR_W_SELECTION_VECTOR) {
+                        throw new UnsupportedOperationException("AggregationOperator.consumeVec: need to implement varchar read optimisation");
+
+                    } else {
+                        incrementForKeyArguments[currentArgumentIndex++] = createMethodInvocation(
+                                JaninoGeneralGen.getLocation(),
+                                avwsvap.readArrowVector(),
+                                "get",
+                                new Java.Rvalue[] { recordIndexAP.read() }
+                        );
+
+                    }
+
                 } else if (currentKeyOrdinal instanceof ArrayVectorAccessPath avap) {
                     incrementForKeyArguments[currentArgumentIndex++] = JaninoGeneralGen.createArrayElementAccessExpr(
                             JaninoGeneralGen.getLocation(),
@@ -1302,6 +1381,7 @@ public class AggregationOperator extends CodeGenOperator {
 
                 } else if (currentFunction == AggregationFunction.G_SUM) {
                     // We simply need to maintain the sum based on the input ordinal type
+                    // No need to perform FixedSizeBinaryVector read optimisations, since these cannot occur in a sum
                     AccessPath inputOrdinal = cCtx.getCurrentOrdinalMapping().get(this.aggregationFunctionInputOrdinals[i][0]);
                     QueryVariableType inputOrdinalType = inputOrdinal.getType();
 

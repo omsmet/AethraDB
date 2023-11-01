@@ -9,6 +9,11 @@ import org.apache.arrow.vector.FixedSizeBinaryVector;
 public final class Char_Arr_Hash_Function {
 
     /**
+     * Buffer array for reading from a fixed-size binary vector.
+     */
+    private static byte[] readBuffer = null;
+
+    /**
      * Prevent instantiation of this class.
      */
     private Char_Arr_Hash_Function() {
@@ -36,12 +41,20 @@ public final class Char_Arr_Hash_Function {
      */
     public static long preHash(FixedSizeBinaryVector vector, long keyIndex) {
         int vectorWidth = vector.getByteWidth();
-        long baseMemoryAddress = vector.getDataBufferAddress() + keyIndex * vectorWidth;
-        long topMemoryAddress = baseMemoryAddress + vectorWidth;
+        long memoryAddressToRead = vector.getDataBufferAddress() + keyIndex * vectorWidth;
 
+        // Upgrade the readBuffer if necessary
+        if (readBuffer == null || readBuffer.length < vectorWidth) {
+            readBuffer = new byte[vectorWidth];
+        }
+
+        // Read the value
+        MemoryUtil.UNSAFE.copyMemory(null, memoryAddressToRead, readBuffer, MemoryUtil.BYTE_ARRAY_BASE_OFFSET, vectorWidth);
+
+        // Hash the part of the readBuffer that is valid
         long hash = 0L;
-        for (long memoryAddress = baseMemoryAddress; memoryAddress < topMemoryAddress; memoryAddress++) {
-            hash = (hash * 31) ^ MemoryUtil.UNSAFE.getByte(memoryAddress);
+        for (int i = 0; i < vectorWidth; i++) {
+            hash = (hash * 31) ^ readBuffer[i];
         }
 
         return (hash < 0) ? (-hash) : hash;

@@ -7,7 +7,6 @@ import AethraDB.evaluation.codegen.infrastructure.context.access_path.AccessPath
 import AethraDB.evaluation.codegen.infrastructure.context.access_path.ArrayAccessPath;
 import AethraDB.evaluation.codegen.infrastructure.context.access_path.ArrowVectorAccessPath;
 import AethraDB.evaluation.codegen.infrastructure.context.access_path.ArrowVectorWithSelectionVectorAccessPath;
-import AethraDB.evaluation.codegen.infrastructure.context.access_path.ArrowVectorWithValidityMaskAccessPath;
 import AethraDB.evaluation.codegen.infrastructure.context.access_path.ScalarVariableAccessPath;
 import AethraDB.util.language.AethraExpression;
 import AethraDB.util.language.function.AethraBinaryFunction;
@@ -26,12 +25,6 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 
-import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_DATE_VECTOR;
-import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_DATE_VECTOR_W_SELECTION_VECTOR;
-import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_DOUBLE_VECTOR;
-import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_DOUBLE_VECTOR_W_SELECTION_VECTOR;
-import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_INT_VECTOR;
-import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableType.ARROW_INT_VECTOR_W_SELECTION_VECTOR;
 import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableType.P_A_INT;
 import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableType.P_DOUBLE;
 import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableType.P_INT;

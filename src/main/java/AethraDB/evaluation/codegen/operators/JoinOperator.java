@@ -3,6 +3,7 @@ package AethraDB.evaluation.codegen.operators;
 import AethraDB.evaluation.codegen.infrastructure.context.CodeGenContext;
 import AethraDB.evaluation.codegen.infrastructure.context.OptimisationContext;
 import AethraDB.evaluation.codegen.infrastructure.context.QueryVariableType;
+import AethraDB.evaluation.codegen.infrastructure.context.QueryVariableTypeMethods;
 import AethraDB.evaluation.codegen.infrastructure.context.access_path.AccessPath;
 import AethraDB.evaluation.codegen.infrastructure.context.access_path.ArrayAccessPath;
 import AethraDB.evaluation.codegen.infrastructure.context.access_path.ArrayVectorAccessPath;
@@ -10,11 +11,13 @@ import AethraDB.evaluation.codegen.infrastructure.context.access_path.ArrayVecto
 import AethraDB.evaluation.codegen.infrastructure.context.access_path.ArrayVectorWithValidityMaskAccessPath;
 import AethraDB.evaluation.codegen.infrastructure.context.access_path.ArrowVectorAccessPath;
 import AethraDB.evaluation.codegen.infrastructure.context.access_path.ArrowVectorWithSelectionVectorAccessPath;
-import AethraDB.evaluation.codegen.infrastructure.context.access_path.ArrowVectorWithValidityMaskAccessPath;
 import AethraDB.evaluation.codegen.infrastructure.context.access_path.MapAccessPath;
 import AethraDB.evaluation.codegen.infrastructure.context.access_path.ScalarVariableAccessPath;
 import AethraDB.evaluation.codegen.infrastructure.janino.JaninoControlGen;
+import AethraDB.evaluation.codegen.infrastructure.janino.JaninoGeneralGen;
+import AethraDB.evaluation.codegen.infrastructure.janino.JaninoMethodGen;
 import AethraDB.evaluation.codegen.infrastructure.janino.JaninoOperatorGen;
+import AethraDB.evaluation.codegen.infrastructure.janino.JaninoVariableGen;
 import AethraDB.evaluation.general_support.hashmaps.KeyMultiRecordMapGenerator;
 import org.codehaus.janino.Java;
 
@@ -29,6 +32,7 @@ import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableTy
 import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableType.LogicalType.ARRAY_FIXED_LENGTH_BINARY_VECTOR;
 import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableType.LogicalType.ARROW_FIXED_LENGTH_BINARY_VECTOR;
 import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableType.LogicalType.ARROW_FIXED_LENGTH_BINARY_VECTOR_W_SELECTION_VECTOR;
+import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableType.LogicalType.ARROW_VARCHAR_VECTOR_W_SELECTION_VECTOR;
 import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableType.MAP_GENERATED;
 import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableType.P_A_LONG;
 import static AethraDB.evaluation.codegen.infrastructure.context.QueryVariableType.P_INT;
@@ -662,6 +666,9 @@ public class JoinOperator extends CodeGenOperator {
     private List<Java.Statement> consumeVecBuild(CodeGenContext cCtx, OptimisationContext oCtx) {
         List<Java.Statement> codeGenResult = new ArrayList<>();
 
+        if (this.useSIMDVec())
+            throw new UnsupportedOperationException("JoinOperator.consumeVecBuild no longer supports SIMD");
+
         // Check that we can handle the key type (casts valid due to pre-condition check in constructor)
         int buildKeyOrdinal = this.leftChildEquijoinIndex;
         List<AccessPath> currentOrdinalMapping = cCtx.getCurrentOrdinalMapping();
@@ -673,23 +680,20 @@ public class JoinOperator extends CodeGenOperator {
             throw new UnsupportedOperationException("JoinOperator.consumeVecBuild only supports integer join key columns");
 
         // Idea: first perform pre-hashing of the key-column and then perform hash-table inserts
-        String vectorisedHashMethodName = this.useSIMDVec() ? "constructPreHashKeyVectorSIMD" : "constructPreHashKeyVector";
-
         if (buildKeyAPType == ARROW_INT_VECTOR) {
             // We know that all other vectors on the build side must be of some arrow/array vector type
             // without any validity mask/selection vector
             ArrowVectorAccessPath buildKeyAVAP = ((ArrowVectorAccessPath) buildKeyAP);
 
-            // VectorisedHashOperators.constructPreHashKeyVector[SIMD]([this.preHashVectorAP.read()], [buildKeyAVAP.read()], false);
+            // VectorisedHashOperators.constructPreHashKeyVectorInit([this.preHashVectorAP.read()], [buildKeyAVAP.read()]);
             codeGenResult.add(
                     createMethodInvocationStm(
                             getLocation(),
                             createAmbiguousNameRef(getLocation(), "VectorisedHashOperators"),
-                            vectorisedHashMethodName,
+                            "constructPreHashKeyVectorInit",
                             new Java.Rvalue[]{
                                     this.preHashVectorAP.read(),
-                                    buildKeyAVAP.read(),
-                                    new Java.BooleanLiteral(getLocation(), "false")
+                                    buildKeyAVAP.read()
                             }
                     ));
 
@@ -736,7 +740,7 @@ public class JoinOperator extends CodeGenOperator {
             );
 
             // Insert the record into the hash-table
-            // Get the key value
+            // Get the key value (no need to optimise for fixed-length binary values, since we only support ints here)
             // int left_join_record_key = [buildKeyAVAP].get([i]);
             ScalarVariableAccessPath leftJoinRecordKeyAP = new ScalarVariableAccessPath(
                     cCtx.defineVariable("left_join_record_key"),
@@ -757,18 +761,101 @@ public class JoinOperator extends CodeGenOperator {
             );
 
             // Get the values for the remaining columns to prevent key duplication
+            // Need to potentially optimise for fixed-length binary and varchar columns
             Java.Rvalue[] columnValues = new Java.Rvalue[currentOrdinalMapping.size() - 1];
             int currentValueColumnIndex = 0;
             for (int i = 0; i < currentOrdinalMapping.size(); i++) {
                 if (i == buildKeyOrdinal)
                     continue;
 
-                columnValues[currentValueColumnIndex++] = createMethodInvocation(
-                        getLocation(),
-                        ((ArrowVectorAccessPath) currentOrdinalMapping.get(i)).read(),
-                        "get",
-                        new Java.Rvalue[] { insertionLoopIndexVariable.read() }
-                );
+                ArrowVectorAccessPath currentOrdinalAP = (ArrowVectorAccessPath) currentOrdinalMapping.get(i);
+                QueryVariableType.LogicalType currentOrdinalAPLogicalType = currentOrdinalAP.getType().logicalType;
+
+                if (currentOrdinalAPLogicalType == QueryVariableType.LogicalType.ARROW_FIXED_LENGTH_BINARY_VECTOR) {
+                    // Allocate a global byte array cache variable to avoid allocations
+                    String byteArrayCacheName = cCtx.defineQueryGlobalVariable(
+                            "byte_array_cache",
+                            JaninoGeneralGen.createPrimitiveArrayType(JaninoGeneralGen.getLocation(), Java.Primitive.BYTE),
+                            new Java.NewArray(
+                                    JaninoGeneralGen.getLocation(),
+                                    JaninoGeneralGen.createPrimitiveType(JaninoGeneralGen.getLocation(), Java.Primitive.BYTE),
+                                    new Java.Rvalue[] {
+                                            JaninoGeneralGen.createIntegerLiteral(JaninoGeneralGen.getLocation(), currentOrdinalAP.getType().byteWidth)
+                                    },
+                                    0
+                            ),
+                            false);
+
+                    // Perform an optimised read (which will write the appropriate value into the cache array
+                    insertionLoopBody.addStatement(
+                            createMethodInvocationStm(
+                                    getLocation(),
+                                    createAmbiguousNameRef(getLocation(), "ArrowOptimisations"),
+                                    "getFixedSizeBinaryValue",
+                                    new Java.Rvalue[] {
+                                            currentOrdinalAP.read(),
+                                            insertionLoopIndexVariable.read(),
+                                            createAmbiguousNameRef(getLocation(), byteArrayCacheName)
+                                    }
+                            ));
+
+                    // Set the column value to read from the byte cache
+                    columnValues[currentValueColumnIndex++] = createAmbiguousNameRef(
+                            JaninoGeneralGen.getLocation(),
+                            byteArrayCacheName
+                    );
+
+                } else if (currentOrdinalAPLogicalType == QueryVariableType.LogicalType.ARROW_VARCHAR_VECTOR) {
+                    // Allocate an array of global byte array caches to avoid allocations as much as possible
+                    // while keeping the var-charity. The array has space for one byte array cache upto the
+                    // maximum var char length in the database
+                    int maximumVarCharLength = 200; // TODO: find way to not hard-code this
+                    String arrayOfCachesName = cCtx.defineQueryGlobalVariable(
+                            "byte_array_caches",
+                            JaninoGeneralGen.createNestedPrimitiveArrayType(JaninoGeneralGen.getLocation(), Java.Primitive.BYTE),
+                            JaninoGeneralGen.createNew2DPrimitiveArray(
+                                    JaninoGeneralGen.getLocation(),
+                                    Java.Primitive.BYTE,
+                                    JaninoGeneralGen.createIntegerLiteral(JaninoGeneralGen.getLocation(), maximumVarCharLength)
+                            ),
+                            false
+                    );
+
+                    // Perform an optimised read and assign the returned byte array to a local reference variable
+                    String localColumnVariableName = cCtx.defineVariable("var_char_cached_value");
+                    insertionLoopBody.addStatement(
+                            JaninoVariableGen.createLocalVariable(
+                                    JaninoGeneralGen.getLocation(),
+                                    QueryVariableTypeMethods.toJavaType(JaninoGeneralGen.getLocation(), S_VARCHAR),
+                                    localColumnVariableName,
+                                    createMethodInvocation(
+                                            getLocation(),
+                                            createAmbiguousNameRef(getLocation(), "ArrowOptimisations"),
+                                            "getVarCharBinaryValue",
+                                            new Java.Rvalue[] {
+                                                    currentOrdinalAP.read(),
+                                                    insertionLoopIndexVariable.read(),
+                                                    createAmbiguousNameRef(getLocation(), arrayOfCachesName)
+                                            }
+                                    )
+                            )
+                    );
+
+                    // Set the column value to read from the byte cache
+                    columnValues[currentValueColumnIndex++] = createAmbiguousNameRef(
+                            JaninoGeneralGen.getLocation(),
+                            localColumnVariableName
+                    );
+
+                } else {
+                    columnValues[currentValueColumnIndex++] = createMethodInvocation(
+                            getLocation(),
+                            ((ArrowVectorAccessPath) currentOrdinalMapping.get(i)).read(),
+                            "get",
+                            new Java.Rvalue[] { insertionLoopIndexVariable.read() }
+                    );
+
+                }
             }
 
             // [join_map].associate([left_join_record_key], [preHashVector][[i]], [columnValues])
@@ -792,19 +879,18 @@ public class JoinOperator extends CodeGenOperator {
             // with a selection vector
             ArrowVectorWithSelectionVectorAccessPath buildKeyAVWSVAP = ((ArrowVectorWithSelectionVectorAccessPath) buildKeyAP);
 
-            // VectorisedHashOperators.constructPreHashKeyVector[SIMD](
-            //         [this.preHashVectorAP.read()], [buildKeyAVWSVAP.read()], [buildKeyAVWSVAP.selectionVector], [buildKeyAVWSVAP.selectionVectorLength], false);
+            // VectorisedHashOperators."constructPreHashKeyVectorInit"(
+            //         [this.preHashVectorAP.read()], [buildKeyAVWSVAP.read()], [buildKeyAVWSVAP.selectionVector], [buildKeyAVWSVAP.selectionVectorLength]);
             codeGenResult.add(
                     createMethodInvocationStm(
                             getLocation(),
                             createAmbiguousNameRef(getLocation(), "VectorisedHashOperators"),
-                            vectorisedHashMethodName,
+                            "constructPreHashKeyVectorInit",
                             new Java.Rvalue[]{
                                     this.preHashVectorAP.read(),
                                     buildKeyAVWSVAP.readArrowVector(),
                                     buildKeyAVWSVAP.readSelectionVector(),
-                                    buildKeyAVWSVAP.readSelectionVectorLength(),
-                                    new Java.BooleanLiteral(getLocation(), "false")
+                                    buildKeyAVWSVAP.readSelectionVectorLength()
                             }
                     ));
 
@@ -864,7 +950,7 @@ public class JoinOperator extends CodeGenOperator {
             );
 
             // Insert the record into the hash-table
-            // Get the key
+            // Get the key (no need to perform FixedSizeBinaryVector optimisation as we only support ints here)
             // int left_join_record_key = [buildKeyAVWSVAP].get([selected_record_index]);
             ScalarVariableAccessPath leftJoinRecordKeyAP = new ScalarVariableAccessPath(
                     cCtx.defineVariable("left_join_record_key"),
@@ -893,12 +979,93 @@ public class JoinOperator extends CodeGenOperator {
 
                 AccessPath currentOrdinalAP = currentOrdinalMapping.get(i);
                 if (currentOrdinalAP instanceof ArrowVectorWithSelectionVectorAccessPath avwsvap) {
-                    columnValues[currentValueColumnIndex++] = createMethodInvocation(
-                            getLocation(),
-                            avwsvap.readArrowVector(),
-                            "get",
-                            new Java.Rvalue[] { selectedRecordIndexAP.read() }
-                    );
+                    // Potentially need to optimise for FixedLengthBinaryVector and VarCharVector
+                    QueryVariableType.LogicalType logicalColumnType = avwsvap.getType().logicalType;
+                    if (logicalColumnType == ARROW_FIXED_LENGTH_BINARY_VECTOR_W_SELECTION_VECTOR) {
+                        // Allocate a global byte array cache variable to avoid allocations
+                        String byteArrayCacheName = cCtx.defineQueryGlobalVariable(
+                                "byte_array_cache",
+                                JaninoGeneralGen.createPrimitiveArrayType(JaninoGeneralGen.getLocation(), Java.Primitive.BYTE),
+                                new Java.NewArray(
+                                        JaninoGeneralGen.getLocation(),
+                                        JaninoGeneralGen.createPrimitiveType(JaninoGeneralGen.getLocation(), Java.Primitive.BYTE),
+                                        new Java.Rvalue[] {
+                                                JaninoGeneralGen.createIntegerLiteral(JaninoGeneralGen.getLocation(), currentOrdinalAP.getType().byteWidth)
+                                        },
+                                        0
+                                ),
+                                false);
+
+                        // Perform an optimised read (which will write the appropriate value into the cache array
+                        insertionLoopBody.addStatement(
+                                createMethodInvocationStm(
+                                        getLocation(),
+                                        createAmbiguousNameRef(getLocation(), "ArrowOptimisations"),
+                                        "getFixedSizeBinaryValue",
+                                        new Java.Rvalue[] {
+                                                avwsvap.readArrowVector(),
+                                                selectedRecordIndexAP.read(),
+                                                createAmbiguousNameRef(getLocation(), byteArrayCacheName)
+                                        }
+                                ));
+
+                        // Set the column value to read from the byte cache
+                        columnValues[currentValueColumnIndex++] = createAmbiguousNameRef(
+                                JaninoGeneralGen.getLocation(),
+                                byteArrayCacheName
+                        );
+
+                    } else if (logicalColumnType == ARROW_VARCHAR_VECTOR_W_SELECTION_VECTOR) {
+                        // Allocate an array of global byte array caches to avoid allocations as much as possible
+                        // while keeping the var-charity. The array has space for one byte array cache upto the
+                        // maximum var char length in the database
+                        int maximumVarCharLength = 200; // TODO: find way to not hard-code this
+                        String arrayOfCachesName = cCtx.defineQueryGlobalVariable(
+                                "byte_array_caches",
+                                JaninoGeneralGen.createNestedPrimitiveArrayType(JaninoGeneralGen.getLocation(), Java.Primitive.BYTE),
+                                JaninoGeneralGen.createNew2DPrimitiveArray(
+                                        JaninoGeneralGen.getLocation(),
+                                        Java.Primitive.BYTE,
+                                        JaninoGeneralGen.createIntegerLiteral(JaninoGeneralGen.getLocation(), maximumVarCharLength)
+                                ),
+                                false
+                        );
+
+                        // Perform an optimised read and assign the returned byte array to a local reference variable
+                        String localColumnVariableName = cCtx.defineVariable("var_char_cached_value");
+                        insertionLoopBody.addStatement(
+                                JaninoVariableGen.createLocalVariable(
+                                        JaninoGeneralGen.getLocation(),
+                                        QueryVariableTypeMethods.toJavaType(JaninoGeneralGen.getLocation(), S_VARCHAR),
+                                        localColumnVariableName,
+                                        createMethodInvocation(
+                                                getLocation(),
+                                                createAmbiguousNameRef(getLocation(), "ArrowOptimisations"),
+                                                "getVarCharBinaryValue",
+                                                new Java.Rvalue[] {
+                                                        avwsvap.readArrowVector(),
+                                                        selectedRecordIndexAP.read(),
+                                                        createAmbiguousNameRef(getLocation(), arrayOfCachesName)
+                                                }
+                                        )
+                                )
+                        );
+
+                        // Set the column value to read from the byte cache
+                        columnValues[currentValueColumnIndex++] = createAmbiguousNameRef(
+                                JaninoGeneralGen.getLocation(),
+                                localColumnVariableName
+                        );
+
+                    } else {
+                        columnValues[currentValueColumnIndex++] = createMethodInvocation(
+                                getLocation(),
+                                avwsvap.readArrowVector(),
+                                "get",
+                                new Java.Rvalue[] { selectedRecordIndexAP.read() }
+                        );
+
+                    }
 
                 } else if (currentOrdinalAP instanceof ArrayVectorWithSelectionVectorAccessPath avwsvap) {
                     columnValues[currentValueColumnIndex++] = createArrayElementAccessExpr(
@@ -935,21 +1102,19 @@ public class JoinOperator extends CodeGenOperator {
             // without any validity mask/selection vector
             ArrayVectorAccessPath buildKeyAVAP = ((ArrayVectorAccessPath) buildKeyAP);
 
-            // VectorisedHashOperators.constructPreHashKeyVector[SIMD](
+            // VectorisedHashOperators."constructPreHashKeyVectorInit"(
             //         [this.preHashVectorAP.read()],
             //         [buildKeyAVAP.getVectorVariable().read()]
-            //         [buildKeyAVAP.getVectorLengthVariable().read()],
-            //         false);
+            //         [buildKeyAVAP.getVectorLengthVariable().read()]);
             codeGenResult.add(
                     createMethodInvocationStm(
                             getLocation(),
                             createAmbiguousNameRef(getLocation(), "VectorisedHashOperators"),
-                            vectorisedHashMethodName,
+                            "constructPreHashKeyVectorInit",
                             new Java.Rvalue[]{
                                     this.preHashVectorAP.read(),
                                     buildKeyAVAP.getVectorVariable().read(),
-                                    buildKeyAVAP.getVectorLengthVariable().read(),
-                                    new Java.BooleanLiteral(getLocation(), "false")
+                                    buildKeyAVAP.getVectorLengthVariable().read()
                             }
                     ));
 
@@ -1045,6 +1210,9 @@ public class JoinOperator extends CodeGenOperator {
     private List<Java.Statement> consumeVecProbe(CodeGenContext cCtx, OptimisationContext oCtx) {
         List<Java.Statement> codeGenResult = new ArrayList<>();
 
+        if (this.useSIMDVec())
+            throw new UnsupportedOperationException("JoinOperator.consumeVecProbe no longer supports SIMD");
+
         // Check that we can handle the key type (casts valid due to pre-condition check in constructor)
         int probeKey = this.rightChildEquijoinIndex;
         // Need to convert the output ordinal to the right-input ordinal
@@ -1063,7 +1231,6 @@ public class JoinOperator extends CodeGenOperator {
         //  - Initialisation of the recordIndexVariable (and potential initialisation code required by it)
         //  - The statement required to obtain the right_join_key variable
         // That is done below
-        String vectorisedHashMethodName = this.useSIMDVec() ? "constructPreHashKeyVectorSIMD" : "constructPreHashKeyVector";
         Java.Rvalue recordCountInitialisation;
         ScalarVariableAccessPath recordIndexAP;
         Java.Statement recordIndexAPRelatedStatements = null;
@@ -1085,16 +1252,15 @@ public class JoinOperator extends CodeGenOperator {
             // without any validity mask/selection vector
             ArrowVectorAccessPath buildKeyAVAP = ((ArrowVectorAccessPath) buildKeyAP);
 
-            // VectorisedHashOperators.constructPreHashKeyVector[SIMD]([this.preHashVectorAP.read()], [buildKeyAVAP.read()], false);
+            // VectorisedHashOperators.constructPreHashKeyVectorIni"([this.preHashVectorAP.read()], [buildKeyAVAP.read()]);
             codeGenResult.add(
                     createMethodInvocationStm(
                             getLocation(),
                             createAmbiguousNameRef(getLocation(), "VectorisedHashOperators"),
-                            vectorisedHashMethodName,
+                            "constructPreHashKeyVectorInit",
                             new Java.Rvalue[]{
                                     this.preHashVectorAP.read(),
-                                    buildKeyAVAP.read(),
-                                    new Java.BooleanLiteral(getLocation(), "false")
+                                    buildKeyAVAP.read()
                             }
                     ));
 
@@ -1121,19 +1287,18 @@ public class JoinOperator extends CodeGenOperator {
             // with a selection vector
             ArrowVectorWithSelectionVectorAccessPath buildKeyAVWSVAP = ((ArrowVectorWithSelectionVectorAccessPath) buildKeyAP);
 
-            // VectorisedHashOperators.constructPreHashKeyVector[SIMD](
-            // [this.preHashVectorAP.read()], [buildKeyAVWSVAP.arrowVector], [buildKeyAVWSVAP.selectionVector], [buildKeyAVWSVAP.selectionVectorLength], false);
+            // VectorisedHashOperators.constructPreHashKeyVectorInit(
+            // [this.preHashVectorAP.read()], [buildKeyAVWSVAP.arrowVector], [buildKeyAVWSVAP.selectionVector], [buildKeyAVWSVAP.selectionVectorLength]);
             codeGenResult.add(
                     createMethodInvocationStm(
                             getLocation(),
                             createAmbiguousNameRef(getLocation(), "VectorisedHashOperators"),
-                            vectorisedHashMethodName,
+                            "constructPreHashKeyVectorInit",
                             new Java.Rvalue[]{
                                     this.preHashVectorAP.read(),
                                     buildKeyAVWSVAP.readArrowVector(),
                                     buildKeyAVWSVAP.readSelectionVector(),
-                                    buildKeyAVWSVAP.readSelectionVectorLength(),
-                                    new Java.BooleanLiteral(getLocation(), "false")
+                                    buildKeyAVWSVAP.readSelectionVectorLength()
                             }
                     ));
 
@@ -1171,22 +1336,20 @@ public class JoinOperator extends CodeGenOperator {
             // without any validity mask/selection vector
             ArrayVectorAccessPath buildKeyAVAP = ((ArrayVectorAccessPath) buildKeyAP);
 
-            // VectorisedHashOperators.constructPreHashKeyVector[SIMD](
+            // VectorisedHashOperators.constructPreHashKeyVectorInit(
             //     [this.preHashVectorAP.read()],
             //     [buildKeyAVAP.getVectorVariable().read()],
-            //     [buildKeyAVAP.getVectorLengthVariable().read(),
-            //     false]
+            //     [buildKeyAVAP.getVectorLengthVariable().read()]
             // );
             codeGenResult.add(
                     createMethodInvocationStm(
                             getLocation(),
                             createAmbiguousNameRef(getLocation(), "VectorisedHashOperators"),
-                            vectorisedHashMethodName,
+                            "constructPreHashKeyVectorInit",
                             new Java.Rvalue[]{
                                     this.preHashVectorAP.read(),
                                     buildKeyAVAP.getVectorVariable().read(),
-                                    buildKeyAVAP.getVectorLengthVariable().read(),
-                                    new Java.BooleanLiteral(getLocation(), "false")
+                                    buildKeyAVAP.getVectorLengthVariable().read()
                             }
                     ));
 
@@ -1399,8 +1562,11 @@ public class JoinOperator extends CodeGenOperator {
             } else {
                 // Need to distinguish the access path
                 AccessPath rightJoinColumnAP = currentOrdinalMapping.get(i);
+                QueryVariableType.LogicalType rightJoinColumnAPLogicalType = rightJoinColumnAP.getType().logicalType;
                 Java.Rvalue rightJoinColumnRValue;
                 if (rightJoinColumnAP instanceof ArrowVectorAccessPath avap) {
+                    // No need to optimise for FixedLengthBinaryVector and VarCharVector, since we need copies anyhow
+                    // to store in the result vector array
                     rightJoinColumnRValue = createMethodInvocation(
                             getLocation(),
                             avap.read(),
@@ -1409,17 +1575,11 @@ public class JoinOperator extends CodeGenOperator {
                     );
 
                 } else if (rightJoinColumnAP instanceof ArrowVectorWithSelectionVectorAccessPath avwsvap) {
+                    // No need to optimise for FixedLengthBinaryVector and VarCharVector, since we need copies anyhow
+                    // to store in the result vector array
                     rightJoinColumnRValue = createMethodInvocation(
                             getLocation(),
                             avwsvap.readArrowVector(),
-                            "get",
-                            new Java.Rvalue[] { recordIndexAP.read() }
-                    );
-
-                } else if (rightJoinColumnAP instanceof ArrowVectorWithValidityMaskAccessPath avwvmap) {
-                    rightJoinColumnRValue = createMethodInvocation(
-                            getLocation(),
-                            avwvmap.readArrowVector(),
                             "get",
                             new Java.Rvalue[] { recordIndexAP.read() }
                     );
